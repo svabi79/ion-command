@@ -1,0 +1,43 @@
+{
+  "branding": {
+    "productName": "ION COMMAND",
+    "subtitle": "Global Geospatial Operations & HF Propagation Command Center"
+  },
+  "server": {
+    "listenAddress": "127.0.0.1:7810",
+    "writeTimeoutSeconds": 10
+  },
+  "pipeline": {
+    "queueCapacity": 16384,
+    "clientQueueCapacity": 4096,
+    "workerCount": 4
+  },
+  "recording": {
+    "enabled": true,
+    "directory": "../../data/recordings",
+    "flushIntervalSeconds": 1
+  },
+  "sources": [
+    {
+      "id": "mock-radio-primary",
+      "type": "mock.radio",
+      "enabled": true,
+      "eventsPerSecond": 40,
+      "seed": 7810
+    },
+    {
+      "id": "mock-lightning-primary",
+      "type": "mock.lightning",
+      "enabled": true,
+      "eventsPerSecond": 2,
+      "seed": 7811
+    },
+    {
+      "id": "mock-spaceweather-primary",
+      "type": "mock.spaceweather",
+      "enabled": true,
+      "eventsPerSecond": 0.1,
+      "seed": 7812
+    }
+  ]
+}

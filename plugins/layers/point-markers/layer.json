@@ -1,0 +1,14 @@
+{
+  "layerId": "core.point-markers",
+  "displayName": "Geospatial Point Markers",
+  "domain": "*",
+  "acceptedSemanticTypes": ["*"],
+  "geometryTypes": ["Point"],
+  "defaultVisibility": true,
+  "defaultTimeWindowSeconds": 900,
+  "renderer": "GenericInstancedPointRenderer",
+  "supportsSelection": true,
+  "supportsReplay": true,
+  "supportsAggregation": true
+}
+

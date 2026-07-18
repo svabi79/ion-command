@@ -1,0 +1,8 @@
+{
+  "pluginId": "domain.spaceweather",
+  "version": "0.1.0",
+  "category": "domain",
+  "accepts": ["raw:spaceweather"],
+  "provides": ["semantic:spaceweather.state"]
+}
+

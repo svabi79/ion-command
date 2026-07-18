@@ -1,0 +1,10 @@
+{
+  "pluginId": "source.mock",
+  "version": "0.1.0",
+  "category": "source",
+  "displayName": "Synthetic Geospatial Sources",
+  "provides": ["raw:hamradio", "raw:weather", "raw:spaceweather"],
+  "lifecycle": "compile-time-registry",
+  "configurationSchema": "collector/configs/development.json"
+}
+

@@ -1,0 +1,9 @@
+{
+  "pluginId": "context.grayline",
+  "version": "0.1.0",
+  "category": "context",
+  "requires": ["service:utc", "geometry:WGS84"],
+  "optional": ["semantic:radio.reception"],
+  "provides": ["service:solar-subpoint", "semantic:context.grayline"]
+}
+

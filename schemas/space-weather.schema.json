@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Bootstrap space-weather source sample",
+  "type": "object",
+  "required": ["sampleId", "kp"],
+  "properties": {
+    "sampleId": { "type": "string" },
+    "kp": { "type": "number", "minimum": 0, "maximum": 9 },
+    "aIndex": { "type": "integer", "minimum": 0 },
+    "solarFlux": { "type": "number" },
+    "solarWindSpeedKms": { "type": "number" },
+    "solarWindDensity": { "type": "number" },
+    "imfBzNt": { "type": "number" }
+  },
+  "additionalProperties": true
+}
+

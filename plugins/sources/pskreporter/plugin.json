@@ -1,0 +1,10 @@
+{
+  "pluginId": "source.pskreporter",
+  "version": "0.0.0-placeholder",
+  "category": "source",
+  "displayName": "PSKReporter Live Feed",
+  "provides": ["raw:hamradio.pskreporter"],
+  "state": "interface-prepared",
+  "notes": "Raw subscription format intentionally remains isolated from the canonical core."
+}
+

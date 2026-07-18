@@ -1,0 +1,8 @@
+{
+  "pluginId": "tool.distance",
+  "version": "0.1.0",
+  "category": "tool",
+  "requires": ["geometry:WGS84"],
+  "provides": ["tool:great-circle-distance", "tool:initial-bearing"]
+}
+

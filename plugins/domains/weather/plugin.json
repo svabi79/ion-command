@@ -1,0 +1,9 @@
+{
+  "pluginId": "domain.weather",
+  "version": "0.1.0",
+  "category": "domain",
+  "accepts": ["raw:weather"],
+  "provides": ["semantic:weather.lightning"],
+  "coreDependencies": ["geometry:Point"]
+}
+

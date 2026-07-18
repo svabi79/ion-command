@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ion-command.local/schemas/canonical-envelope.schema.json",
+  "title": "ION COMMAND canonical geospatial envelope",
+  "type": "object",
+  "required": ["schemaVersion", "messageId", "messageType", "domain", "semanticType", "source", "time", "geometry"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "messageId": { "type": "string", "minLength": 1 },
+    "messageType": { "enum": ["entity", "observation", "relationship", "track", "area", "field", "volume", "annotation"] },
+    "domain": { "type": "string", "minLength": 1 },
+    "semanticType": { "type": "string", "pattern": "^[a-z][a-z0-9]*(\\.[A-Za-z][A-Za-z0-9]*)+$" },
+    "entityId": { "type": "string" },
+    "fromEntityId": { "type": "string" },
+    "toEntityId": { "type": "string" },
+    "targetId": { "type": "string" },
+    "source": {
+      "type": "object",
+      "required": ["pluginId", "instanceId"],
+      "properties": {
+        "pluginId": { "type": "string", "minLength": 1 },
+        "instanceId": { "type": "string", "minLength": 1 },
+        "originalId": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "time": {
+      "type": "object",
+      "required": ["observedUtc", "receivedUtc", "validFromUtc", "processingUtc"],
+      "properties": {
+        "observedUtc": { "type": "string", "format": "date-time" },
+        "receivedUtc": { "type": "string", "format": "date-time" },
+        "validFromUtc": { "type": "string", "format": "date-time" },
+        "validUntilUtc": { "type": ["string", "null"], "format": "date-time" },
+        "processingUtc": { "type": "string", "format": "date-time" }
+      },
+      "additionalProperties": false
+    },
+    "geometry": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": { "enum": ["None", "Point", "MultiPoint", "LineString", "GreatCircle", "Arc", "Polygon", "MultiPolygon", "BoundingBox", "Circle", "Track", "Raster", "Grid", "Volume", "Shell"] },
+        "coordinates": {},
+        "crs": { "type": "string", "default": "EPSG:4326" }
+      },
+      "additionalProperties": true
+    },
+    "properties": { "type": "object" },
+    "quality": { "type": "object" },
+    "relationships": { "type": "array" }
+  },
+  "additionalProperties": true
+}
+

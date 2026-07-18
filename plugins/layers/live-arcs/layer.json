@@ -1,0 +1,15 @@
+{
+  "layerId": "hamradio.live-links",
+  "displayName": "Live Radio Links",
+  "domain": "hamradio",
+  "acceptedSemanticTypes": ["radio.reception"],
+  "geometryTypes": ["GreatCircle", "Arc"],
+  "defaultVisibility": true,
+  "defaultTimeWindowSeconds": 900,
+  "renderer": "GenericInstancedArcRenderer",
+  "supportsSelection": true,
+  "supportsReplay": true,
+  "supportsAggregation": true,
+  "styleProvider": "HamBandVisualConfig"
+}
+

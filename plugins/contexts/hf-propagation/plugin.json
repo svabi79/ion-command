@@ -1,0 +1,10 @@
+{
+  "pluginId": "context.hf-propagation",
+  "version": "0.0.0-interface",
+  "category": "context",
+  "requires": ["semantic:radio.reception"],
+  "optional": ["semantic:ionosphere.foF2", "semantic:ionosphere.hmF2", "semantic:spaceweather.state", "service:solar-subpoint"],
+  "provides": ["semantic:radio.propagation.context"],
+  "state": "interface-prepared"
+}
+

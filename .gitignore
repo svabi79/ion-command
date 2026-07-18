@@ -1,0 +1,26 @@
+# Go
+collector/bin/
+collector/coverage.out
+
+# Runtime data
+data/
+collector/data/
+*.log
+
+# Unreal Engine
+unreal/.vs/
+unreal/Binaries/
+unreal/DerivedDataCache/
+unreal/Intermediate/
+unreal/Saved/
+unreal/Plugins/*/Binaries/
+unreal/Plugins/*/Intermediate/
+*.sln
+
+# Editors / OS
+__pycache__/
+*.pyc
+.idea/
+.vscode/
+Thumbs.db
+Desktop.ini

@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ion-command.local/schemas/spot-event.schema.json",
+  "title": "Ham-radio source record before canonical normalization",
+  "type": "object",
+  "required": ["spotId", "txCallsign", "rxCallsign", "txLongitude", "txLatitude", "rxLongitude", "rxLatitude", "frequencyHz"],
+  "properties": {
+    "spotId": { "type": "string" },
+    "txCallsign": { "type": "string" },
+    "rxCallsign": { "type": "string" },
+    "txLongitude": { "type": "number", "minimum": -180, "maximum": 180 },
+    "txLatitude": { "type": "number", "minimum": -90, "maximum": 90 },
+    "rxLongitude": { "type": "number", "minimum": -180, "maximum": 180 },
+    "rxLatitude": { "type": "number", "minimum": -90, "maximum": 90 },
+    "frequencyHz": { "type": "integer", "minimum": 1 },
+    "band": { "type": "string" },
+    "mode": { "type": "string" },
+    "snrDb": { "type": ["number", "null"] }
+  },
+  "additionalProperties": true
+}
+

@@ -1,0 +1,9 @@
+{
+  "pluginId": "domain.hamradio",
+  "version": "0.1.0",
+  "category": "domain",
+  "accepts": ["raw:hamradio"],
+  "provides": ["semantic:radio.station", "semantic:radio.reception"],
+  "coreDependencies": ["geometry:Point", "geometry:GreatCircle"]
+}
+
