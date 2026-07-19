@@ -25,6 +25,7 @@ private:
     void ClearBandPreset();
     void CycleHudMode();
     void ToggleHeatmap();
+    void TogglePaths();
     void StartRecentReplay();
     void ChangeReplaySpeed(double Factor);
     void ReplaySlower();

@@ -38,6 +38,17 @@ void AIonCommandPlayerController::SetupInputComponent()
     InputComponent->BindAction(TEXT("ReplayFaster"), IE_Pressed, this, &AIonCommandPlayerController::ReplayFaster);
     InputComponent->BindAction(TEXT("CycleHud"), IE_Pressed, this, &AIonCommandPlayerController::CycleHudMode);
     InputComponent->BindAction(TEXT("ToggleHeatmap"), IE_Pressed, this, &AIonCommandPlayerController::ToggleHeatmap);
+    InputComponent->BindAction(TEXT("TogglePaths"), IE_Pressed, this, &AIonCommandPlayerController::TogglePaths);
+}
+
+void AIonCommandPlayerController::TogglePaths()
+{
+    // Clears the view when thousands of live paths bury the globe; markers,
+    // heatmap, and instruments stay.
+    for (TActorIterator<AGeoArcLayerActor> It(GetWorld()); It; ++It)
+    {
+        It->SetActorHiddenInGame(!It->IsHidden());
+    }
 }
 
 void AIonCommandPlayerController::ToggleHeatmap()
