@@ -1,7 +1,42 @@
 # Implementation status
 
-Status date: **2026-07-19** (fourth pass: cockpit stage 1 — screen-space
-instrument HUD from data already flowing).
+Status date: **2026-07-19** (fifth pass: cockpit stage 2 — DXCC regions and
+the HF-conditions forecast).
+
+## Cockpit stage 2 (2026-07-19)
+
+- **DXCC regions end to end**: the PSKReporter decoder now carries the
+  broker's `sa`/`ra` ADIF DXCC entity codes (verified against live frames;
+  optional, nil-safe), and the ham-radio normalizer resolves them through a
+  generated entity table (`dxcc_gen.go`, 403 entities incl. deleted,
+  regenerable via `tools/gen-dxcc.py` from the ADIF 3.1.5 spec) into generic
+  `display.fromRegion`/`display.toRegion` properties plus numeric
+  `txDxcc`/`rxDxcc`. Code 0 ("not within any entity") stays unnamed; unknown
+  codes fall back to `DXCC <n>`. The mock radio feed emits a weighted spread
+  of real codes so instruments verify without the live feed.
+- **TOP REGIONS panel**: the HUD tallies the generic region properties of
+  path traffic (bounded map, same 0.97 decay cadence as endpoints) and shows
+  the top eight with share-of-traffic bars.
+- **Cockpit panel provider API**: `UIonCockpitPanelSubsystem` lets domain
+  modules contribute read-only panels (title + rows of colored cells) without
+  the UI module learning their vocabulary.
+- **HF CONDITIONS panel** (HamRadio module, explicitly labeled HEURISTIC):
+  classic solar-widget style day/night ratings per band group from solar
+  flux, degraded by geomagnetic activity (Kp >= 4 or A >= 20 one step,
+  Kp >= 5 or A >= 30 two); driven by the live `spaceweather.state` samples.
+- **Isolated verification**: `first-light.ps1 -Port <n>` refuses a busy port,
+  patches a temp collector config (BOM-less UTF-8 — PowerShell 5.1's UTF8
+  default emits a BOM that Go's JSON decoder rejects), and passes
+  `-IonCollectorUrl=` to the client, so verification never hijacks an
+  operator's live collector/client pair on 7810 (which is exactly what the
+  first stage-1 run did, silently).
+
+Verification: collector tests green (`sa`/`ra` fixture from a captured live
+frame, region/deleted/unknown/zero cases), editor build clean, mock First
+Light on port 7811 while the live pair kept running on 7810: TOP REGIONS
+showed the seeded country spread (United States 23%, Germany 15%, ...),
+HF CONDITIONS showed correctly degraded ratings at Kp 4.2 (30M-20M DAY FAIR),
+zero log errors, DROP 0.
 
 ## Cockpit stage 1 (2026-07-19)
 

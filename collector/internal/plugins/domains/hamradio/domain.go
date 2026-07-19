@@ -29,6 +29,20 @@ type rawSpot struct {
 	Band        string  `json:"band"`
 	Mode        string  `json:"mode"`
 	SNRDb       int     `json:"snrDb"`
+	TXDxcc      *int    `json:"txDxcc"`
+	RXDxcc      *int    `json:"rxDxcc"`
+}
+
+// regionName resolves an ADIF DXCC entity code to a display name. Code 0 is
+// the explicit "not within any DXCC entity" marker and stays unnamed.
+func regionName(code *int) string {
+	if code == nil || *code == 0 {
+		return ""
+	}
+	if name, ok := dxccEntityNames[*code]; ok {
+		return name
+	}
+	return fmt.Sprintf("DXCC %d", *code)
 }
 
 func New() *Domain               { return &Domain{seenEntities: make(map[string]time.Time), maxSeenEntities: 200000} }
@@ -69,6 +83,14 @@ func (d *Domain) Normalize(_ context.Context, record plugins.RawRecord) ([]event
 		"display.title":  "Observed Link", "display.from": raw.TXCallsign, "display.to": raw.RXCallsign,
 		"display.primary":   fmt.Sprintf("%s  //  %s  //  %.3f MHz", raw.Band, raw.Mode, float64(raw.FrequencyHz)/1_000_000.0),
 		"display.secondary": fmt.Sprintf("SNR %+d dB", raw.SNRDb),
+	}
+	if region := regionName(raw.TXDxcc); region != "" {
+		relationship.Properties["txDxcc"] = *raw.TXDxcc
+		relationship.Properties["display.fromRegion"] = region
+	}
+	if region := regionName(raw.RXDxcc); region != "" {
+		relationship.Properties["rxDxcc"] = *raw.RXDxcc
+		relationship.Properties["display.toRegion"] = region
 	}
 	measured := true
 	relationship.Quality.Measured = &measured

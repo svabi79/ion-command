@@ -4,7 +4,9 @@
 #include "GeoEnvelopeJsonParser.h"
 #include "GeoTimelineSubsystem.h"
 #include "IonCommandData.h"
+#include "Misc/CommandLine.h"
 #include "Misc/ConfigCacheIni.h"
+#include "Misc/Parse.h"
 #include "Modules/ModuleManager.h"
 #include "WebSocketsModule.h"
 
@@ -12,6 +14,14 @@ void UGeoStreamSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
     Super::Initialize(Collection);
     GConfig->GetString(TEXT("/Script/IonCommand.IonCommandRuntime"), TEXT("CollectorUrl"), CollectorUrl, GGameIni);
+    // -IonCollectorUrl=ws://host:port/ws/live lets verification harnesses run
+    // an isolated collector without touching an operator's live pair on 7810.
+    FString UrlOverride;
+    if (FParse::Value(FCommandLine::Get(), TEXT("IonCollectorUrl="), UrlOverride) && !UrlOverride.IsEmpty())
+    {
+        CollectorUrl = UrlOverride;
+        UE_LOG(LogIonGeoData, Display, TEXT("Collector URL overridden from the command line: %s"), *CollectorUrl);
+    }
     GConfig->GetInt(TEXT("/Script/IonCommand.IonCommandRuntime"), TEXT("MaxPendingMessages"), MaxPendingMessages, GGameIni);
     GConfig->GetInt(TEXT("/Script/IonCommand.IonCommandRuntime"), TEXT("MaxBatchSize"), MaxBatchSize, GGameIni);
     GConfig->GetDouble(TEXT("/Script/IonCommand.IonCommandRuntime"), TEXT("ReconnectSeconds"), ReconnectSeconds, GGameIni);

@@ -111,11 +111,21 @@ void AIonCockpitHudActor::OnMessageAccepted(const FGeoMessageEnvelope& Message)
     ++RateBuckets[NowSecond % 60];
     RecordEndpoint(Message.FromEntityId, Message.Properties.FindRef(TEXT("display.from")), Message.Geometry.Positions[0]);
     RecordEndpoint(Message.ToEntityId, Message.Properties.FindRef(TEXT("display.to")), Message.Geometry.Positions.Last());
+    auto RecordRegion = [this](const FString& Region)
+    {
+        if (Region.IsEmpty()) return;
+        if (double* Weight = RegionWeights.Find(Region)) { *Weight += 1.0; return; }
+        if (RegionWeights.Num() < MaxRegionStats) RegionWeights.Add(Region, 1.0);
+    };
+    RecordRegion(Message.Properties.FindRef(TEXT("display.fromRegion")));
+    RecordRegion(Message.Properties.FindRef(TEXT("display.toRegion")));
 }
 
 void AIonCockpitHudActor::OnDataReset()
 {
     EndpointStats.Reset();
+    RegionWeights.Reset();
+    CachedTopRegions.Reset();
     CachedTopEndpoints.Reset();
     CachedBreakdown.Reset();
     FMemory::Memzero(RateBuckets, sizeof(RateBuckets));
@@ -175,6 +185,25 @@ void AIonCockpitHudActor::RefreshAggregates(double NowSeconds)
     for (const TPair<FString, FIonEndpointStat>& Pair : EndpointStats) CachedTopEndpoints.Add(Pair.Value);
     CachedTopEndpoints.Sort([](const FIonEndpointStat& A, const FIonEndpointStat& B) { return A.Weight > B.Weight; });
     if (CachedTopEndpoints.Num() > MaxLabelCandidates) CachedTopEndpoints.SetNum(MaxLabelCandidates);
+
+    // Same decay treatment for the region tallies.
+    CachedRegionTotal = 0.0;
+    for (auto It = RegionWeights.CreateIterator(); It; ++It)
+    {
+        It->Value *= 0.97;
+        if (It->Value < 0.05) { It.RemoveCurrent(); continue; }
+        CachedRegionTotal += It->Value;
+    }
+    CachedTopRegions.Reset();
+    for (const TPair<FString, double>& Pair : RegionWeights) CachedTopRegions.Add({Pair.Key, Pair.Value});
+    CachedTopRegions.Sort([](const FIonRegionStat& A, const FIonRegionStat& B) { return A.Weight > B.Weight; });
+    if (CachedTopRegions.Num() > 8) CachedTopRegions.SetNum(8);
+
+    CachedPanels.Reset();
+    if (const UIonCockpitPanelSubsystem* Panels = GetGameInstance() ? GetGameInstance()->GetSubsystem<UIonCockpitPanelSubsystem>() : nullptr)
+    {
+        CachedPanels = Panels->CollectPanels();
+    }
 }
 
 void AIonCockpitHudActor::DrawHUD()
@@ -199,7 +228,9 @@ void AIonCockpitHudActor::DrawHUD()
     {
         DrawTrafficPanel(Scale, Alpha);
         DrawRatePanel(Scale, Alpha, TrafficPanelBottomY + 16.0f * Scale);
+        DrawRegionsPanel(Scale, Alpha, RatePanelBottomY + 16.0f * Scale);
         DrawPolarPanel(Scale, Alpha);
+        DrawProviderPanels(Scale, Alpha, PolarPanelBottomY + 16.0f * Scale);
         DrawEndpointLabels(Scale, Alpha);
     }
     DrawModeHint(Scale, Alpha);
@@ -317,6 +348,39 @@ void AIonCockpitHudActor::DrawRatePanel(float Scale, float Alpha, float PanelY)
         const float BarHeight = FMath::Max(ChartMaxHeight * Count / MaxBucket, 1.5f * Scale);
         DrawRect(ChartX + Offset * BarStep, ChartBottom - BarHeight, FMath::Max(BarStep - 1.0f, 1.0f), BarHeight, WithAlpha(CockpitCyan, 0.8f * Alpha));
     }
+    RatePanelBottomY = PanelY + PanelHeight;
+}
+
+void AIonCockpitHudActor::DrawRegionsPanel(float Scale, float Alpha, float PanelY)
+{
+    const float PanelX = 18.0f * Scale;
+    const float PanelWidth = 330.0f * Scale;
+    const float RowHeight = 24.0f * Scale;
+    const float HeaderHeight = 34.0f * Scale;
+    const int32 Rows = FMath::Max(CachedTopRegions.Num(), 1);
+    const float PanelHeight = HeaderHeight + Rows * RowHeight + 12.0f * Scale;
+    DrawPanelFrame(PanelX, PanelY, PanelWidth, PanelHeight, TEXT("TOP REGIONS"), Scale, Alpha);
+    if (CachedTopRegions.IsEmpty())
+    {
+        DrawTextAt(TEXT("AWAITING DATA"), PanelX + 12.0f * Scale, PanelY + HeaderHeight + 4.0f * Scale, WithAlpha(CockpitDim, Alpha), 1.15f * Scale);
+        return;
+    }
+    const double MaxWeight = CachedTopRegions[0].Weight;
+    const float LabelWidth = 150.0f * Scale;
+    const float ShareWidth = 52.0f * Scale;
+    const float BarMaxWidth = PanelWidth - LabelWidth - ShareWidth - 30.0f * Scale;
+    float RowY = PanelY + HeaderHeight;
+    for (const FIonRegionStat& Region : CachedTopRegions)
+    {
+        FString Label = Region.Label.ToUpper();
+        if (Label.Len() > 18) Label = Label.Left(17) + TEXT("~");
+        DrawTextAt(Label, PanelX + 12.0f * Scale, RowY + 4.0f * Scale, WithAlpha(CockpitWhite, Alpha), 1.1f * Scale);
+        const float BarWidth = BarMaxWidth * (MaxWeight > 0.0 ? static_cast<float>(Region.Weight / MaxWeight) : 0.0f);
+        DrawRect(PanelX + LabelWidth, RowY + 6.0f * Scale, FMath::Max(BarWidth, 2.0f * Scale), RowHeight - 12.0f * Scale, WithAlpha(CockpitCyan, 0.75f * Alpha));
+        const double Share = CachedRegionTotal > 0.0 ? 100.0 * Region.Weight / CachedRegionTotal : 0.0;
+        DrawTextAt(FString::Printf(TEXT("%.0f%%"), Share), PanelX + LabelWidth + BarMaxWidth + 10.0f * Scale, RowY + 4.0f * Scale, WithAlpha(CockpitCyan, Alpha), 1.1f * Scale);
+        RowY += RowHeight;
+    }
 }
 
 void AIonCockpitHudActor::DrawPolarPanel(float Scale, float Alpha)
@@ -362,6 +426,38 @@ void AIonCockpitHudActor::DrawPolarPanel(float Scale, float Alpha)
         Previous = Point;
     }
     DrawTextAt(bHasKp ? FString::Printf(TEXT("KP %.1f  //  OVAL %.0f N"), EnvKp, CenterLatitude) : TEXT("KP --  //  AWAITING DATA"), Center.X, PanelY + PanelHeight - 24.0f * Scale, WithAlpha(bHasKp ? CockpitWhite : CockpitDim, Alpha), 1.1f * Scale, true);
+    PolarPanelBottomY = PanelY + PanelHeight;
+}
+
+void AIonCockpitHudActor::DrawProviderPanels(float Scale, float Alpha, float PanelY)
+{
+    const float PanelWidth = 250.0f * Scale;
+    const float PanelX = Canvas->SizeX - PanelWidth - 18.0f * Scale;
+    const float RowHeight = 24.0f * Scale;
+    const float HeaderHeight = 34.0f * Scale;
+    float CursorY = PanelY;
+    for (const FIonCockpitPanelModel& Panel : CachedPanels)
+    {
+        const int32 Rows = FMath::Max(Panel.Rows.Num(), 1);
+        const float PanelHeight = HeaderHeight + Rows * RowHeight + 12.0f * Scale;
+        if (CursorY + PanelHeight > Canvas->SizeY - 40.0f * Scale) break;
+        DrawPanelFrame(PanelX, CursorY, PanelWidth, PanelHeight, Panel.Title, Scale, Alpha);
+        float RowY = CursorY + HeaderHeight;
+        for (const FIonCockpitPanelRow& Row : Panel.Rows)
+        {
+            DrawTextAt(Row.Label, PanelX + 12.0f * Scale, RowY + 4.0f * Scale, WithAlpha(CockpitWhite, Alpha), 1.1f * Scale);
+            float CellX = PanelX + 92.0f * Scale;
+            for (const FIonCockpitPanelCell& Cell : Row.Cells)
+            {
+                DrawTextAt(Cell.Text, CellX, RowY + 4.0f * Scale, WithAlpha(Cell.Color, Alpha), 1.1f * Scale);
+                float CellW = 0.0f, CellH = 0.0f;
+                Canvas->TextSize(GEngine->GetMediumFont(), Cell.Text, CellW, CellH, 1.1f * Scale, 1.1f * Scale);
+                CellX += CellW + 12.0f * Scale;
+            }
+            RowY += RowHeight;
+        }
+        CursorY += PanelHeight + 16.0f * Scale;
+    }
 }
 
 void AIonCockpitHudActor::DrawEndpointLabels(float Scale, float Alpha)

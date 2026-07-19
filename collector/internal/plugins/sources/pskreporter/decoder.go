@@ -22,6 +22,9 @@ type mqttSpot struct {
 	RXCallsign string  `json:"rc"`
 	RXLocator  string  `json:"rl"`
 	Band       string  `json:"b"`
+	// ADIF DXCC entity codes; pointers because the broker may omit them.
+	TXDxcc *int `json:"sa"`
+	RXDxcc *int `json:"ra"`
 }
 
 // normalizedSpot mirrors the ham-radio domain raw contract.
@@ -37,6 +40,8 @@ type normalizedSpot struct {
 	Band        string  `json:"band"`
 	Mode        string  `json:"mode"`
 	SNRDb       int     `json:"snrDb"`
+	TXDxcc      *int    `json:"txDxcc,omitempty"`
+	RXDxcc      *int    `json:"rxDxcc,omitempty"`
 }
 
 // SpotDecoder converts broker frames into ham-radio raw records. Spots that
@@ -76,6 +81,8 @@ func (SpotDecoder) Decode(frame []byte, sourceInstanceID string) ([]plugins.RawR
 		Band:        spot.Band,
 		Mode:        spot.Mode,
 		SNRDb:       spot.Report,
+		TXDxcc:      spot.TXDxcc,
+		RXDxcc:      spot.RXDxcc,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("encode PSKReporter spot: %w", err)

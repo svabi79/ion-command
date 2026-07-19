@@ -99,9 +99,15 @@ func radioPayload(rng *rand.Rand, sequence uint64) map[string]any {
 		{"10m", 28_074_000, "FT8"}, {"6m", 50_313_000, "FT8"},
 	}
 	band := bands[rng.IntN(len(bands))]
+	// A weighted spread of real ADIF DXCC entity codes so region instruments
+	// have realistic data (Germany, Italy, USA, Japan, Spain, England, France,
+	// Switzerland, Poland, Brazil).
+	dxcc := []int{230, 230, 248, 291, 291, 291, 339, 281, 223, 227, 287, 269, 108}
 	fromLon, fromLat := randomLandishPoint(rng)
 	toLon, toLat := randomLandishPoint(rng)
 	return map[string]any{
+		"txDxcc": dxcc[rng.IntN(len(dxcc))],
+		"rxDxcc": dxcc[rng.IntN(len(dxcc))],
 		"spotId":      fmt.Sprintf("spot-%d", sequence),
 		"txCallsign":  fmt.Sprintf("TX%05d", sequence%100000),
 		"rxCallsign":  fmt.Sprintf("RX%05d", (sequence*37)%100000),

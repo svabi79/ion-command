@@ -4,9 +4,17 @@
 #include "GameFramework/HUD.h"
 #include "GeoArcLayerActor.h"
 #include "GeoTypes.h"
+#include "IonCockpitPanelSubsystem.h"
 #include "IonCockpitHudActor.generated.h"
 
 class UGeoDataSubsystem;
+
+// One aggregated display region (generic display.*Region property value).
+struct FIonRegionStat
+{
+    FString Label;
+    double Weight = 0.0;
+};
 
 UENUM()
 enum class EIonCockpitMode : uint8
@@ -53,7 +61,9 @@ private:
     void DrawStatusBar(float Scale, float Alpha);
     void DrawTrafficPanel(float Scale, float Alpha);
     void DrawRatePanel(float Scale, float Alpha, float PanelY);
+    void DrawRegionsPanel(float Scale, float Alpha, float PanelY);
     void DrawPolarPanel(float Scale, float Alpha);
+    void DrawProviderPanels(float Scale, float Alpha, float PanelY);
     void DrawEndpointLabels(float Scale, float Alpha);
     void DrawModeHint(float Scale, float Alpha);
 
@@ -82,13 +92,22 @@ private:
     static constexpr int32 MaxEndpointStats = 4096;
     static constexpr double EndpointRetentionSeconds = 120.0;
 
+    // Bounded aggregation of generic display regions for the top-regions panel.
+    TMap<FString, double> RegionWeights;
+    static constexpr int32 MaxRegionStats = 512;
+
     // Instrument caches refreshed on a fixed cadence, not per frame.
     TArray<FGeoPaletteBreakdownEntry> CachedBreakdown;
     FString CachedPanelTitle;
     int32 CachedBandFocus = INDEX_NONE;
     TArray<FIonEndpointStat> CachedTopEndpoints;
+    TArray<FIonRegionStat> CachedTopRegions;
+    double CachedRegionTotal = 0.0;
+    TArray<FIonCockpitPanelModel> CachedPanels;
     double LastAggregateSeconds = -1000.0;
     float TrafficPanelBottomY = 0.0f;
+    float RatePanelBottomY = 0.0f;
+    float PolarPanelBottomY = 0.0f;
 
     TWeakObjectPtr<AGeoArcLayerActor> ArcLayer;
     TWeakObjectPtr<UGeoDataSubsystem> DataSubsystem;

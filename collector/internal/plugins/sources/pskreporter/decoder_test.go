@@ -38,6 +38,24 @@ func TestDecodeRealFrame(t *testing.T) {
 	if math.Abs(spot.RXLatitude-41.73) > 0.05 || math.Abs(spot.RXLongitude-(-72.70)) > 0.05 {
 		t.Fatalf("FN31pr mapped to %.4f/%.4f", spot.RXLatitude, spot.RXLongitude)
 	}
+	if spot.TXDxcc == nil || *spot.TXDxcc != 287 || spot.RXDxcc == nil || *spot.RXDxcc != 291 {
+		t.Fatalf("sa/ra not carried through: %+v %+v", spot.TXDxcc, spot.RXDxcc)
+	}
+}
+
+func TestDecodeWithoutDxccStaysNil(t *testing.T) {
+	frame := []byte(`{"sq":9,"f":14074123,"md":"FT8","rp":-1,"t":1784436418,"sc":"HB9ABC","sl":"JN47ka","rc":"K1ABC","rl":"FN31pr","b":"20m"}`)
+	records, err := SpotDecoder{}.Decode(frame, "primary")
+	if err != nil || len(records) != 1 {
+		t.Fatalf("decode failed: %v (%d records)", err, len(records))
+	}
+	var spot normalizedSpot
+	if err := json.Unmarshal(records[0].Payload, &spot); err != nil {
+		t.Fatalf("payload decode failed: %v", err)
+	}
+	if spot.TXDxcc != nil || spot.RXDxcc != nil {
+		t.Fatalf("expected nil dxcc codes, got %+v %+v", spot.TXDxcc, spot.RXDxcc)
+	}
 }
 
 func TestDecodeSkipsUnmappableSpots(t *testing.T) {
