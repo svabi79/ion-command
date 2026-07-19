@@ -28,6 +28,10 @@ AIonCommandCameraPawn::AIonCommandCameraPawn()
     Grade.bOverride_BloomSizeScale = true; Grade.BloomSizeScale = 5.5f;
     Grade.bOverride_VignetteIntensity = true; Grade.VignetteIntensity = 0.38f;
     Grade.bOverride_SceneFringeIntensity = true; Grade.SceneFringeIntensity = 0.3f;
+    // No lens flare: overexposed arc-convergence hotspots (one skimmer hearing
+    // hundreds of stations) otherwise smear polygonal ghost chains across the
+    // starfield.
+    Grade.bOverride_LensFlareIntensity = true; Grade.LensFlareIntensity = 0.0f;
     AutoPossessPlayer = EAutoReceiveInput::Player0;
 }
 
