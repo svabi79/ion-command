@@ -19,12 +19,16 @@ AGeoArcLayerActor::AGeoArcLayerActor()
     PrimaryActorTick.bCanEverTick = true;
     SceneRoot = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
     SetRootComponent(SceneRoot);
-    static ConstructorHelpers::FObjectFinder<UStaticMesh> CylinderMesh(TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
+    // Beam segments are engine cubes (12 triangles): at 2-unit beam width the
+    // cross-section shape vanishes under bloom, while the smooth BasicShapes
+    // cylinder costs three orders of magnitude more triangles - 10k arcs x 16
+    // segments made the packaged client primitive-bound at ~10 fps.
+    static ConstructorHelpers::FObjectFinder<UStaticMesh> SegmentMesh(TEXT("/Engine/BasicShapes/Cube.Cube"));
     for (int32 Index = 0; Index < PaletteSize; ++Index)
     {
         UInstancedStaticMeshComponent* Instances = CreateDefaultSubobject<UInstancedStaticMeshComponent>(*FString::Printf(TEXT("ArcInstances_%02d"), Index));
         Instances->SetupAttachment(SceneRoot);
-        Instances->SetStaticMesh(CylinderMesh.Object);
+        Instances->SetStaticMesh(SegmentMesh.Object);
         Instances->SetCollisionEnabled(ECollisionEnabled::NoCollision);
         Instances->SetCastShadow(false);
         // Custom data 0/1 carry spawn time and 1/lifetime for the GPU fade.
@@ -37,7 +41,7 @@ AGeoArcLayerActor::AGeoArcLayerActor()
     }
     SelectionMesh = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("SelectedArcInstances"));
     SelectionMesh->SetupAttachment(SceneRoot);
-    SelectionMesh->SetStaticMesh(CylinderMesh.Object);
+    SelectionMesh->SetStaticMesh(SegmentMesh.Object);
     SelectionMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
     SelectionMesh->SetCastShadow(false);
     if (UMaterialInterface* SelectionMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/ION/Materials/MI_Signal_Selected.MI_Signal_Selected")))

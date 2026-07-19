@@ -71,7 +71,9 @@ void AIonCommandGameMode::TakeAutomationScreenshot()
 {
     // bShowUI so the capture proves the screen-space cockpit, not just the scene.
     FScreenshotRequest::RequestScreenshot(AutomationScreenshotFile, true, false);
-    UE_LOG(LogTemp, Display, TEXT("ION COMMAND automation screenshot requested: %s"), *AutomationScreenshotFile);
+    // GFrameCounter is the benchmark's frame source: the log line's own frame
+    // column wraps at 1000 and undercounts fast runs.
+    UE_LOG(LogTemp, Display, TEXT("ION COMMAND automation screenshot requested at frame %llu: %s"), GFrameCounter, *AutomationScreenshotFile);
     if (bExitAfterScreenshot)
     {
         GetWorldTimerManager().SetTimer(AutomationExitTimer, FTimerDelegate::CreateLambda([]

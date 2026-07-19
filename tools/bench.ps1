@@ -36,7 +36,8 @@ try {
 
 $requested = Select-String -LiteralPath $benchLog -Pattern 'automation screenshot requested' | Select-Object -First 1
 if (-not $requested) { throw 'benchmark capture did not complete' }
-if ($requested.Line -notmatch '\[\s*(\d+)\]') { throw "could not parse frame counter: $($requested.Line)" }
+# Explicit GFrameCounter value; the log line's own frame column wraps at 1000.
+if ($requested.Line -notmatch 'at frame (\d+)') { throw "could not parse frame counter: $($requested.Line)" }
 $frames = [int]$Matches[1]
 $fps = [math]::Round($frames / $DurationSeconds, 1)
 Write-Output ("frames={0} duration={1}s avg_fps={2}" -f $frames, $DurationSeconds, $fps)

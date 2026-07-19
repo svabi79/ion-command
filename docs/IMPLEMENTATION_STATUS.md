@@ -1,7 +1,35 @@
 # Implementation status
 
-Status date: **2026-07-19** (fifth pass: cockpit stage 2 — DXCC regions and
-the HF-conditions forecast).
+Status date: **2026-07-19** (sixth pass: renderer performance — the 60 fps
+target is met without Niagara, and the old benchmark numbers are retracted).
+
+## Renderer performance (2026-07-19)
+
+**Correction:** the earlier packaged-build figures (24 seg = 6.5 fps, 16 seg =
+10.3 fps, "overdraw-bound, 60 fps requires the Niagara renderer") were
+measurement artifacts. The benchmark parsed the log line's own frame column,
+which wraps at 1000 frames — the real counts were ~1000 frames higher. The
+harness now logs `GFrameCounter` explicitly and `bench.ps1` parses that.
+
+Honest same-session series (12,000-arc cap, 600 mock spots/s, packaged
+Development client at 5120x1440 on the RTX 4090, one change per measurement):
+
+| Configuration | avg fps |
+|---|---|
+| Cylinder segments, engine-default lens flare (yesterday's shipped state) | 80.3 |
+| Cylinder segments, lens flare off | 86.9 |
+| **Cube segments (12 tris), lens flare off (shipped)** | **125.3** |
+
+- The arc segment mesh is now the engine cube: at a 2-unit beam width under
+  bloom the cross-section is invisible (stress-ball A/B captures are visually
+  identical), while the smooth BasicShapes cylinder cost three orders of
+  magnitude more triangles. The renderer was primitive-bound, not
+  overdraw-bound.
+- Lens flare stays off (see the hotspot ghost fix); it was worth ~8%.
+- The 60 fps target is exceeded 2x at the 12k-arc cap. The Niagara Data
+  Channel renderer (ADR 0003) is no longer required at this scale and is
+  deferred until a concrete need (e.g. far larger arc counts or per-particle
+  motion) appears.
 
 ## Cockpit stage 2 (2026-07-19)
 
@@ -92,9 +120,10 @@ last-state snapshot on connect is a known follow-up.
   `MaxVisibleArcs` 10,000.
 - **Benchmark** (`tools/bench.ps1`, 600 mock spots/s, packaged client at
   5120x1440 on the RTX 4090 workstation): 24 segments/arc = 6.5 fps avg;
-  16 segments/arc = 10.3 fps avg (one change per measurement). 10k additive
-  ISM arcs are overdraw-bound; the 60 fps target requires the Niagara/GPU
-  renderer, which stays the top Phase 2 item.
+  16 segments/arc = 10.3 fps avg (one change per measurement).
+  **RETRACTED 2026-07-19**: these figures were corrupted by the log frame
+  counter wrapping at 1000; see "Renderer performance" above for the
+  corrected series (~80 fps then, 125 fps now).
 - **Own station**: `[IonCommand.Station]` in DefaultGame.ini (Callsign,
   Locator; default N0CALL/JN00AA), pulsing halo marker on the globe, M toggles
   a generic entity filter (only links touching the own station). The
