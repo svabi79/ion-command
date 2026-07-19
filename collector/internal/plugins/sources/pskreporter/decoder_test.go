@@ -8,7 +8,7 @@ import (
 
 func TestDecodeRealFrame(t *testing.T) {
 	frame := []byte(`{"sq":123456789,"f":14074123,"md":"FT8","rp":-11,"t":1784436418,"sc":"HB9ABC","sl":"JN47ka","rc":"K1ABC","rl":"FN31pr","sa":287,"ra":291,"b":"20m"}`)
-	records, err := SpotDecoder{}.Decode(frame, "primary")
+	records, err := NewSpotDecoder().Decode(frame, "primary")
 	if err != nil {
 		t.Fatalf("decode failed: %v", err)
 	}
@@ -45,7 +45,7 @@ func TestDecodeRealFrame(t *testing.T) {
 
 func TestDecodeWithoutDxccStaysNil(t *testing.T) {
 	frame := []byte(`{"sq":9,"f":14074123,"md":"FT8","rp":-1,"t":1784436418,"sc":"HB9ABC","sl":"JN47ka","rc":"K1ABC","rl":"FN31pr","b":"20m"}`)
-	records, err := SpotDecoder{}.Decode(frame, "primary")
+	records, err := NewSpotDecoder().Decode(frame, "primary")
 	if err != nil || len(records) != 1 {
 		t.Fatalf("decode failed: %v (%d records)", err, len(records))
 	}
@@ -66,7 +66,7 @@ func TestDecodeSkipsUnmappableSpots(t *testing.T) {
 		[]byte(`{"sq":4,"f":14074000,"sc":"","sl":"JN47","rc":"K1ABC","rl":"FN31"}`),
 	}
 	for i, frame := range cases {
-		records, err := SpotDecoder{}.Decode(frame, "primary")
+		records, err := NewSpotDecoder().Decode(frame, "primary")
 		if err != nil {
 			t.Fatalf("case %d returned error: %v", i, err)
 		}
@@ -77,7 +77,7 @@ func TestDecodeSkipsUnmappableSpots(t *testing.T) {
 }
 
 func TestDecodeRejectsMalformedJSON(t *testing.T) {
-	if _, err := (SpotDecoder{}).Decode([]byte("not json"), "primary"); err == nil {
+	if _, err := NewSpotDecoder().Decode([]byte("not json"), "primary"); err == nil {
 		t.Fatal("expected an error for malformed JSON")
 	}
 }
@@ -106,5 +106,21 @@ func TestMaidenheadConversion(t *testing.T) {
 		if _, _, err := MaidenheadToLatLon(invalid); err == nil {
 			t.Fatalf("expected error for %q", invalid)
 		}
+	}
+}
+
+func TestDecodeDropsDuplicateSequences(t *testing.T) {
+	decoder := NewSpotDecoder()
+	frame := []byte(`{"sq":42,"f":14074123,"md":"FT8","rp":-1,"t":1784436418,"sc":"HB9ABC","sl":"JN47ka","rc":"K1ABC","rl":"FN31pr","b":"20m"}`)
+	first, err := decoder.Decode(frame, "primary")
+	if err != nil || len(first) != 1 {
+		t.Fatalf("first decode: %v (%d records)", err, len(first))
+	}
+	second, err := decoder.Decode(frame, "primary")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(second) != 0 {
+		t.Fatalf("redelivered sequence must be dropped, got %d records", len(second))
 	}
 }

@@ -26,6 +26,8 @@ private:
     void CycleHudMode();
     void ToggleHeatmap();
     void TogglePaths();
+    void CycleModeFilter();
+    FString ActiveModeFilter;
     void StartRecentReplay();
     void ChangeReplaySpeed(double Factor);
     void ReplaySlower();

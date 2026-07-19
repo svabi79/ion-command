@@ -47,14 +47,45 @@ type normalizedSpot struct {
 // SpotDecoder converts broker frames into ham-radio raw records. Spots that
 // cannot be placed on the globe (missing or malformed locators) are skipped
 // rather than fabricated at 0/0; frames that are not valid JSON are an error.
-type SpotDecoder struct{}
+// A bounded window of recent sequence ids drops duplicates, which the broker
+// redelivers around reconnects.
+type SpotDecoder struct {
+	recentSequences map[int64]struct{}
+	recentOrder     []int64
+}
 
-func (SpotDecoder) Decode(frame []byte, sourceInstanceID string) ([]plugins.RawRecord, error) {
+const dedupeWindow = 8192
+
+func NewSpotDecoder() *SpotDecoder {
+	return &SpotDecoder{recentSequences: make(map[int64]struct{}, dedupeWindow)}
+}
+
+func (d *SpotDecoder) isDuplicate(sequence int64) bool {
+	if d.recentSequences == nil {
+		return false
+	}
+	if _, seen := d.recentSequences[sequence]; seen {
+		return true
+	}
+	if len(d.recentOrder) >= dedupeWindow {
+		oldest := d.recentOrder[0]
+		d.recentOrder = d.recentOrder[1:]
+		delete(d.recentSequences, oldest)
+	}
+	d.recentSequences[sequence] = struct{}{}
+	d.recentOrder = append(d.recentOrder, sequence)
+	return false
+}
+
+func (d *SpotDecoder) Decode(frame []byte, sourceInstanceID string) ([]plugins.RawRecord, error) {
 	var spot mqttSpot
 	if err := json.Unmarshal(frame, &spot); err != nil {
 		return nil, fmt.Errorf("decode PSKReporter frame: %w", err)
 	}
 	if spot.TXCallsign == "" || spot.RXCallsign == "" || spot.Frequency <= 0 {
+		return nil, nil
+	}
+	if d.isDuplicate(spot.Sequence) {
 		return nil, nil
 	}
 	txLat, txLon, err := MaidenheadToLatLon(spot.TXLocator)

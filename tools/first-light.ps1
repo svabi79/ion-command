@@ -66,6 +66,10 @@ try {
 if (-not (Test-Path -LiteralPath $screenshot)) { throw 'live screenshot was not produced' }
 $errors = Select-String -LiteralPath $gameLog -Pattern ': Error:'
 if ($errors) { $errors | Select-Object -First 10 | ForEach-Object { $_.Line }; throw 'game log contains errors' }
+# Structural regression gate: HUD present, globe lit, scene colorful (a
+# broken master material renders the gray engine default and must fail here).
+& python (Join-Path $PSScriptRoot 'verify-capture.py') $screenshot
+if ($LASTEXITCODE -ne 0) { throw 'capture failed structural verification' }
 
 Write-Output "First Light capture complete: $screenshot"
 Get-Item -LiteralPath $screenshot | Select-Object Length, LastWriteTime

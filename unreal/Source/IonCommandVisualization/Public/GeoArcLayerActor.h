@@ -61,6 +61,11 @@ public:
     void SetEntityFilter(const TArray<FString>& EntityIds);
     bool HasEntityFilter() const { return EntityFilter.Num() > 0; }
 
+    // Restricts the layer to messages whose property Key equals Value (empty
+    // value clears the filter) and resubmits the active window.
+    void SetPropertyFilter(const FString& Key, const FString& Value);
+    const FString& GetPropertyFilterValue() const { return PropertyFilterValue; }
+
     // Shows a single palette (band) exclusively; pressing the same preset
     // again or passing INDEX_NONE restores all bands. Pure visibility, no
     // data churn.
@@ -114,6 +119,8 @@ private:
     FString HighlightedMessageId;
     TArray<float> PaletteBaseIntensities;
     TArray<FString> EntityFilter;
+    FString PropertyFilterKey;
+    FString PropertyFilterValue;
     // Decaying per-endpoint arc counts driving the hotspot dimming.
     TMap<FString, float> EndpointDensity;
     int32 BandFocusIndex = INDEX_NONE;

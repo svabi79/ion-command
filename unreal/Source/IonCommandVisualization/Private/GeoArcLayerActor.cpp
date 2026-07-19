@@ -202,6 +202,10 @@ void AGeoArcLayerActor::Submit(const FGeoMessageEnvelope& Message)
     {
         return;
     }
+    if (!PropertyFilterValue.IsEmpty() && Message.Properties.FindRef(PropertyFilterKey) != PropertyFilterValue)
+    {
+        return;
+    }
     if (ActiveArcs.Num() >= MaxVisibleArcs)
     {
         // Trim without rebuilding: at firehose rates every submit would
@@ -262,6 +266,18 @@ void AGeoArcLayerActor::SetEntityFilter(const TArray<FString>& EntityIds)
 {
     if (EntityFilter == EntityIds) return;
     EntityFilter = EntityIds;
+    Reset();
+    if (DataSubsystem.IsValid())
+    {
+        for (const FGeoMessageEnvelope& Message : DataSubsystem->GetActiveMessages()) Submit(Message);
+    }
+}
+
+void AGeoArcLayerActor::SetPropertyFilter(const FString& Key, const FString& Value)
+{
+    if (PropertyFilterKey == Key && PropertyFilterValue == Value) return;
+    PropertyFilterKey = Key;
+    PropertyFilterValue = Value;
     Reset();
     if (DataSubsystem.IsValid())
     {

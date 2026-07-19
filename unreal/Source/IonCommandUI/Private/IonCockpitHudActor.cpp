@@ -368,6 +368,14 @@ void AIonCockpitHudActor::DrawStatusBar(float Scale, float Alpha)
     for (int32 Bucket : RateBuckets) PerMinute += Bucket;
     DrawLabelValue(CursorX, TextY, TEXT("PATHS/MIN"), FString::Printf(TEXT("%d"), PerMinute), CockpitCyan, Scale, Alpha);
 
+    if (const AGeoArcLayerActor* Layer = ArcLayer.Get())
+    {
+        if (!Layer->GetPropertyFilterValue().IsEmpty())
+        {
+            DrawLabelValue(CursorX, TextY, TEXT("FILTER"), Layer->GetPropertyFilterValue().ToUpper(), CockpitAmber, Scale, Alpha);
+        }
+    }
+
     if (Data)
     {
         const FGeoRuntimeStatistics Stats = Data->GetStatistics();

@@ -113,7 +113,7 @@ void AIonCommandDeckActor::Tick(float DeltaSeconds)
     else
     {
         const FString TimelineState = Timeline && Timeline->IsPaused() ? TEXT("PAUSED") : (Timeline && !Timeline->IsLive() ? TEXT("REPLAY") : TEXT("LIVE"));
-        SelectionText->SetText(FText::FromString(FString::Printf(TEXT("%s // SELECT PATH WITH LMB\nORBIT // RMB   ZOOM // WHEEL\nPAUSE // SPACE   RETURN LIVE // L   HUD // TAB\nPATHS // V   HEATMAP // H   IONOSPHERE // I"), *TimelineState)));
+        SelectionText->SetText(FText::FromString(FString::Printf(TEXT("%s // SELECT PATH WITH LMB\nORBIT // RMB   ZOOM // WHEEL\nPAUSE // SPACE   RETURN LIVE // L   HUD // TAB\nPATHS // V   HEATMAP // H   IONOSPHERE // I   MODE // N"), *TimelineState)));
         SelectionText->SetTextRenderColor(Timeline && Timeline->IsPaused() ? FColor(255, 180, 50) : FColor(110, 225, 255));
     }
 }

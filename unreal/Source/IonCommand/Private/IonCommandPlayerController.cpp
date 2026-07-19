@@ -3,6 +3,7 @@
 #include "Components/InputComponent.h"
 #include "EngineUtils.h"
 #include "GeoArcLayerActor.h"
+#include "GeoDataSubsystem.h"
 #include "GeoSelectionSubsystem.h"
 #include "GeoReplaySubsystem.h"
 #include "HamRadioOwnStationActor.h"
@@ -39,6 +40,39 @@ void AIonCommandPlayerController::SetupInputComponent()
     InputComponent->BindAction(TEXT("CycleHud"), IE_Pressed, this, &AIonCommandPlayerController::CycleHudMode);
     InputComponent->BindAction(TEXT("ToggleHeatmap"), IE_Pressed, this, &AIonCommandPlayerController::ToggleHeatmap);
     InputComponent->BindAction(TEXT("TogglePaths"), IE_Pressed, this, &AIonCommandPlayerController::TogglePaths);
+    InputComponent->BindAction(TEXT("CycleModeFilter"), IE_Pressed, this, &AIonCommandPlayerController::CycleModeFilter);
+}
+
+void AIonCommandPlayerController::CycleModeFilter()
+{
+    // Cycle through the transmission modes present in the active window
+    // (alphabetical), then back to no filter. Property-driven, so any domain
+    // that publishes a "mode" property participates.
+    UGeoDataSubsystem* Data = GetGameInstance() ? GetGameInstance()->GetSubsystem<UGeoDataSubsystem>() : nullptr;
+    if (!Data) return;
+    TSet<FString> Modes;
+    for (const FGeoMessageEnvelope& Message : Data->GetActiveMessages())
+    {
+        const FString Mode = Message.Properties.FindRef(TEXT("mode"));
+        if (!Mode.IsEmpty()) Modes.Add(Mode);
+    }
+    TArray<FString> Sorted = Modes.Array();
+    Sorted.Sort();
+    FString Next;
+    if (!ActiveModeFilter.IsEmpty())
+    {
+        const int32 CurrentIndex = Sorted.IndexOfByKey(ActiveModeFilter);
+        if (CurrentIndex != INDEX_NONE && CurrentIndex + 1 < Sorted.Num()) Next = Sorted[CurrentIndex + 1];
+    }
+    else if (Sorted.Num() > 0)
+    {
+        Next = Sorted[0];
+    }
+    ActiveModeFilter = Next;
+    for (TActorIterator<AGeoArcLayerActor> It(GetWorld()); It; ++It)
+    {
+        It->SetPropertyFilter(TEXT("mode"), ActiveModeFilter);
+    }
 }
 
 void AIonCommandPlayerController::TogglePaths()

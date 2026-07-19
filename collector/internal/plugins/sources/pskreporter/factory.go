@@ -15,7 +15,7 @@ func NewMQTT(sourceConfig config.Source, logger *slog.Logger) (*Adapter, error) 
 	}
 	return &Adapter{
 		InstanceID: sourceConfig.ID,
-		Decoder:    SpotDecoder{},
+		Decoder:    NewSpotDecoder(),
 		Transport: &MQTTTransport{
 			Broker:   sourceConfig.Broker,
 			Topic:    sourceConfig.Topic,
