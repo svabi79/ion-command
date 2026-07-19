@@ -11,6 +11,7 @@
 #include "EngineUtils.h"
 #include "GeoPointLayerActor.h"
 #include "HamRadioLinkLayerActor.h"
+#include "HamRadioOwnStationActor.h"
 #include "IonCommandCameraPawn.h"
 #include "IonCommandDeckActor.h"
 #include "IonCommandPlayerController.h"
@@ -35,6 +36,16 @@ void AIonCommandGameMode::BeginPlay()
     TActorIterator<AIonIonosphereActor> Ionosphere(World); if (!Ionosphere) World->SpawnActor<AIonIonosphereActor>(FVector::ZeroVector, FRotator::ZeroRotator);
     TActorIterator<AIonAuroraActor> Aurora(World); if (!Aurora) World->SpawnActor<AIonAuroraActor>(FVector::ZeroVector, FRotator::ZeroRotator);
     TActorIterator<AIonCommandDeckActor> Deck(World); if (!Deck) World->SpawnActor<AIonCommandDeckActor>(FVector(-1300, 0, 0), FRotator::ZeroRotator);
+    TActorIterator<AHamRadioOwnStationActor> OwnStation(World); if (!OwnStation) World->SpawnActor<AHamRadioOwnStationActor>(FVector::ZeroVector, FRotator::ZeroRotator);
+    // Boot staging: fade in from black over the first seconds. Purely visual
+    // and never blocks input, so any interaction effectively skips it.
+    if (APlayerController* Player = World->GetFirstPlayerController())
+    {
+        if (Player->PlayerCameraManager)
+        {
+            Player->PlayerCameraManager->StartCameraFade(1.0f, 0.0f, 5.0f, FLinearColor::Black, false, false);
+        }
+    }
     ScheduleAutomationScreenshot();
 }
 

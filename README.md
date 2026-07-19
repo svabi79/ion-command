@@ -59,10 +59,27 @@ provided command to generate the `L_CommandDeck` asset.
 Start the collector before Play in Editor. Right mouse orbits, the wheel zooms,
 left mouse selects the nearest visible path, Escape releases it, Space pauses
 the shared timeline, and L returns to live. F re-centers the camera on the
-selection and I toggles the conceptual ionosphere shells. A selected path is
-pinned and shown as a bright dedicated arc with white endpoint markers while
+selection, I toggles the conceptual ionosphere shells, M shows only links
+touching the own station, 1-9 focus a single band (0 restores all), R replays
+the last 15 minutes, and comma/period change the replay speed. A selected path
+is pinned and shown as a bright dedicated arc with white endpoint markers while
 all other traffic dims, and the camera eases toward the selected link;
 observed-link details appear on the center console.
+
+Configure the own station in `unreal/Config/DefaultGame.ini`:
+
+```ini
+[IonCommand.Station]
+Callsign=N0CALL
+Locator=JN00AA
+```
+
+Package a standalone client and benchmark it:
+
+```powershell
+.\tools\package.ps1        # -> dist\windows\IonCommand.exe
+.\tools\bench.ps1          # 600 mock spots/s, ~10k arcs, avg-fps report
+```
 
 See [development instructions](docs/DEVELOPMENT.md), the
 [architecture](docs/ARCHITECTURE.md), and the

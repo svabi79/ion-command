@@ -22,6 +22,8 @@ import (
 	"github.com/ion-command/ion-command/collector/internal/plugins/domains/weather"
 	mocksource "github.com/ion-command/ion-command/collector/internal/plugins/sources/mock"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/pskreporter"
+	"github.com/ion-command/ion-command/collector/internal/plugins/sources/swpc"
+	"github.com/ion-command/ion-command/collector/internal/plugins/sources/wsjtx"
 	"github.com/ion-command/ion-command/collector/internal/recording"
 	"github.com/ion-command/ion-command/collector/internal/stream"
 	"github.com/ion-command/ion-command/collector/internal/telemetry"
@@ -62,6 +64,10 @@ func run(configPath string, logger *slog.Logger) error {
 			source, err = mocksource.New(sourceConfig)
 		case sourceConfig.Type == "pskreporter.mqtt":
 			source, err = pskreporter.NewMQTT(sourceConfig, logger)
+		case sourceConfig.Type == "wsjtx.udp":
+			source, err = wsjtx.New(sourceConfig, logger)
+		case sourceConfig.Type == "spaceweather.swpc":
+			source, err = swpc.New(sourceConfig, logger)
 		default:
 			err = fmt.Errorf("unknown source type %q", sourceConfig.Type)
 		}

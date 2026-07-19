@@ -1,7 +1,47 @@
 # Implementation status
 
-Status date: **2026-07-19** (second pass: live PSKReporter feed + visual
-overhaul).
+Status date: **2026-07-19** (third pass: packaged build, GPU age fade, own
+station, WSJT-X, NOAA SWPC, operator controls).
+
+## Phase 2 second slice (2026-07-19, packages A-D)
+
+- **Packaged build**: `tools/package.ps1` (Development by default, `-Config`
+  selectable) produces `dist/windows/IonCommand.exe`; the final live capture
+  and the benchmark both ran from the packaged client.
+- **GPU age fade**: arc instances carry spawn time and 1/lifetime as
+  per-instance custom data; the signal material fades emissive and opacity on
+  the GPU. CPU expiry rebuilds only once >10% of the list is stale;
+  `MaxVisibleArcs` 10,000.
+- **Benchmark** (`tools/bench.ps1`, 600 mock spots/s, packaged client at
+  5120x1440 on the RTX 4090 workstation): 24 segments/arc = 6.5 fps avg;
+  16 segments/arc = 10.3 fps avg (one change per measurement). 10k additive
+  ISM arcs are overdraw-bound; the 60 fps target requires the Niagara/GPU
+  renderer, which stays the top Phase 2 item.
+- **Own station**: `[IonCommand.Station]` in DefaultGame.ini (Callsign,
+  Locator; default N0CALL/JN00AA), pulsing halo marker on the globe, M toggles
+  a generic entity filter (only links touching the own station). The
+  repository modularity gate caught a first draft that leaked `callsign` into
+  the generic arc renderer; the filter is now entity-id based, with the
+  ham-specific id construction in the HamRadio module.
+- **WSJT-X UDP source** (`wsjtx.udp`, default 127.0.0.1:2237): QDataStream
+  header/status/decode parser, sender callsign+grid extraction from FT8/FT4
+  text (RR73-vs-grid handled), grid cache for non-CQ decodes, band from
+  frequency. Unit tests plus a synthetic-datagram end-to-end run (2 decodes →
+  4 canonical events, 0 invalid). Disabled by default in live.json.
+- **NOAA SWPC source** (`spaceweather.swpc`): polls Kp, 10.7cm flux, solar
+  wind speed and IMF Bz every 5 min (configurable `pollSeconds`, hard floor of
+  1 min); parses the real product formats (verified against the live API);
+  missing summaries degrade to null. The aurora ovals now expand equatorward
+  and brighten with live Kp.
+- **Operator controls**: 1-9 exclusive band presets (0 = all, pure component
+  visibility), R replays the last 15 minutes, comma/period halve/double replay
+  speed (0.25x-10x), boot fade-in with diegetic deck boot lines (never blocks
+  input). Deviation from the original key spec: R starts replay (the collector
+  records continuously anyway).
+- **Config hardening**: `config.Load` no longer element-merges the default
+  source list into configured sources (a Go `json.Unmarshal` slice pitfall
+  that briefly made the SWPC poller inherit `eventsPerSecond: 40` and hammer
+  NOAA at 20 req/s until caught in the live check; regression-tested).
 
 ## Phase 2 progress (2026-07-19)
 

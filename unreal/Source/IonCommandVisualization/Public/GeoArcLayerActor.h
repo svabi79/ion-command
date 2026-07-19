@@ -15,6 +15,7 @@ struct FRenderedGeoArc
     GENERATED_BODY()
     FGeoMessageEnvelope Message;
     FDateTime AddedUtc;
+    double SpawnTimeSeconds = 0.0;
     int32 PaletteIndex = 0;
 };
 
@@ -39,9 +40,20 @@ public:
     // persistent collision bodies for the thousands of instanced arc segments.
     bool FindClosestMessageToRay(const FVector& RayOrigin, const FVector& RayDirection, double RayLength, double MaxDistance, FGeoMessageEnvelope& OutMessage) const;
 
+    // Restricts the layer to relationships touching one of the given entity
+    // ids (empty clears the filter) and resubmits the active window.
+    void SetEntityFilter(const TArray<FString>& EntityIds);
+    bool HasEntityFilter() const { return EntityFilter.Num() > 0; }
+
+    // Shows a single palette (band) exclusively; pressing the same preset
+    // again or passing INDEX_NONE restores all bands. Pure visibility, no
+    // data churn.
+    void SetBandFocus(int32 PaletteIndex);
+    int32 GetBandFocus() const { return BandFocusIndex; }
+
     UPROPERTY(EditAnywhere, Category="ION COMMAND|Layer") double GlobeRadius = 1000.0;
-    UPROPERTY(EditAnywhere, Category="ION COMMAND|Layer") int32 SegmentsPerArc = 24;
-    UPROPERTY(EditAnywhere, Category="ION COMMAND|Layer") int32 MaxVisibleArcs = 2400;
+    UPROPERTY(EditAnywhere, Category="ION COMMAND|Layer") int32 SegmentsPerArc = 16;
+    UPROPERTY(EditAnywhere, Category="ION COMMAND|Layer") int32 MaxVisibleArcs = 10000;
     UPROPERTY(EditAnywhere, Category="ION COMMAND|Layer") double LifetimeSeconds = 18.0;
     // Cylinder scale factors; the base mesh is 100 units wide. Thin beams plus
     // bloom read as light, thick ones read as plastic tubes.
@@ -73,6 +85,8 @@ private:
     TWeakObjectPtr<UGeoDataSubsystem> DataSubsystem;
     FString HighlightedMessageId;
     TArray<float> PaletteBaseIntensities;
+    TArray<FString> EntityFilter;
+    int32 BandFocusIndex = INDEX_NONE;
     bool bSelectionDimmed = false;
     bool bNeedsRebuild = false;
     double LastExpiryCheck = 0.0;

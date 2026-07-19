@@ -28,6 +28,8 @@ AGeoArcLayerActor::AGeoArcLayerActor()
         Instances->SetStaticMesh(CylinderMesh.Object);
         Instances->SetCollisionEnabled(ECollisionEnabled::NoCollision);
         Instances->SetCastShadow(false);
+        // Custom data 0/1 carry spawn time and 1/lifetime for the GPU fade.
+        Instances->SetNumCustomDataFloats(2);
         if (UMaterialInterface* SignalMaterial = LoadObject<UMaterialInterface>(nullptr, *FString::Printf(TEXT("/Game/ION/Materials/MI_Signal_%02d.MI_Signal_%02d"), Index, Index)))
         {
             Instances->SetMaterial(0, SignalMaterial);
@@ -159,14 +161,20 @@ void AGeoArcLayerActor::Tick(float DeltaSeconds)
         RebuildInstances();
     }
     const double Now = FPlatformTime::Seconds();
-    if (Now - LastExpiryCheck < 2.0) return;
+    if (Now - LastExpiryCheck < 3.0) return;
     LastExpiryCheck = Now;
     const UGeoTimelineSubsystem* Timeline = GetGameInstance() ? GetGameInstance()->GetSubsystem<UGeoTimelineSubsystem>() : nullptr;
     const FDateTime TimelineUtc = Timeline ? Timeline->GetTimelineUtc() : FDateTime::UtcNow();
     const FDateTime Cutoff = TimelineUtc - FTimespan::FromSeconds(LifetimeSeconds);
-    const int32 Before = ActiveArcs.Num();
-    ActiveArcs.RemoveAll([&Cutoff](const FRenderedGeoArc& Arc) { return Arc.AddedUtc < Cutoff; });
-    if (Before != ActiveArcs.Num()) RebuildInstances();
+    int32 ExpiredCount = 0;
+    for (const FRenderedGeoArc& Arc : ActiveArcs) if (Arc.AddedUtc < Cutoff) ++ExpiredCount;
+    // Expired arcs have already faded to zero on the GPU, so the costly CPU
+    // rebuild can wait until a meaningful share of the list is stale.
+    if (ExpiredCount > FMath::Max(64, ActiveArcs.Num() / 10))
+    {
+        ActiveArcs.RemoveAll([&Cutoff](const FRenderedGeoArc& Arc) { return Arc.AddedUtc < Cutoff; });
+        RebuildInstances();
+    }
 }
 
 bool AGeoArcLayerActor::Supports(const FGeoMessageEnvelope& Message) const
@@ -177,6 +185,10 @@ bool AGeoArcLayerActor::Supports(const FGeoMessageEnvelope& Message) const
 void AGeoArcLayerActor::Submit(const FGeoMessageEnvelope& Message)
 {
     if (!Supports(Message)) return;
+    if (EntityFilter.Num() > 0 && !EntityFilter.Contains(Message.FromEntityId) && !EntityFilter.Contains(Message.ToEntityId))
+    {
+        return;
+    }
     if (ActiveArcs.Num() >= MaxVisibleArcs)
     {
         // Trim without rebuilding: at firehose rates every submit would
@@ -187,6 +199,7 @@ void AGeoArcLayerActor::Submit(const FGeoMessageEnvelope& Message)
     FRenderedGeoArc& Arc = ActiveArcs.AddDefaulted_GetRef();
     Arc.Message = Message;
     Arc.AddedUtc = Message.Time.ObservedUtc.GetTicks() > 0 ? Message.Time.ObservedUtc : FDateTime::UtcNow();
+    Arc.SpawnTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
     Arc.PaletteIndex = ResolvePaletteIndex(Message);
     if (!bNeedsRebuild)
     {
@@ -206,10 +219,40 @@ void AGeoArcLayerActor::Reset()
 
 void AGeoArcLayerActor::OnMessageAccepted(const FGeoMessageEnvelope& Message) { Submit(Message); }
 
+void AGeoArcLayerActor::SetBandFocus(int32 PaletteIndex)
+{
+    BandFocusIndex = (PaletteIndex == BandFocusIndex) ? INDEX_NONE : PaletteIndex;
+    for (int32 Index = 0; Index < PaletteMeshes.Num(); ++Index)
+    {
+        PaletteMeshes[Index]->SetVisibility(BandFocusIndex == INDEX_NONE || Index == BandFocusIndex);
+    }
+}
+
+void AGeoArcLayerActor::SetEntityFilter(const TArray<FString>& EntityIds)
+{
+    if (EntityFilter == EntityIds) return;
+    EntityFilter = EntityIds;
+    Reset();
+    if (DataSubsystem.IsValid())
+    {
+        for (const FGeoMessageEnvelope& Message : DataSubsystem->GetActiveMessages()) Submit(Message);
+    }
+}
+
 void AGeoArcLayerActor::AddArcInstances(const FRenderedGeoArc& Arc)
 {
     UInstancedStaticMeshComponent* Instances = PaletteMeshes.IsValidIndex(Arc.PaletteIndex) ? PaletteMeshes[Arc.PaletteIndex] : PaletteMeshes.Last();
-    AddArcInstancesTo(Instances, Arc.Message, ArcThickness);
+    TArray<FTransform> Transforms;
+    Transforms.Reserve(SegmentsPerArc);
+    AppendArcTransforms(Transforms, Arc.Message, ArcThickness);
+    const TArray<int32> Indices = Instances->AddInstances(Transforms, true, true);
+    const float InverseLifetime = LifetimeSeconds > 0.0 ? static_cast<float>(1.0 / LifetimeSeconds) : 0.0f;
+    for (const int32 InstanceIndex : Indices)
+    {
+        Instances->SetCustomDataValue(InstanceIndex, 0, static_cast<float>(Arc.SpawnTimeSeconds), false);
+        Instances->SetCustomDataValue(InstanceIndex, 1, InverseLifetime, false);
+    }
+    Instances->MarkRenderStateDirty();
 }
 
 void AGeoArcLayerActor::AddArcInstancesTo(UInstancedStaticMeshComponent* Instances, const FGeoMessageEnvelope& Message, double Thickness)
@@ -318,16 +361,30 @@ void AGeoArcLayerActor::RebuildInstances()
     // One bulk update per palette component instead of one render-state dirty
     // per segment; this keeps full rebuilds affordable at firehose feed rates.
     TArray<TArray<FTransform>> PerPalette;
+    TArray<TArray<float>> PerPaletteSpawnTimes;
     PerPalette.SetNum(PaletteMeshes.Num());
+    PerPaletteSpawnTimes.SetNum(PaletteMeshes.Num());
     for (const FRenderedGeoArc& Arc : ActiveArcs)
     {
         const int32 PaletteIndex = PaletteMeshes.IsValidIndex(Arc.PaletteIndex) ? Arc.PaletteIndex : PaletteMeshes.Num() - 1;
         AppendArcTransforms(PerPalette[PaletteIndex], Arc.Message, ArcThickness);
+        for (int32 Segment = 0; Segment < SegmentsPerArc; ++Segment)
+        {
+            PerPaletteSpawnTimes[PaletteIndex].Add(static_cast<float>(Arc.SpawnTimeSeconds));
+        }
     }
+    const float InverseLifetime = LifetimeSeconds > 0.0 ? static_cast<float>(1.0 / LifetimeSeconds) : 0.0f;
     for (int32 Index = 0; Index < PaletteMeshes.Num(); ++Index)
     {
-        PaletteMeshes[Index]->ClearInstances();
-        PaletteMeshes[Index]->AddInstances(PerPalette[Index], false, true);
+        UInstancedStaticMeshComponent* Instances = PaletteMeshes[Index];
+        Instances->ClearInstances();
+        const TArray<int32> Added = Instances->AddInstances(PerPalette[Index], true, true);
+        for (int32 AddedIndex = 0; AddedIndex < Added.Num(); ++AddedIndex)
+        {
+            Instances->SetCustomDataValue(Added[AddedIndex], 0, PerPaletteSpawnTimes[Index][AddedIndex], false);
+            Instances->SetCustomDataValue(Added[AddedIndex], 1, InverseLifetime, false);
+        }
+        Instances->MarkRenderStateDirty();
     }
 }
 

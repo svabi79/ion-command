@@ -24,3 +24,6 @@ __pycache__/
 .vscode/
 Thumbs.db
 Desktop.ini
+
+# Packaged builds
+dist/

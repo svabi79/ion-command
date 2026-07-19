@@ -20,4 +20,14 @@ private:
     void ClearSelection();
     void ToggleIonosphere();
     void FocusSelection();
+    void ToggleOwnStationFilter();
+    void SelectBandPreset(int32 PaletteIndex);
+    void ClearBandPreset();
+    void StartRecentReplay();
+    void ChangeReplaySpeed(double Factor);
+    void ReplaySlower();
+    void ReplayFaster();
+    double ReplaySpeed = 1.0;
+    FDateTime ReplayFromUtc;
+    FDateTime ReplayToUtc;
 };

@@ -26,11 +26,15 @@
       "topic": "pskr/filter/v2/#"
     },
     {
-      "id": "mock-spaceweather-primary",
-      "type": "mock.spaceweather",
-      "enabled": true,
-      "eventsPerSecond": 0.1,
-      "seed": 7812
+      "id": "wsjtx-local",
+      "type": "wsjtx.udp",
+      "enabled": false,
+      "broker": "127.0.0.1:2237"
+    },
+    {
+      "id": "swpc-primary",
+      "type": "spaceweather.swpc",
+      "enabled": true
     }
   ]
 }

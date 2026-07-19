@@ -19,7 +19,7 @@ $gameLog = Join-Path $repositoryRoot 'unreal\Saved\Logs\Game-live-capture.log'
 if ($LASTEXITCODE -ne 0) { throw 'collector build failed' }
 
 $collector = Start-Process -FilePath (Join-Path $repositoryRoot 'collector\bin\ion-collector.exe') `
-    -ArgumentList @('-config', (Join-Path $repositoryRoot 'collector\configs\development.json')) `
+    -ArgumentList @('-config', ('"{0}"' -f (Join-Path $repositoryRoot 'collector\configs\development.json'))) `
     -WorkingDirectory (Join-Path $repositoryRoot 'collector') -PassThru -WindowStyle Hidden
 try {
     $deadline = (Get-Date).AddSeconds(15)

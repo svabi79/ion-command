@@ -4,6 +4,8 @@
 #include "EngineUtils.h"
 #include "GeoArcLayerActor.h"
 #include "GeoSelectionSubsystem.h"
+#include "GeoReplaySubsystem.h"
+#include "HamRadioOwnStationActor.h"
 #include "IonCommandCameraPawn.h"
 #include "IonIonosphereActor.h"
 
@@ -21,6 +23,60 @@ void AIonCommandPlayerController::SetupInputComponent()
     InputComponent->BindAction(TEXT("ClearSelection"), IE_Pressed, this, &AIonCommandPlayerController::ClearSelection);
     InputComponent->BindAction(TEXT("ToggleIonosphere"), IE_Pressed, this, &AIonCommandPlayerController::ToggleIonosphere);
     InputComponent->BindAction(TEXT("FocusSelection"), IE_Pressed, this, &AIonCommandPlayerController::FocusSelection);
+    InputComponent->BindAction(TEXT("ToggleMyStation"), IE_Pressed, this, &AIonCommandPlayerController::ToggleOwnStationFilter);
+    for (int32 Preset = 1; Preset <= 9; ++Preset)
+    {
+        FInputActionBinding Binding(*FString::Printf(TEXT("BandPreset%d"), Preset), IE_Pressed);
+        Binding.ActionDelegate.GetDelegateForManualSet().BindWeakLambda(this, [this, Preset] { SelectBandPreset(Preset - 1); });
+        InputComponent->AddActionBinding(Binding);
+    }
+    InputComponent->BindAction(TEXT("BandPresetAll"), IE_Pressed, this, &AIonCommandPlayerController::ClearBandPreset);
+    InputComponent->BindAction(TEXT("ReplayRecent"), IE_Pressed, this, &AIonCommandPlayerController::StartRecentReplay);
+    InputComponent->BindAction(TEXT("ReplaySlower"), IE_Pressed, this, &AIonCommandPlayerController::ReplaySlower);
+    InputComponent->BindAction(TEXT("ReplayFaster"), IE_Pressed, this, &AIonCommandPlayerController::ReplayFaster);
+}
+
+void AIonCommandPlayerController::SelectBandPreset(int32 PaletteIndex)
+{
+    for (TActorIterator<AGeoArcLayerActor> It(GetWorld()); It; ++It) It->SetBandFocus(PaletteIndex);
+}
+
+void AIonCommandPlayerController::ClearBandPreset()
+{
+    for (TActorIterator<AGeoArcLayerActor> It(GetWorld()); It; ++It) if (It->GetBandFocus() != INDEX_NONE) It->SetBandFocus(It->GetBandFocus());
+}
+
+void AIonCommandPlayerController::StartRecentReplay()
+{
+    ReplayToUtc = FDateTime::UtcNow();
+    ReplayFromUtc = ReplayToUtc - FTimespan::FromMinutes(15.0);
+    ReplaySpeed = 1.0;
+    if (UGeoReplaySubsystem* Replay = GetGameInstance()->GetSubsystem<UGeoReplaySubsystem>())
+    {
+        Replay->StartReplay(ReplayFromUtc, ReplayToUtc, ReplaySpeed);
+    }
+}
+
+void AIonCommandPlayerController::ReplaySlower() { ChangeReplaySpeed(0.5); }
+void AIonCommandPlayerController::ReplayFaster() { ChangeReplaySpeed(2.0); }
+
+void AIonCommandPlayerController::ChangeReplaySpeed(double Factor)
+{
+    if (ReplayFromUtc.GetTicks() == 0) return;
+    ReplaySpeed = FMath::Clamp(ReplaySpeed * Factor, 0.25, 10.0);
+    if (UGeoReplaySubsystem* Replay = GetGameInstance()->GetSubsystem<UGeoReplaySubsystem>())
+    {
+        Replay->StartReplay(ReplayFromUtc, ReplayToUtc, ReplaySpeed);
+    }
+}
+
+void AIonCommandPlayerController::ToggleOwnStationFilter()
+{
+    const TArray<FString> OwnEntityIds = AHamRadioOwnStationActor::OwnStationEntityIds();
+    for (TActorIterator<AGeoArcLayerActor> It(GetWorld()); It; ++It)
+    {
+        It->SetEntityFilter(It->HasEntityFilter() ? TArray<FString>() : OwnEntityIds);
+    }
 }
 
 void AIonCommandPlayerController::ToggleIonosphere()

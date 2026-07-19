@@ -39,6 +39,7 @@ type Source struct {
 	Broker          string  `json:"broker,omitempty"`
 	Topic           string  `json:"topic,omitempty"`
 	ClientID        string  `json:"clientId,omitempty"`
+	PollSeconds     int     `json:"pollSeconds,omitempty"`
 }
 
 type Config struct {
@@ -72,6 +73,10 @@ func Load(path string) (Config, error) {
 	if err != nil {
 		return Config{}, fmt.Errorf("read config: %w", err)
 	}
+	// json.Unmarshal merges into existing slice ELEMENTS, so a configured
+	// source would silently inherit fields of the default source at the same
+	// index. A config file therefore always defines the complete source list.
+	cfg.Sources = nil
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		return Config{}, fmt.Errorf("decode config: %w", err)
 	}

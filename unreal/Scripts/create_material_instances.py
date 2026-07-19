@@ -124,8 +124,35 @@ def build_signal_master() -> unreal.Material:
     multiply = expression(material, unreal.MaterialExpressionMultiply, -330, -70)
     MEL.connect_material_expressions(color, "", multiply, "A")
     MEL.connect_material_expressions(intensity, "", multiply, "B")
-    MEL.connect_material_property(multiply, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
-    MEL.connect_material_property(opacity, "", unreal.MaterialProperty.MP_OPACITY)
+
+    # GPU age fade: instance custom data 0 = spawn time (game seconds),
+    # 1 = 1/lifetime. Meshes without custom data read the defaults (0/0),
+    # which resolves to a constant fade of 1.
+    spawn_time = expression(material, unreal.MaterialExpressionPerInstanceCustomData, -900, 420)
+    spawn_time.set_editor_property("data_index", 0)
+    inv_lifetime = expression(material, unreal.MaterialExpressionPerInstanceCustomData, -900, 500)
+    inv_lifetime.set_editor_property("data_index", 1)
+    now = expression(material, unreal.MaterialExpressionTime, -900, 340)
+    age = expression(material, unreal.MaterialExpressionSubtract, -720, 380)
+    MEL.connect_material_expressions(now, "", age, "A")
+    MEL.connect_material_expressions(spawn_time, "", age, "B")
+    normalized = expression(material, unreal.MaterialExpressionMultiply, -580, 420)
+    MEL.connect_material_expressions(age, "", normalized, "A")
+    MEL.connect_material_expressions(inv_lifetime, "", normalized, "B")
+    inverted = expression(material, unreal.MaterialExpressionOneMinus, -450, 420)
+    MEL.connect_material_expressions(normalized, "", inverted, "")
+    fade = expression(material, unreal.MaterialExpressionSaturate, -330, 420)
+    MEL.connect_material_expressions(inverted, "", fade, "")
+
+    faded_emissive = expression(material, unreal.MaterialExpressionMultiply, -180, 0)
+    MEL.connect_material_expressions(multiply, "", faded_emissive, "A")
+    MEL.connect_material_expressions(fade, "", faded_emissive, "B")
+    faded_opacity = expression(material, unreal.MaterialExpressionMultiply, -180, 260)
+    MEL.connect_material_expressions(opacity, "", faded_opacity, "A")
+    MEL.connect_material_expressions(fade, "", faded_opacity, "B")
+
+    MEL.connect_material_property(faded_emissive, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    MEL.connect_material_property(faded_opacity, "", unreal.MaterialProperty.MP_OPACITY)
     MEL.recompile_material(material)
     save_asset(f"{MATERIAL_DIR}/M_HolographicSignal")
     return material

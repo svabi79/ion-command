@@ -50,6 +50,23 @@ void AIonCommandDeckActor::Tick(float DeltaSeconds)
 {
     Super::Tick(DeltaSeconds);
     if (!GetGameInstance()) return;
+    // Diegetic boot readout during the camera fade-in; selection input skips
+    // straight to the operational readout.
+    const double BootSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : 10.0;
+    const UGeoSelectionSubsystem* BootSelection = GetGameInstance()->GetSubsystem<UGeoSelectionSubsystem>();
+    if (BootSeconds < 5.0 && (!BootSelection || !BootSelection->HasSelection()))
+    {
+        static const TCHAR* BootLines[] = {
+            TEXT("INITIALISING RENDERER"),
+            TEXT("LOADING EARTH MODEL"),
+            TEXT("CONNECTING TELEMETRY"),
+            TEXT("SYNCHRONISING UTC"),
+        };
+        const int32 BootLine = FMath::Clamp(static_cast<int32>(BootSeconds / 1.25), 0, 3);
+        SelectionText->SetText(FText::FromString(FString::Printf(TEXT(">> %s"), BootLines[BootLine])));
+        SelectionText->SetTextRenderColor(FColor(70, 210, 255));
+        return;
+    }
     const UGeoStreamSubsystem* Stream = GetGameInstance()->GetSubsystem<UGeoStreamSubsystem>();
     const UGeoDataSubsystem* Data = GetGameInstance()->GetSubsystem<UGeoDataSubsystem>();
     const UGeoTimelineSubsystem* Timeline = GetGameInstance()->GetSubsystem<UGeoTimelineSubsystem>();
