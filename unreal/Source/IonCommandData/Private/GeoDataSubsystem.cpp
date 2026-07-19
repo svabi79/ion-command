@@ -22,9 +22,11 @@ bool UGeoDataSubsystem::AcceptMessage(FGeoMessageEnvelope&& Message)
     }
     if (ActiveMessages.Num() >= MaxActiveMessages)
     {
+        // Window-cap eviction is the bounded history working as designed at
+        // firehose rates - tracked separately from real backpressure drops.
         const int32 RemoveCount = FMath::Min(MaxActiveMessages / 20 + 1, ActiveMessages.Num());
         ActiveMessages.RemoveAt(0, RemoveCount, EAllowShrinking::No);
-        DroppedMessageCount += RemoveCount;
+        EvictedMessageCount += RemoveCount;
     }
     const int32 Index = ActiveMessages.Add(MoveTemp(Message));
     ++AcceptedMessageCount;
@@ -50,6 +52,7 @@ FGeoRuntimeStatistics UGeoDataSubsystem::GetStatistics() const
     Result.AcceptedMessages = AcceptedMessageCount;
     Result.InvalidMessages = InvalidMessageCount;
     Result.DroppedMessages = DroppedMessageCount;
+    Result.EvictedMessages = EvictedMessageCount;
     Result.ActiveMessages = ActiveMessages.Num();
     return Result;
 }

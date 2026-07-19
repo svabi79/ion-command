@@ -10,7 +10,11 @@
   "pipeline": {
     "queueCapacity": 65536,
     "clientQueueCapacity": 16384,
-    "workerCount": 4
+    "workerCount": 4,
+    "retainLatest": [
+      "spaceweather.state",
+      "ionosphere.sounding"
+    ]
   },
   "recording": {
     "enabled": false,

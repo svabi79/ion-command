@@ -38,6 +38,7 @@ private:
     int64 AcceptedMessageCount = 0;
     int64 InvalidMessageCount = 0;
     int64 DroppedMessageCount = 0;
+    int64 EvictedMessageCount = 0;
     bool bPaused = false;
     FOnGeoMessageAccepted MessageAccepted;
     FOnGeoDataReset DataReset;

@@ -68,6 +68,7 @@ private:
     void DrawModeHint(float Scale, float Alpha);
 
     void DrawPanelFrame(float X, float Y, float Width, float Height, const FString& Title, float Scale, float Alpha);
+    bool DrawRegionFlag(const FString& RegionName, float X, float Y, float Width, float Height, float Alpha);
     void DrawLabelValue(float& CursorX, float Y, const FString& Label, const FString& Value, const FLinearColor& ValueColor, float Scale, float Alpha);
     void DrawTextAt(const FString& Text, float X, float Y, const FLinearColor& Color, float TextScale, bool bCentered = false);
     void DrawRect(float X, float Y, float Width, float Height, const FLinearColor& Color);

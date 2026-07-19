@@ -22,6 +22,10 @@ type Pipeline struct {
 	QueueCapacity       int `json:"queueCapacity"`
 	ClientQueueCapacity int `json:"clientQueueCapacity"`
 	WorkerCount         int `json:"workerCount"`
+	// RetainLatest lists semantic types whose latest observation per entity
+	// is replayed to every newly connected live client, so state-like values
+	// (space weather, soundings) do not stay blank until the next sample.
+	RetainLatest []string `json:"retainLatest"`
 }
 
 type Recording struct {

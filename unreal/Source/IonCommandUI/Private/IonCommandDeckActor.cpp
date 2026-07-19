@@ -87,7 +87,7 @@ void AIonCommandDeckActor::Tick(float DeltaSeconds)
     if (Data)
     {
         const FGeoRuntimeStatistics Stats = Data->GetStatistics();
-        TelemetryText->SetText(FText::FromString(FString::Printf(TEXT("ACTIVE %06d  //  RX %09lld  //  DROP %06lld"), Stats.ActiveMessages, Stats.AcceptedMessages, Stats.DroppedMessages)));
+        TelemetryText->SetText(FText::FromString(FString::Printf(TEXT("ACTIVE %06d  //  RX %09lld  //  DROP %04lld  //  EVICT %07lld"), Stats.ActiveMessages, Stats.AcceptedMessages, Stats.DroppedMessages, Stats.EvictedMessages)));
     }
     if (Selection && Selection->HasSelection())
     {

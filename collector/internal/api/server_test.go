@@ -23,7 +23,7 @@ func TestHealthEndpoint(t *testing.T) {
 	stats := telemetry.New()
 	hub := stream.NewHub(8, stats)
 	registry := plugins.NewRegistry()
-	pipe := pipeline.New(registry, 8, 1, hub, recording.New(cfg.Recording.Directory, false, time.Second), stats, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	pipe := pipeline.New(registry, 8, 1, hub, recording.New(cfg.Recording.Directory, false, time.Second), stats, slog.New(slog.NewTextHandler(io.Discard, nil)), nil)
 	server := httptest.NewServer(New(cfg, pipe, hub, stats, slog.Default()).Handler())
 	defer server.Close()
 	response, err := http.Get(server.URL + "/api/health")
@@ -42,7 +42,7 @@ func TestLiveWebSocketReceivesCanonicalMessage(t *testing.T) {
 	stats := telemetry.New()
 	hub := stream.NewHub(8, stats)
 	registry := plugins.NewRegistry()
-	pipe := pipeline.New(registry, 8, 1, hub, recording.New(cfg.Recording.Directory, false, time.Second), stats, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	pipe := pipeline.New(registry, 8, 1, hub, recording.New(cfg.Recording.Directory, false, time.Second), stats, slog.New(slog.NewTextHandler(io.Discard, nil)), nil)
 	server := httptest.NewServer(New(cfg, pipe, hub, stats, slog.Default()).Handler())
 	defer server.Close()
 	url := "ws" + server.URL[len("http"):] + "/ws/live"
@@ -55,7 +55,7 @@ func TestLiveWebSocketReceivesCanonicalMessage(t *testing.T) {
 	for stats.Snapshot().ConnectedClients == 0 && time.Now().Before(deadline) {
 		time.Sleep(time.Millisecond)
 	}
-	hub.Publish([]byte(`{"messageId":"one"}`))
+	hub.Publish([]byte(`{"messageId":"one"}`), "")
 	_ = connection.SetReadDeadline(time.Now().Add(time.Second))
 	_, payload, err := connection.ReadMessage()
 	if err != nil {

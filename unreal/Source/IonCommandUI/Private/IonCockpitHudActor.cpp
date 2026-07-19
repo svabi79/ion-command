@@ -52,6 +52,92 @@ FLinearColor WithAlpha(const FLinearColor& Color, float Alpha)
     Result.A = Alpha;
     return Result;
 }
+
+// Simplified region flags for the top-regions panel: stripes, Nordic or
+// plain crosses, center discs, and the US canton, keyed by the generic
+// display-region name. Approximations by intent - readable at 22x14 px.
+enum class ERegionFlagType : uint8 { HStripes2, HStripes3, VStripes3, Cross, NordicCross, Disc, Canton };
+
+struct FRegionFlag
+{
+    ERegionFlagType Type;
+    FLinearColor A;
+    FLinearColor B;
+    FLinearColor C;
+};
+
+const TMap<FString, FRegionFlag>& RegionFlags()
+{
+    static TMap<FString, FRegionFlag> Flags;
+    if (Flags.Num() > 0) return Flags;
+    const FLinearColor White(0.95f, 0.95f, 0.95f);
+    const FLinearColor Red(0.82f, 0.06f, 0.10f);
+    const FLinearColor Blue(0.05f, 0.20f, 0.55f);
+    const FLinearColor LightBlue(0.35f, 0.60f, 0.90f);
+    const FLinearColor Yellow(0.98f, 0.83f, 0.10f);
+    const FLinearColor Green(0.05f, 0.50f, 0.20f);
+    const FLinearColor Black(0.05f, 0.05f, 0.05f);
+    const FLinearColor Orange(0.95f, 0.50f, 0.10f);
+    auto H3 = [](FLinearColor A, FLinearColor B, FLinearColor C) { return FRegionFlag{ERegionFlagType::HStripes3, A, B, C}; };
+    auto H2 = [](FLinearColor A, FLinearColor B) { return FRegionFlag{ERegionFlagType::HStripes2, A, B, B}; };
+    auto V3 = [](FLinearColor A, FLinearColor B, FLinearColor C) { return FRegionFlag{ERegionFlagType::VStripes3, A, B, C}; };
+    Flags.Add(TEXT("germany"), H3(Black, Red, Yellow));
+    Flags.Add(TEXT("united states"), {ERegionFlagType::Canton, Red, White, Blue});
+    Flags.Add(TEXT("japan"), {ERegionFlagType::Disc, White, Red, Red});
+    Flags.Add(TEXT("italy"), V3(Green, White, Red));
+    Flags.Add(TEXT("france"), V3(Blue, White, Red));
+    Flags.Add(TEXT("spain"), H3(Red, Yellow, Red));
+    Flags.Add(TEXT("england"), {ERegionFlagType::Cross, White, Red, Red});
+    Flags.Add(TEXT("scotland"), {ERegionFlagType::Cross, Blue, White, White});
+    Flags.Add(TEXT("wales"), H2(White, Green));
+    Flags.Add(TEXT("northern ireland"), {ERegionFlagType::Cross, White, Red, Red});
+    Flags.Add(TEXT("ireland"), V3(Green, White, Orange));
+    Flags.Add(TEXT("poland"), H2(White, Red));
+    Flags.Add(TEXT("european russia"), H3(White, Blue, Red));
+    Flags.Add(TEXT("asiatic russia"), H3(White, Blue, Red));
+    Flags.Add(TEXT("kaliningrad"), H3(White, Blue, Red));
+    Flags.Add(TEXT("netherlands"), H3(Red, White, Blue));
+    Flags.Add(TEXT("belgium"), V3(Black, Yellow, Red));
+    Flags.Add(TEXT("switzerland"), {ERegionFlagType::Cross, Red, White, White});
+    Flags.Add(TEXT("austria"), H3(Red, White, Red));
+    Flags.Add(TEXT("canada"), V3(Red, White, Red));
+    Flags.Add(TEXT("brazil"), {ERegionFlagType::Disc, Green, Yellow, Yellow});
+    Flags.Add(TEXT("argentina"), H3(LightBlue, White, LightBlue));
+    Flags.Add(TEXT("australia"), {ERegionFlagType::Canton, Blue, Blue, Blue});
+    Flags.Add(TEXT("new zealand"), {ERegionFlagType::Canton, Blue, Blue, Blue});
+    Flags.Add(TEXT("ukraine"), H2(LightBlue, Yellow));
+    Flags.Add(TEXT("czech republic"), H2(White, Red));
+    Flags.Add(TEXT("slovak republic"), H3(White, Blue, Red));
+    Flags.Add(TEXT("hungary"), H3(Red, White, Green));
+    Flags.Add(TEXT("romania"), V3(Blue, Yellow, Red));
+    Flags.Add(TEXT("bulgaria"), H3(White, Green, Red));
+    Flags.Add(TEXT("greece"), H3(Blue, White, Blue));
+    Flags.Add(TEXT("portugal"), V3(Green, Red, Red));
+    Flags.Add(TEXT("sweden"), {ERegionFlagType::NordicCross, Blue, Yellow, Yellow});
+    Flags.Add(TEXT("norway"), {ERegionFlagType::NordicCross, Red, White, White});
+    Flags.Add(TEXT("denmark"), {ERegionFlagType::NordicCross, Red, White, White});
+    Flags.Add(TEXT("finland"), {ERegionFlagType::NordicCross, White, Blue, Blue});
+    Flags.Add(TEXT("iceland"), {ERegionFlagType::NordicCross, Blue, White, White});
+    Flags.Add(TEXT("china"), {ERegionFlagType::Disc, Red, Yellow, Yellow});
+    Flags.Add(TEXT("republic of korea"), {ERegionFlagType::Disc, White, Red, Blue});
+    Flags.Add(TEXT("indonesia"), H2(Red, White));
+    Flags.Add(TEXT("thailand"), H3(Red, White, Blue));
+    Flags.Add(TEXT("india"), H3(Orange, White, Green));
+    Flags.Add(TEXT("israel"), {ERegionFlagType::Disc, White, Blue, Blue});
+    Flags.Add(TEXT("turkey"), {ERegionFlagType::Disc, Red, White, White});
+    Flags.Add(TEXT("mexico"), V3(Green, White, Red));
+    Flags.Add(TEXT("colombia"), H3(Yellow, Blue, Red));
+    Flags.Add(TEXT("cuba"), H3(Blue, White, Blue));
+    Flags.Add(TEXT("croatia"), H3(Red, White, Blue));
+    Flags.Add(TEXT("slovenia"), H3(White, Blue, Red));
+    Flags.Add(TEXT("serbia"), H3(Red, Blue, White));
+    Flags.Add(TEXT("lithuania"), H3(Yellow, Green, Red));
+    Flags.Add(TEXT("latvia"), H3(Red, White, Red));
+    Flags.Add(TEXT("estonia"), H3(LightBlue, Black, White));
+    Flags.Add(TEXT("belarus"), H2(Red, Green));
+    Flags.Add(TEXT("luxembourg"), H3(Red, White, LightBlue));
+    return Flags;
+}
 }
 
 AIonCockpitHudActor::AIonCockpitHudActor()
@@ -288,6 +374,7 @@ void AIonCockpitHudActor::DrawStatusBar(float Scale, float Alpha)
         DrawLabelValue(CursorX, TextY, TEXT("ACTIVE"), FString::Printf(TEXT("%d"), Stats.ActiveMessages), CockpitWhite, Scale, Alpha);
         DrawLabelValue(CursorX, TextY, TEXT("RX"), FString::Printf(TEXT("%lld"), Stats.AcceptedMessages), CockpitWhite, Scale, Alpha);
         DrawLabelValue(CursorX, TextY, TEXT("DROP"), FString::Printf(TEXT("%lld"), Stats.DroppedMessages), Stats.DroppedMessages > 0 ? CockpitRed : CockpitGreen, Scale, Alpha);
+        DrawLabelValue(CursorX, TextY, TEXT("EVICT"), FString::Printf(TEXT("%lld"), Stats.EvictedMessages), CockpitDim, Scale, Alpha);
     }
 }
 
@@ -366,15 +453,21 @@ void AIonCockpitHudActor::DrawRegionsPanel(float Scale, float Alpha, float Panel
         return;
     }
     const double MaxWeight = CachedTopRegions[0].Weight;
+    const float FlagWidth = 22.0f * Scale;
     const float LabelWidth = 150.0f * Scale;
     const float ShareWidth = 52.0f * Scale;
     const float BarMaxWidth = PanelWidth - LabelWidth - ShareWidth - 30.0f * Scale;
     float RowY = PanelY + HeaderHeight;
     for (const FIonRegionStat& Region : CachedTopRegions)
     {
+        float LabelX = PanelX + 12.0f * Scale;
+        if (DrawRegionFlag(Region.Label, LabelX, RowY + 5.0f * Scale, FlagWidth, 13.0f * Scale, Alpha))
+        {
+            LabelX += FlagWidth + 6.0f * Scale;
+        }
         FString Label = Region.Label.ToUpper();
-        if (Label.Len() > 18) Label = Label.Left(17) + TEXT("~");
-        DrawTextAt(Label, PanelX + 12.0f * Scale, RowY + 4.0f * Scale, WithAlpha(CockpitWhite, Alpha), 1.1f * Scale);
+        if (Label.Len() > 14) Label = Label.Left(13) + TEXT("~");
+        DrawTextAt(Label, LabelX, RowY + 4.0f * Scale, WithAlpha(CockpitWhite, Alpha), 1.1f * Scale);
         const float BarWidth = BarMaxWidth * (MaxWeight > 0.0 ? static_cast<float>(Region.Weight / MaxWeight) : 0.0f);
         DrawRect(PanelX + LabelWidth, RowY + 6.0f * Scale, FMath::Max(BarWidth, 2.0f * Scale), RowHeight - 12.0f * Scale, WithAlpha(CockpitCyan, 0.75f * Alpha));
         const double Share = CachedRegionTotal > 0.0 ? 100.0 * Region.Weight / CachedRegionTotal : 0.0;
@@ -507,6 +600,53 @@ void AIonCockpitHudActor::DrawModeHint(float Scale, float Alpha)
 {
     const TCHAR* ModeName = Mode == EIonCockpitMode::Full ? TEXT("FULL") : TEXT("MIN");
     DrawTextAt(FString::Printf(TEXT("HUD %s // TAB"), ModeName), Canvas->SizeX - 18.0f * Scale, Canvas->SizeY - 26.0f * Scale, WithAlpha(CockpitDim, Alpha), 1.0f * Scale, true);
+}
+
+bool AIonCockpitHudActor::DrawRegionFlag(const FString& RegionName, float X, float Y, float Width, float Height, float Alpha)
+{
+    const FRegionFlag* Flag = RegionFlags().Find(RegionName.ToLower());
+    if (!Flag) return false;
+    const FLinearColor A = WithAlpha(Flag->A, Alpha);
+    const FLinearColor B = WithAlpha(Flag->B, Alpha);
+    const FLinearColor C = WithAlpha(Flag->C, Alpha);
+    switch (Flag->Type)
+    {
+    case ERegionFlagType::HStripes2:
+        DrawRect(X, Y, Width, Height * 0.5f, A);
+        DrawRect(X, Y + Height * 0.5f, Width, Height * 0.5f, B);
+        break;
+    case ERegionFlagType::HStripes3:
+        DrawRect(X, Y, Width, Height / 3.0f, A);
+        DrawRect(X, Y + Height / 3.0f, Width, Height / 3.0f, B);
+        DrawRect(X, Y + Height * 2.0f / 3.0f, Width, Height / 3.0f, C);
+        break;
+    case ERegionFlagType::VStripes3:
+        DrawRect(X, Y, Width / 3.0f, Height, A);
+        DrawRect(X + Width / 3.0f, Y, Width / 3.0f, Height, B);
+        DrawRect(X + Width * 2.0f / 3.0f, Y, Width / 3.0f, Height, C);
+        break;
+    case ERegionFlagType::Cross:
+        DrawRect(X, Y, Width, Height, A);
+        DrawRect(X, Y + Height * 0.38f, Width, Height * 0.24f, B);
+        DrawRect(X + Width * 0.40f, Y, Width * 0.20f, Height, B);
+        break;
+    case ERegionFlagType::NordicCross:
+        DrawRect(X, Y, Width, Height, A);
+        DrawRect(X, Y + Height * 0.38f, Width, Height * 0.24f, B);
+        DrawRect(X + Width * 0.28f, Y, Width * 0.18f, Height, B);
+        break;
+    case ERegionFlagType::Disc:
+        DrawRect(X, Y, Width, Height, A);
+        DrawRect(X + Width * 0.38f, Y + Height * 0.22f, Width * 0.24f, Height * 0.56f, B);
+        break;
+    case ERegionFlagType::Canton:
+        DrawRect(X, Y, Width, Height / 3.0f, A);
+        DrawRect(X, Y + Height / 3.0f, Width, Height / 3.0f, B);
+        DrawRect(X, Y + Height * 2.0f / 3.0f, Width, Height / 3.0f, A);
+        DrawRect(X, Y, Width * 0.45f, Height * 0.5f, C);
+        break;
+    }
+    return true;
 }
 
 void AIonCockpitHudActor::DrawPanelFrame(float X, float Y, float Width, float Height, const FString& Title, float Scale, float Alpha)

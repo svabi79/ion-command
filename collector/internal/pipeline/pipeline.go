@@ -30,11 +30,16 @@ type Pipeline struct {
 	stats        *telemetry.Stats
 	logger       *slog.Logger
 	stateMu      sync.RWMutex
+	retainTypes  map[string]struct{}
 	sourceStates map[string]SourceState
 }
 
-func New(registry *plugins.Registry, queueCapacity, workers int, hub *stream.Hub, recorder *recording.Writer, stats *telemetry.Stats, logger *slog.Logger) *Pipeline {
-	return &Pipeline{registry: registry, rawQueue: make(chan plugins.RawRecord, queueCapacity), workers: workers, hub: hub, recorder: recorder, stats: stats, logger: logger, sourceStates: make(map[string]SourceState)}
+func New(registry *plugins.Registry, queueCapacity, workers int, hub *stream.Hub, recorder *recording.Writer, stats *telemetry.Stats, logger *slog.Logger, retainLatest []string) *Pipeline {
+	retain := make(map[string]struct{}, len(retainLatest))
+	for _, semanticType := range retainLatest {
+		retain[semanticType] = struct{}{}
+	}
+	return &Pipeline{registry: registry, rawQueue: make(chan plugins.RawRecord, queueCapacity), workers: workers, hub: hub, recorder: recorder, stats: stats, logger: logger, sourceStates: make(map[string]SourceState), retainTypes: retain}
 }
 
 func (p *Pipeline) Run(ctx context.Context) error {
@@ -121,7 +126,11 @@ func (p *Pipeline) publish(message events.Envelope) {
 	} else if p.recorder.Enabled() {
 		p.stats.IncRecorded()
 	}
-	p.hub.Publish(encoded)
+	retainKey := ""
+	if _, retainable := p.retainTypes[message.SemanticType]; retainable {
+		retainKey = message.SemanticType + "|" + message.EntityID
+	}
+	p.hub.Publish(encoded, retainKey)
 	p.stats.IncPublished()
 }
 

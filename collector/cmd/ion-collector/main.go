@@ -89,7 +89,7 @@ func run(configPath string, logger *slog.Logger) error {
 		flush = time.Second
 	}
 	recorder := recording.New(cfg.Recording.Directory, cfg.Recording.Enabled, flush)
-	pipe := pipeline.New(registry, cfg.Pipeline.QueueCapacity, cfg.Pipeline.WorkerCount, hub, recorder, stats, logger)
+	pipe := pipeline.New(registry, cfg.Pipeline.QueueCapacity, cfg.Pipeline.WorkerCount, hub, recorder, stats, logger, cfg.Pipeline.RetainLatest)
 	if err := pipe.Verify(); err != nil {
 		return err
 	}

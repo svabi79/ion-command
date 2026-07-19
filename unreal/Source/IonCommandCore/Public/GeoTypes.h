@@ -174,6 +174,10 @@ struct IONCOMMANDCORE_API FGeoRuntimeStatistics
     UPROPERTY(BlueprintReadOnly, Category="ION COMMAND|Diagnostics")
     int64 DroppedMessages = 0;
 
+    // Window-cap evictions: bounded history at work, not a failure signal.
+    UPROPERTY(BlueprintReadOnly, Category="ION COMMAND|Diagnostics")
+    int64 EvictedMessages = 0;
+
     UPROPERTY(BlueprintReadOnly, Category="ION COMMAND|Diagnostics")
     int32 ActiveMessages = 0;
 

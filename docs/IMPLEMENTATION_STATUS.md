@@ -1,7 +1,26 @@
 # Implementation status
 
-Status date: **2026-07-19** (eighth pass: georeference fix — every station
-was rendered a mirrored quarter turn away from its terrain).
+Status date: **2026-07-19** (tenth pass: connect-time state snapshot,
+drop/evict split, and region flags).
+
+## Cockpit polish (2026-07-19)
+
+- **Retained-state snapshot on connect**: the hub keeps the latest message
+  per configured semantic type and entity (`pipeline.retainLatest`, bounded)
+  and replays that snapshot to every new live client before the stream, so
+  KP/FLUX/A and the sounding set are populated seconds after a client starts
+  instead of staying `--` until the next 5/10-minute poll. Generic and
+  config-driven; unit-tested (latest-wins, transient types not retained,
+  bounded map). Live-proven: a fresh client showed full space weather within
+  90 s of launch.
+- **DROP vs EVICT**: window-cap evictions (bounded active history working as
+  designed at firehose rates) are now `EvictedMessages`, shown dim in the
+  status bar and deck; `DROP` only counts real backpressure and stays green
+  at zero. Live: DROP 0 / EVICT 40k after one minute at ~800 msg/s.
+- **Region flags**: the top-regions panel draws simplified canvas flags
+  (stripes, Nordic/plain crosses, discs, US canton) for ~50 of the most
+  active DXCC regions, keyed by the generic display-region name with a
+  text-only fallback.
 
 ## Georeference fix (2026-07-19)
 
