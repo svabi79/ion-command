@@ -21,6 +21,10 @@ struct FRenderedGeoPoint
     // Per-message size multiplier (visual.markerScale property).
     float Scale = 1.0f;
     bool bObservation = false;
+    // Pictogram atlas tile (visual.icon property resolved through the icon
+    // registry) and its tint, both baked into per-instance custom data.
+    float IconIndex = 0.0f;
+    FLinearColor Color = FLinearColor(0.0f, 0.82f, 1.0f);
     // Domain drives the overlay menu's per-category visibility; the display
     // strings feed the hover tooltip.
     FString Domain;
@@ -57,7 +61,9 @@ public:
 
     UPROPERTY(EditAnywhere, Category="ION COMMAND|Layer") double GlobeRadius = 1000.0;
     UPROPERTY(EditAnywhere, Category="ION COMMAND|Layer") int32 MaxVisiblePoints = 25000;
-    UPROPERTY(EditAnywhere, Category="ION COMMAND|Layer") double MarkerScale = 0.14;
+    // Pictogram quads read slightly smaller than the old solid spheres at
+    // equal scale, hence the larger default.
+    UPROPERTY(EditAnywhere, Category="ION COMMAND|Layer") double MarkerScale = 0.2;
     // A marker survives this long past its last sighting; one-shot
     // observations (lightning strikes) fade much sooner than entities.
     UPROPERTY(EditAnywhere, Category="ION COMMAND|Layer") double MarkerLifetimeSeconds = 300.0;
@@ -68,9 +74,13 @@ private:
     void BuildEditorPreview();
     void OnLayerVisibilityChanged(const FString& LayerId, bool bVisible);
     void RebuildInstances();
+    // One instance's worth of custom data for the pictogram material:
+    // icon index, RGB tint, world origin (billboard pivot).
+    static void AppendCustomData(TArray<float>& Out, const FRenderedGeoPoint& Point);
     UPROPERTY(VisibleAnywhere) TObjectPtr<USceneComponent> SceneRoot;
-    UPROPERTY(VisibleAnywhere) TObjectPtr<UInstancedStaticMeshComponent> EntityInstances;
-    UPROPERTY(VisibleAnywhere) TObjectPtr<UInstancedStaticMeshComponent> ObservationInstances;
+    // Single camera-facing quad pool; entity/observation split lives in the
+    // bookkeeping (lifetimes), not in separate components anymore.
+    UPROPERTY(VisibleAnywhere) TObjectPtr<UInstancedStaticMeshComponent> MarkerInstances;
     TWeakObjectPtr<UGeoDataSubsystem> DataSubsystem;
     // Markers keep a roughly constant screen size: world scale follows the
     // camera distance instead of ballooning when the operator zooms in.

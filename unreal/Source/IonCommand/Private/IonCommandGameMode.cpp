@@ -9,6 +9,7 @@
 #include "Engine/ExponentialHeightFog.h"
 #include "Engine/SkyLight.h"
 #include "EngineUtils.h"
+#include "GeoArcLayerActor.h"
 #include "GeoPointLayerActor.h"
 #include "HamRadioLinkLayerActor.h"
 #include "HamRadioOwnStationActor.h"
@@ -68,6 +69,13 @@ void AIonCommandGameMode::BeginPlay()
     if (FParse::Param(FCommandLine::Get(), TEXT("IonHeatmapVisible")))
     {
         for (TActorIterator<AIonActivityHeatmapActor> It(World); It; ++It) It->SetActorHiddenInGame(false);
+    }
+    // Marker-focused captures: start with the path layers hidden (same state
+    // the V key / overlay menu toggles) so pictograms are not buried under
+    // live arc traffic.
+    if (FParse::Param(FCommandLine::Get(), TEXT("IonPathsHidden")))
+    {
+        for (TActorIterator<AGeoArcLayerActor> It(World); It; ++It) It->SetActorHiddenInGame(true);
     }
 }
 

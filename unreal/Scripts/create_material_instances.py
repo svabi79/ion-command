@@ -357,6 +357,149 @@ def build_selected_path_master() -> unreal.Material:
     return material
 
 
+def build_marker_icon_master(icon_texture) -> unreal.Material:
+    """Camera-facing pictogram markers: one instanced quad per marker. The
+    per-instance contract (GeoPointLayerActor sets 7 custom floats):
+      0 = atlas tile index (4x2 grid, see generate_visual_sources.py)
+      1..3 = RGB tint
+      4..6 = instance origin in world space (drives the billboard rotation;
+             passing it as data avoids relying on Local->World including the
+             instance transform, which is vertex-factory dependent).
+    Billboard math: T = vertex world pos - origin is the scaled local offset
+    (instances never rotate), and the vertex is re-aimed into the camera
+    plane via WPO = right*T.x + up*T.y - T."""
+    material = ensure_material("M_MarkerIcon")
+    material.set_editor_property("blend_mode", unreal.BlendMode.BLEND_ADDITIVE)
+    material.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
+    material.set_editor_property("two_sided", True)
+    material.set_editor_property("used_with_instanced_static_meshes", True)
+
+    # --- atlas UV from custom data 0 ---
+    icon_index = expression(material, unreal.MaterialExpressionPerInstanceCustomData, -1500, -300)
+    icon_index.set_editor_property("data_index", 0)
+    columns = expression(material, unreal.MaterialExpressionConstant, -1500, -220)
+    columns.set_editor_property("r", 4.0)
+    column = expression(material, unreal.MaterialExpressionFmod, -1340, -320)
+    MEL.connect_material_expressions(icon_index, "", column, "A")
+    MEL.connect_material_expressions(columns, "", column, "B")
+    row_raw = expression(material, unreal.MaterialExpressionDivide, -1340, -220)
+    MEL.connect_material_expressions(icon_index, "", row_raw, "A")
+    MEL.connect_material_expressions(columns, "", row_raw, "B")
+    row = expression(material, unreal.MaterialExpressionFloor, -1220, -220)
+    MEL.connect_material_expressions(row_raw, "", row, "")
+    tile = expression(material, unreal.MaterialExpressionAppendVector, -1120, -280)
+    MEL.connect_material_expressions(column, "", tile, "A")
+    MEL.connect_material_expressions(row, "", tile, "B")
+    base_uv = expression(material, unreal.MaterialExpressionTextureCoordinate, -1120, -380)
+    uv_sum = expression(material, unreal.MaterialExpressionAdd, -980, -330)
+    MEL.connect_material_expressions(base_uv, "", uv_sum, "A")
+    MEL.connect_material_expressions(tile, "", uv_sum, "B")
+    tile_scale = expression(material, unreal.MaterialExpressionConstant2Vector, -980, -240)
+    tile_scale.set_editor_property("r", 0.25)
+    tile_scale.set_editor_property("g", 0.5)
+    uv = expression(material, unreal.MaterialExpressionMultiply, -850, -300)
+    MEL.connect_material_expressions(uv_sum, "", uv, "A")
+    MEL.connect_material_expressions(tile_scale, "", uv, "B")
+    sample = expression(material, unreal.MaterialExpressionTextureSample, -700, -340)
+    sample.set_editor_property("texture", icon_texture)
+    MEL.connect_material_expressions(uv, "", sample, "UVs")
+
+    # --- tint from custom data 1..3 ---
+    tint_r = expression(material, unreal.MaterialExpressionPerInstanceCustomData, -1500, -120)
+    tint_r.set_editor_property("data_index", 1)
+    tint_g = expression(material, unreal.MaterialExpressionPerInstanceCustomData, -1500, -40)
+    tint_g.set_editor_property("data_index", 2)
+    tint_b = expression(material, unreal.MaterialExpressionPerInstanceCustomData, -1500, 40)
+    tint_b.set_editor_property("data_index", 3)
+    tint_rg = expression(material, unreal.MaterialExpressionAppendVector, -1340, -80)
+    MEL.connect_material_expressions(tint_r, "", tint_rg, "A")
+    MEL.connect_material_expressions(tint_g, "", tint_rg, "B")
+    tint = expression(material, unreal.MaterialExpressionAppendVector, -1220, -60)
+    MEL.connect_material_expressions(tint_rg, "", tint, "A")
+    MEL.connect_material_expressions(tint_b, "", tint, "B")
+    intensity = scalar(material, "Intensity", 5.0, -1220, 40)
+    tinted = expression(material, unreal.MaterialExpressionMultiply, -1080, -20)
+    MEL.connect_material_expressions(tint, "", tinted, "A")
+    MEL.connect_material_expressions(intensity, "", tinted, "B")
+    emissive = expression(material, unreal.MaterialExpressionMultiply, -520, -160)
+    MEL.connect_material_expressions(sample, "RGB", emissive, "A")
+    MEL.connect_material_expressions(tinted, "", emissive, "B")
+
+    opacity_param = scalar(material, "Opacity", 0.95, -700, -80)
+    opacity = expression(material, unreal.MaterialExpressionMultiply, -520, 0)
+    MEL.connect_material_expressions(sample, "R", opacity, "A")
+    MEL.connect_material_expressions(opacity_param, "", opacity, "B")
+
+    # --- billboard world position offset from custom data 4..6 ---
+    origin_x = expression(material, unreal.MaterialExpressionPerInstanceCustomData, -1500, 200)
+    origin_x.set_editor_property("data_index", 4)
+    origin_y = expression(material, unreal.MaterialExpressionPerInstanceCustomData, -1500, 280)
+    origin_y.set_editor_property("data_index", 5)
+    origin_z = expression(material, unreal.MaterialExpressionPerInstanceCustomData, -1500, 360)
+    origin_z.set_editor_property("data_index", 6)
+    origin_xy = expression(material, unreal.MaterialExpressionAppendVector, -1340, 240)
+    MEL.connect_material_expressions(origin_x, "", origin_xy, "A")
+    MEL.connect_material_expressions(origin_y, "", origin_xy, "B")
+    origin = expression(material, unreal.MaterialExpressionAppendVector, -1220, 260)
+    MEL.connect_material_expressions(origin_xy, "", origin, "A")
+    MEL.connect_material_expressions(origin_z, "", origin, "B")
+
+    world_pos = expression(material, unreal.MaterialExpressionWorldPosition, -1220, 400)
+    local_offset = expression(material, unreal.MaterialExpressionSubtract, -1060, 340)
+    MEL.connect_material_expressions(world_pos, "", local_offset, "A")
+    MEL.connect_material_expressions(origin, "", local_offset, "B")
+
+    camera = expression(material, unreal.MaterialExpressionCameraPositionWS, -1220, 500)
+    to_marker = expression(material, unreal.MaterialExpressionSubtract, -1060, 480)
+    MEL.connect_material_expressions(origin, "", to_marker, "A")
+    MEL.connect_material_expressions(camera, "", to_marker, "B")
+    forward = expression(material, unreal.MaterialExpressionNormalize, -940, 480)
+    MEL.connect_material_expressions(to_marker, "", forward, "")
+    world_up = expression(material, unreal.MaterialExpressionConstant3Vector, -1060, 580)
+    world_up.set_editor_property("constant", unreal.LinearColor(0.0, 0.0, 1.0, 0.0))
+    right_raw = expression(material, unreal.MaterialExpressionCrossProduct, -820, 520)
+    MEL.connect_material_expressions(world_up, "", right_raw, "A")
+    MEL.connect_material_expressions(forward, "", right_raw, "B")
+    right = expression(material, unreal.MaterialExpressionNormalize, -700, 520)
+    MEL.connect_material_expressions(right_raw, "", right, "")
+    up = expression(material, unreal.MaterialExpressionCrossProduct, -700, 600)
+    MEL.connect_material_expressions(forward, "", up, "A")
+    MEL.connect_material_expressions(right, "", up, "B")
+
+    offset_x = expression(material, unreal.MaterialExpressionComponentMask, -920, 340)
+    offset_x.set_editor_property("r", True)
+    offset_x.set_editor_property("g", False)
+    offset_x.set_editor_property("b", False)
+    offset_x.set_editor_property("a", False)
+    MEL.connect_material_expressions(local_offset, "", offset_x, "")
+    offset_y = expression(material, unreal.MaterialExpressionComponentMask, -920, 420)
+    offset_y.set_editor_property("r", False)
+    offset_y.set_editor_property("g", True)
+    offset_y.set_editor_property("b", False)
+    offset_y.set_editor_property("a", False)
+    MEL.connect_material_expressions(local_offset, "", offset_y, "")
+
+    billboard_x = expression(material, unreal.MaterialExpressionMultiply, -560, 400)
+    MEL.connect_material_expressions(right, "", billboard_x, "A")
+    MEL.connect_material_expressions(offset_x, "", billboard_x, "B")
+    billboard_y = expression(material, unreal.MaterialExpressionMultiply, -560, 480)
+    MEL.connect_material_expressions(up, "", billboard_y, "A")
+    MEL.connect_material_expressions(offset_y, "", billboard_y, "B")
+    aimed = expression(material, unreal.MaterialExpressionAdd, -440, 440)
+    MEL.connect_material_expressions(billboard_x, "", aimed, "A")
+    MEL.connect_material_expressions(billboard_y, "", aimed, "B")
+    wpo = expression(material, unreal.MaterialExpressionSubtract, -320, 400)
+    MEL.connect_material_expressions(aimed, "", wpo, "A")
+    MEL.connect_material_expressions(local_offset, "", wpo, "B")
+
+    MEL.connect_material_property(emissive, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    MEL.connect_material_property(opacity, "", unreal.MaterialProperty.MP_OPACITY)
+    MEL.connect_material_property(wpo, "", unreal.MaterialProperty.MP_WORLD_POSITION_OFFSET)
+    MEL.recompile_material(material)
+    save_asset(f"{MATERIAL_DIR}/M_MarkerIcon")
+    return material
+
+
 def build_heat_master() -> unreal.Material:
     """Additive splat for the activity heatmap: instance custom data 0 is the
     normalized heat, the quad UV drives a soft radial falloff, and hot cells
@@ -551,6 +694,11 @@ def main() -> None:
     build_selected_path_master()
     build_scatter_atmosphere_master()
     stars = import_texture(SOURCE_DIR / "Generated" / "starfield.png", "T_Starfield")
+    icons = import_texture(SOURCE_DIR / "Generated" / "marker_icons.png", "T_MarkerIcons")
+    # White-on-black mask: linear values keep thin strokes from washing out.
+    icons.set_editor_property("srgb", False)
+    save_asset(f"{TEXTURE_DIR}/T_MarkerIcons")
+    build_marker_icon_master(icons)
     build_earth_master(day, night)
     build_starfield_master(stars)
 
@@ -563,8 +711,12 @@ def main() -> None:
         red, green, blue = colorsys.hsv_to_rgb(index / 11.0, 0.72, 1.0)
         create_instance(f"MI_Signal_{index:02d}", signal, unreal.LinearColor(red, green, blue, 1.0), 0.62, intensity=4.6)
     create_instance("MI_Signal_Selected", signal, unreal.LinearColor(0.78, 1.0, 1.0, 1.0), 1.0, intensity=11.0)
-    create_instance("MI_Point_Entity", signal, unreal.LinearColor(0.0, 0.82, 1.0, 1.0), 0.8, intensity=3.2)
-    create_instance("MI_Point_Observation", signal, unreal.LinearColor(1.0, 0.32, 0.05, 1.0), 0.9, intensity=4.0)
+    # Point markers moved to the pictogram master (M_MarkerIcon); drop the
+    # obsolete sphere instances so stale assets cannot be referenced again.
+    for obsolete in ("MI_Point_Entity", "MI_Point_Observation"):
+        obsolete_path = f"{MATERIAL_DIR}/{obsolete}"
+        if unreal.EditorAssetLibrary.does_asset_exist(obsolete_path):
+            unreal.EditorAssetLibrary.delete_asset(obsolete_path)
     create_instance("MI_Aurora_North", signal, unreal.LinearColor(0.02, 1.0, 0.38, 1.0), 0.22, intensity=1.6)
     create_instance("MI_Aurora_South", signal, unreal.LinearColor(0.08, 0.55, 1.0, 1.0), 0.20, intensity=1.4)
     create_instance("MI_Console", signal, unreal.LinearColor(0.0, 0.16, 0.42, 1.0), 0.30, intensity=0.5)

@@ -33,7 +33,7 @@ func (d *Domain) Normalize(_ context.Context, record plugins.RawRecord) ([]event
 	}
 	event := events.NewEnvelope(record.OriginalID, "weather", "weather.lightning", events.MessageObservation, events.SourceRef{PluginID: record.SourcePluginID, InstanceID: record.SourceInstanceID, OriginalID: record.OriginalID}, record.ObservedUTC)
 	event.Geometry = events.Point(raw.Longitude, raw.Latitude, 0)
-	event.Properties = map[string]any{"peakCurrentKa": raw.PeakCurrentKa, "unit": "kA", "display.title": "Lightning strike"}
+	event.Properties = map[string]any{"peakCurrentKa": raw.PeakCurrentKa, "unit": "kA", "display.title": "Lightning strike", "visual.icon": "lightning"}
 	if raw.StationCount > 0 {
 		event.Properties["stationCount"] = raw.StationCount
 		event.Properties["display.primary"] = fmt.Sprintf("%d stations", raw.StationCount)

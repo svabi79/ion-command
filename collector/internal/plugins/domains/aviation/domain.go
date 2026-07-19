@@ -60,6 +60,7 @@ func (d *Domain) Normalize(_ context.Context, record plugins.RawRecord) ([]event
 		"groundSpeedKt":      raw.GsKt,
 		"trackDeg":           raw.Track,
 		"visual.markerScale": 0.9,
+		"visual.icon":        "aircraft",
 		"display.title":      title,
 		"display.primary":    primary,
 	}

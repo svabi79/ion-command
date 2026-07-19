@@ -128,6 +128,6 @@ func stationEntity(messageID, entityID, callsign string, lon, lat float64, sourc
 	entity := events.NewEnvelope(messageID, "hamradio", "radio.station", events.MessageEntity, source, observed)
 	entity.EntityID = entityID
 	entity.Geometry = events.Point(lon, lat, 0)
-	entity.Properties = map[string]any{"callsign": callsign}
+	entity.Properties = map[string]any{"callsign": callsign, "visual.icon": "signal"}
 	return entity
 }

@@ -46,6 +46,7 @@ func (d *Domain) Normalize(_ context.Context, record plugins.RawRecord) ([]event
 		"stationId":     raw.StationID,
 		"foF2Mhz":       raw.FoF2Mhz,
 		"mufdMhz":       raw.MufDMhz,
+		"visual.icon":   "sounding",
 		"display.title": fmt.Sprintf("Ionosonde %s", raw.StationID),
 		"display.primary": fmt.Sprintf("foF2 %.1f MHz  //  MUF(3000) %.1f MHz",
 			raw.FoF2Mhz, raw.MufDMhz),

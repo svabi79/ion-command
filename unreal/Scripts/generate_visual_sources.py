@@ -88,7 +88,125 @@ def main() -> None:
     image = Image.alpha_composite(image, stars)
     image.convert("RGB").save(OUTPUT, optimize=True)
     print(f"Generated {OUTPUT}")
+    generate_marker_icons()
     generate_ambience()
+
+
+ICON_ATLAS = Path(__file__).resolve().parents[1] / "SourceAssets" / "Generated" / "marker_icons.png"
+ICON_TILE = 512
+ICON_COLS = 4
+ICON_ROWS = 2
+
+
+def _icon_tile(draw_fn) -> Image.Image:
+    """Render one atlas tile at 4x and downscale for crisp anti-aliased edges.
+    Icons are white silhouettes on black; the material reads R as the mask."""
+    scale = 4
+    size = ICON_TILE * scale
+    tile = Image.new("L", (size, size), 0)
+    draw = ImageDraw.Draw(tile)
+
+    def pt(x, y):
+        return (x * size, y * size)
+
+    draw_fn(draw, pt, size)
+    return tile.resize((ICON_TILE, ICON_TILE), Image.LANCZOS)
+
+
+def _icon_dot(draw, pt, size):
+    draw.ellipse([pt(0.24, 0.24), pt(0.76, 0.76)], fill=255)
+
+
+def _icon_signal(draw, pt, size):
+    # Antenna mast with radiating wave arcs: the generic "transmitter" glyph.
+    draw.polygon([pt(0.5, 0.16), pt(0.40, 0.86), pt(0.60, 0.86)], fill=255)
+    draw.ellipse([pt(0.44, 0.10), pt(0.56, 0.22)], fill=255)
+    stroke = int(size * 0.045)
+    for radius in (0.16, 0.28):
+        box = [pt(0.5 - radius, 0.16 - radius), pt(0.5 + radius, 0.16 + radius)]
+        draw.arc(box, 205, 275, fill=255, width=stroke)
+        draw.arc(box, 265, 335, fill=255, width=stroke)
+
+
+def _icon_aircraft(draw, pt, size):
+    # Top-view airliner silhouette.
+    draw.polygon(
+        [
+            pt(0.50, 0.06), pt(0.545, 0.18), pt(0.55, 0.34),
+            pt(0.94, 0.55), pt(0.94, 0.63), pt(0.55, 0.52),
+            pt(0.54, 0.72), pt(0.68, 0.83), pt(0.68, 0.90), pt(0.50, 0.85),
+            pt(0.32, 0.90), pt(0.32, 0.83), pt(0.46, 0.72),
+            pt(0.45, 0.52), pt(0.06, 0.63), pt(0.06, 0.55), pt(0.45, 0.34),
+            pt(0.455, 0.18),
+        ],
+        fill=255,
+    )
+
+
+def _icon_satellite(draw, pt, size):
+    # Bus with two solar wings on connector booms.
+    draw.rectangle([pt(0.40, 0.38), pt(0.60, 0.62)], fill=255)
+    stroke = int(size * 0.03)
+    draw.line([pt(0.30, 0.5), pt(0.40, 0.5)], fill=255, width=stroke)
+    draw.line([pt(0.60, 0.5), pt(0.70, 0.5)], fill=255, width=stroke)
+    for x0, x1 in ((0.06, 0.30), (0.70, 0.94)):
+        draw.rectangle([pt(x0, 0.40), pt(x1, 0.60)], fill=255)
+        # panel cell separators punched back out for texture
+        for f in (1 / 3, 2 / 3):
+            x = x0 + (x1 - x0) * f
+            draw.line([pt(x, 0.40), pt(x, 0.60)], fill=0, width=int(size * 0.018))
+    draw.arc([pt(0.42, 0.18), pt(0.58, 0.34)], 200, 340, fill=255, width=stroke)
+
+
+def _icon_lightning(draw, pt, size):
+    draw.polygon(
+        [pt(0.60, 0.06), pt(0.33, 0.52), pt(0.49, 0.52), pt(0.38, 0.94), pt(0.70, 0.42), pt(0.53, 0.42)],
+        fill=255,
+    )
+
+
+def _icon_sounding(draw, pt, size):
+    # Ionosonde: echo arcs stacked above a ground station wedge.
+    stroke = int(size * 0.05)
+    for radius in (0.18, 0.32, 0.46):
+        box = [pt(0.5 - radius, 0.82 - radius), pt(0.5 + radius, 0.82 + radius)]
+        draw.arc(box, 220, 320, fill=255, width=stroke)
+    draw.polygon([pt(0.5, 0.70), pt(0.42, 0.90), pt(0.58, 0.90)], fill=255)
+
+
+def _icon_earthquake(draw, pt, size):
+    # Seismogram trace inside a ring.
+    stroke = int(size * 0.045)
+    draw.arc([pt(0.08, 0.08), pt(0.92, 0.92)], 0, 360, fill=255, width=stroke)
+    trace = [
+        pt(0.18, 0.5), pt(0.34, 0.5), pt(0.42, 0.28), pt(0.52, 0.74),
+        pt(0.60, 0.36), pt(0.66, 0.5), pt(0.82, 0.5),
+    ]
+    draw.line(trace, fill=255, width=stroke, joint="curve")
+
+
+def _icon_spare(draw, pt, size):
+    draw.polygon([pt(0.5, 0.14), pt(0.80, 0.5), pt(0.5, 0.86), pt(0.20, 0.5)], fill=255)
+
+
+def generate_marker_icons() -> None:
+    """Marker pictogram atlas: 4x2 grid of white-on-black silhouettes. Tile
+    order is the client's icon index contract (GeoPointLayerActor):
+    0 dot, 1 signal, 2 aircraft, 3 satellite, 4 lightning, 5 sounding,
+    6 earthquake, 7 spare."""
+    tiles = [
+        _icon_dot, _icon_signal, _icon_aircraft, _icon_satellite,
+        _icon_lightning, _icon_sounding, _icon_earthquake, _icon_spare,
+    ]
+    atlas = Image.new("RGB", (ICON_TILE * ICON_COLS, ICON_TILE * ICON_ROWS), (0, 0, 0))
+    for index, draw_fn in enumerate(tiles):
+        tile = _icon_tile(draw_fn)
+        x = (index % ICON_COLS) * ICON_TILE
+        y = (index // ICON_COLS) * ICON_TILE
+        atlas.paste(Image.merge("RGB", (tile, tile, tile)), (x, y))
+    ICON_ATLAS.parent.mkdir(parents=True, exist_ok=True)
+    atlas.save(ICON_ATLAS)
+    print(f"Generated {ICON_ATLAS}")
 
 
 if __name__ == "__main__":

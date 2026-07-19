@@ -56,6 +56,13 @@ void AIonCommandCameraPawn::BeginPlay()
     {
         SetActorRotation(FRotator(0.0, -90.0 - CameraLongitude, 0.0));
     }
+    // -IonCameraLatitude=<deg> raises the orbit so the given latitude sits at
+    // screen center (spring arm pitches down by the latitude).
+    double CameraLatitude = 0.0;
+    if (FParse::Value(FCommandLine::Get(), TEXT("IonCameraLatitude="), CameraLatitude))
+    {
+        SpringArm->SetRelativeRotation(FRotator(FMath::Clamp(-CameraLatitude, -85.0, 85.0), 0.0, 0.0));
+    }
     if (UGeoSelectionSubsystem* Selection = GetGameInstance()->GetSubsystem<UGeoSelectionSubsystem>())
     {
         Selection->OnSelectionChanged.AddDynamic(this, &AIonCommandCameraPawn::HandleSelectionChanged);

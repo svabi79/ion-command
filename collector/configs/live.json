@@ -71,6 +71,42 @@
       "radiusNm": 200
     },
     {
+      "id": "adsb-london",
+      "type": "aviation.adsb",
+      "enabled": true,
+      "latitude": 51.5,
+      "longitude": -0.5,
+      "radiusNm": 250,
+      "pollSeconds": 30
+    },
+    {
+      "id": "adsb-madrid",
+      "type": "aviation.adsb",
+      "enabled": true,
+      "latitude": 40.4,
+      "longitude": -3.7,
+      "radiusNm": 250,
+      "pollSeconds": 30
+    },
+    {
+      "id": "adsb-rome",
+      "type": "aviation.adsb",
+      "enabled": true,
+      "latitude": 41.9,
+      "longitude": 12.5,
+      "radiusNm": 250,
+      "pollSeconds": 30
+    },
+    {
+      "id": "adsb-berlin",
+      "type": "aviation.adsb",
+      "enabled": true,
+      "latitude": 52.5,
+      "longitude": 13.4,
+      "radiusNm": 250,
+      "pollSeconds": 30
+    },
+    {
       "id": "rbn-primary",
       "type": "hamradio.rbn",
       "enabled": true,

@@ -8,18 +8,68 @@
 #include "Materials/MaterialInstanceDynamic.h"
 #include "UObject/ConstructorHelpers.h"
 
+namespace
+{
+    struct FMarkerIconStyle
+    {
+        float AtlasIndex = 0.0f;
+        FLinearColor Color = FLinearColor(0.0f, 0.82f, 1.0f);
+    };
+
+    // Generic pictogram vocabulary: domains declare their glyph through the
+    // envelope's visual.icon property; the renderer only knows atlas tiles.
+    const TMap<FString, FMarkerIconStyle>& IconStyles()
+    {
+        static const TMap<FString, FMarkerIconStyle> Styles = {
+            {TEXT("signal"),     {1.0f, FLinearColor(0.00f, 0.85f, 1.00f)}},
+            {TEXT("aircraft"),   {2.0f, FLinearColor(1.00f, 0.72f, 0.10f)}},
+            {TEXT("satellite"),  {3.0f, FLinearColor(0.85f, 0.92f, 1.00f)}},
+            {TEXT("lightning"),  {4.0f, FLinearColor(0.78f, 0.55f, 1.00f)}},
+            {TEXT("sounding"),   {5.0f, FLinearColor(0.25f, 1.00f, 0.55f)}},
+            {TEXT("earthquake"), {6.0f, FLinearColor(1.00f, 0.28f, 0.12f)}},
+        };
+        return Styles;
+    }
+
+    // Replay compatibility only: recordings made before domains declared
+    // visual.icon still get their glyph. New domains must send the property.
+    const TMap<FString, FString>& DomainIconFallback()
+    {
+        static const TMap<FString, FString> Fallback = {
+            {TEXT("hamradio"), TEXT("signal")},
+            {TEXT("aviation"), TEXT("aircraft")},
+            {TEXT("orbital"), TEXT("satellite")},
+            {TEXT("weather"), TEXT("lightning")},
+            {TEXT("ionosphere"), TEXT("sounding")},
+            {TEXT("geophysics"), TEXT("earthquake")},
+        };
+        return Fallback;
+    }
+
+    constexpr int32 MarkerCustomFloats = 7;
+}
+
 AGeoPointLayerActor::AGeoPointLayerActor()
 {
     PrimaryActorTick.bCanEverTick = true;
     PrimaryActorTick.TickInterval = 0.25f;
     SceneRoot = CreateDefaultSubobject<USceneComponent>(TEXT("Root")); SetRootComponent(SceneRoot);
-    static ConstructorHelpers::FObjectFinder<UStaticMesh> SphereMesh(TEXT("/Engine/BasicShapes/Sphere.Sphere"));
-    EntityInstances = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("EntityPoints"));
-    EntityInstances->SetupAttachment(SceneRoot); EntityInstances->SetStaticMesh(SphereMesh.Object); EntityInstances->SetCollisionEnabled(ECollisionEnabled::NoCollision); EntityInstances->SetCastShadow(false);
-    ObservationInstances = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("ObservationPoints"));
-    ObservationInstances->SetupAttachment(SceneRoot); ObservationInstances->SetStaticMesh(SphereMesh.Object); ObservationInstances->SetCollisionEnabled(ECollisionEnabled::NoCollision); ObservationInstances->SetCastShadow(false);
-    if (UMaterialInterface* EntityMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/ION/Materials/MI_Point_Entity.MI_Point_Entity"))) EntityInstances->SetMaterial(0, EntityMaterial);
-    if (UMaterialInterface* ObservationMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/ION/Materials/MI_Point_Observation.MI_Point_Observation"))) ObservationInstances->SetMaterial(0, ObservationMaterial);
+    static ConstructorHelpers::FObjectFinder<UStaticMesh> QuadMesh(TEXT("/Engine/BasicShapes/Plane.Plane"));
+    MarkerInstances = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("MarkerPoints"));
+    MarkerInstances->SetupAttachment(SceneRoot); MarkerInstances->SetStaticMesh(QuadMesh.Object); MarkerInstances->SetCollisionEnabled(ECollisionEnabled::NoCollision); MarkerInstances->SetCastShadow(false);
+    MarkerInstances->SetNumCustomDataFloats(MarkerCustomFloats);
+    if (UMaterialInterface* IconMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/ION/Materials/M_MarkerIcon.M_MarkerIcon"))) MarkerInstances->SetMaterial(0, IconMaterial);
+}
+
+void AGeoPointLayerActor::AppendCustomData(TArray<float>& Out, const FRenderedGeoPoint& Point)
+{
+    Out.Add(Point.IconIndex);
+    Out.Add(Point.Color.R);
+    Out.Add(Point.Color.G);
+    Out.Add(Point.Color.B);
+    Out.Add(static_cast<float>(Point.Location.X));
+    Out.Add(static_cast<float>(Point.Location.Y));
+    Out.Add(static_cast<float>(Point.Location.Z));
 }
 
 void AGeoPointLayerActor::OnConstruction(const FTransform& Transform)
@@ -36,26 +86,29 @@ void AGeoPointLayerActor::PostRegisterAllComponents()
 
 void AGeoPointLayerActor::BuildEditorPreview()
 {
-    EntityInstances->ClearInstances();
-    ObservationInstances->ClearInstances();
+    MarkerInstances->ClearInstances();
     constexpr int32 PreviewPointCount = 180;
     for (int32 Index = 0; Index < PreviewPointCount; ++Index)
     {
         const double Longitude = FMath::Fmod(Index * 137.507764, 360.0) - 180.0;
         const double Latitude = FMath::Sin(Index * 1.13) * 70.0;
         const FVector Location = UGeoMathLibrary::LatitudeLongitudeToUnitSphere(Latitude, Longitude) * (GlobeRadius + 12.0);
-        UInstancedStaticMeshComponent* Instances = Index % 7 == 0 ? ObservationInstances : EntityInstances;
-        const double Scale = Index % 7 == 0 ? 0.13 : 0.075;
-        Instances->AddInstance(FTransform(FQuat::Identity, Location, FVector(Scale)), true);
+        const int32 InstanceIndex = MarkerInstances->AddInstance(FTransform(FQuat::Identity, Location, FVector(0.1)), true);
+        FRenderedGeoPoint Preview;
+        Preview.IconIndex = static_cast<float>(Index % 8);
+        Preview.Color = FLinearColor::White;
+        Preview.Location = Location;
+        TArray<float> CustomData;
+        AppendCustomData(CustomData, Preview);
+        MarkerInstances->SetCustomData(InstanceIndex, CustomData, false);
     }
+    MarkerInstances->MarkRenderStateDirty();
 }
 
 void AGeoPointLayerActor::BeginPlay()
 {
     Super::BeginPlay();
     Reset();
-    if (UMaterialInstanceDynamic* Material = EntityInstances->CreateAndSetMaterialInstanceDynamic(0)) Material->SetVectorParameterValue(TEXT("Color"), FLinearColor(0.0f, 0.9f, 1.0f));
-    if (UMaterialInstanceDynamic* Material = ObservationInstances->CreateAndSetMaterialInstanceDynamic(0)) Material->SetVectorParameterValue(TEXT("Color"), FLinearColor(1.0f, 0.25f, 0.02f));
     if (UGameInstance* GameInstance = GetGameInstance())
     {
         DataSubsystem = GameInstance->GetSubsystem<UGeoDataSubsystem>();
@@ -134,6 +187,20 @@ void AGeoPointLayerActor::Submit(const FGeoMessageEnvelope& Message)
     Point.Scale = PointScale;
     Point.bObservation = Message.MessageType != EGeoMessageType::Entity;
     Point.Domain = Message.Domain;
+    // Pictogram: the domain's declared glyph, a replay-era fallback by
+    // domain name, else the plain dot in the classic entity/observation hue.
+    FString IconName = Message.Properties.FindRef(TEXT("visual.icon"));
+    if (IconName.IsEmpty()) IconName = DomainIconFallback().FindRef(Message.Domain);
+    if (const FMarkerIconStyle* Style = IconStyles().Find(IconName))
+    {
+        Point.IconIndex = Style->AtlasIndex;
+        Point.Color = Style->Color;
+    }
+    else
+    {
+        Point.IconIndex = 0.0f;
+        Point.Color = Point.bObservation ? FLinearColor(1.0f, 0.32f, 0.05f) : FLinearColor(0.0f, 0.82f, 1.0f);
+    }
     Point.Title = Message.Properties.FindRef(TEXT("display.title"));
     if (Point.Title.IsEmpty()) Point.Title = Message.Properties.FindRef(TEXT("callsign"));
     if (Point.Title.IsEmpty()) Point.Title = Message.SemanticType;
@@ -142,8 +209,10 @@ void AGeoPointLayerActor::Submit(const FGeoMessageEnvelope& Message)
     EntityToPoint.Add(EntityKey, ActivePoints.Num() - 1);
     if (!bNeedsRebuild && IsDomainVisible(Point.Domain))
     {
-        UInstancedStaticMeshComponent* Instances = Point.bObservation ? ObservationInstances : EntityInstances;
-        Instances->AddInstance(FTransform(FQuat::Identity, Location, FVector(MarkerScale * CurrentZoomFactor * PointScale)), true);
+        const int32 InstanceIndex = MarkerInstances->AddInstance(FTransform(FQuat::Identity, Location, FVector(MarkerScale * CurrentZoomFactor * PointScale)), true);
+        TArray<float> CustomData;
+        AppendCustomData(CustomData, Point);
+        MarkerInstances->SetCustomData(InstanceIndex, CustomData, true);
     }
 }
 
@@ -230,29 +299,33 @@ void AGeoPointLayerActor::Tick(float DeltaSeconds)
 
 void AGeoPointLayerActor::RebuildInstances()
 {
-    TArray<FTransform> Entities;
-    TArray<FTransform> Observations;
-    Entities.Reserve(ActivePoints.Num());
+    TArray<FTransform> Transforms;
+    TArray<const FRenderedGeoPoint*> Rendered;
+    Transforms.Reserve(ActivePoints.Num());
+    Rendered.Reserve(ActivePoints.Num());
     for (const FRenderedGeoPoint& Point : ActivePoints)
     {
         if (!IsDomainVisible(Point.Domain)) continue;
         const FVector Scale(MarkerScale * CurrentZoomFactor * Point.Scale);
-        (Point.bObservation ? Observations : Entities).Emplace(FQuat::Identity, Point.Location, Scale);
+        Transforms.Emplace(FQuat::Identity, Point.Location, Scale);
+        Rendered.Add(&Point);
     }
-    EntityInstances->ClearInstances();
-    ObservationInstances->ClearInstances();
-    EntityInstances->AddInstances(Entities, false);
-    ObservationInstances->AddInstances(Observations, false);
-    EntityInstances->MarkRenderStateDirty();
-    ObservationInstances->MarkRenderStateDirty();
+    MarkerInstances->ClearInstances();
+    MarkerInstances->AddInstances(Transforms, false);
+    for (int32 Index = 0; Index < Rendered.Num(); ++Index)
+    {
+        TArray<float> CustomData;
+        AppendCustomData(CustomData, *Rendered[Index]);
+        MarkerInstances->SetCustomData(Index, CustomData, false);
+    }
+    MarkerInstances->MarkRenderStateDirty();
 }
 
 void AGeoPointLayerActor::Reset()
 {
     ActivePoints.Reset();
     EntityToPoint.Reset();
-    EntityInstances->ClearInstances();
-    ObservationInstances->ClearInstances();
+    MarkerInstances->ClearInstances();
 }
 void AGeoPointLayerActor::OnMessageAccepted(const FGeoMessageEnvelope& Message) { Submit(Message); }
 void AGeoPointLayerActor::OnLayerVisibilityChanged(const FString& LayerId, bool bVisible) { if (LayerId == TEXT("core.point-markers")) SetActorHiddenInGame(!bVisible); }

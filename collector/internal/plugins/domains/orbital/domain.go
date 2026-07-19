@@ -45,6 +45,7 @@ func (d *Domain) Normalize(_ context.Context, record plugins.RawRecord) ([]event
 		"noradId":            raw.SatID,
 		"altKm":              raw.AltKm,
 		"visual.markerScale": 1.5,
+		"visual.icon":        "satellite",
 		"display.title":      raw.Name,
 		"display.primary":    fmt.Sprintf("alt %.0f km", raw.AltKm),
 	}

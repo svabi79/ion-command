@@ -52,6 +52,7 @@ func (d *Domain) Normalize(_ context.Context, record plugins.RawRecord) ([]event
 		"magnitude":          raw.Magnitude,
 		"depthKm":            raw.DepthKm,
 		"visual.markerScale": markerScale,
+		"visual.icon":        "earthquake",
 		"display.title":      fmt.Sprintf("M %.1f Earthquake", raw.Magnitude),
 		"display.primary":    raw.Place,
 		"display.secondary":  fmt.Sprintf("depth %.0f km", raw.DepthKm),
