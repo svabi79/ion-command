@@ -1,0 +1,469 @@
+#include "IonCockpitHudActor.h"
+
+#include "CanvasItem.h"
+#include "Engine/Canvas.h"
+#include "Engine/Engine.h"
+#include "Engine/Font.h"
+#include "EngineUtils.h"
+#include "GeoDataSubsystem.h"
+#include "GeoMathLibrary.h"
+#include "GeoSelectionSubsystem.h"
+#include "GeoStreamSubsystem.h"
+#include "GeoTimelineSubsystem.h"
+#include "HAL/PlatformTime.h"
+
+namespace
+{
+constexpr double GlobeRadiusUnits = 1000.0;
+constexpr double LabelRadiusUnits = 1012.0;
+constexpr int32 MaxGlobeLabels = 12;
+// Keep more candidates than drawn labels: the busiest stations may all sit on
+// the far side of the globe, and the label pass draws the busiest VISIBLE ones.
+constexpr int32 MaxLabelCandidates = 48;
+
+const FLinearColor CockpitCyan(0.16f, 0.86f, 1.0f);
+const FLinearColor CockpitDim(0.10f, 0.38f, 0.52f);
+const FLinearColor CockpitWhite(0.88f, 0.99f, 1.0f);
+const FLinearColor CockpitGreen(0.24f, 1.0f, 0.60f);
+const FLinearColor CockpitAmber(1.0f, 0.63f, 0.12f);
+const FLinearColor CockpitRed(1.0f, 0.25f, 0.20f);
+const FLinearColor PanelFill(0.008f, 0.03f, 0.05f);
+
+// Properties arrive flattened to strings; JSON null becomes the literal
+// string "null" and absent keys become empty.
+bool PropertyAsDouble(const TMap<FString, FString>& Properties, const TCHAR* Key, double& OutValue)
+{
+    const FString Raw = Properties.FindRef(Key);
+    if (Raw.IsEmpty() || Raw == TEXT("null")) return false;
+    OutValue = FCString::Atod(*Raw);
+    return true;
+}
+
+FLinearColor SeverityColor(double Value, double AmberFrom, double RedFrom)
+{
+    if (Value >= RedFrom) return CockpitRed;
+    if (Value >= AmberFrom) return CockpitAmber;
+    return CockpitGreen;
+}
+
+FLinearColor WithAlpha(const FLinearColor& Color, float Alpha)
+{
+    FLinearColor Result = Color;
+    Result.A = Alpha;
+    return Result;
+}
+}
+
+AIonCockpitHudActor::AIonCockpitHudActor()
+{
+}
+
+void AIonCockpitHudActor::BeginPlay()
+{
+    Super::BeginPlay();
+    if (UGameInstance* GameInstance = GetGameInstance())
+    {
+        if (UGeoDataSubsystem* Data = GameInstance->GetSubsystem<UGeoDataSubsystem>())
+        {
+            DataSubsystem = Data;
+            MessageAcceptedHandle = Data->OnMessageAccepted().AddUObject(this, &AIonCockpitHudActor::OnMessageAccepted);
+            DataResetHandle = Data->OnDataReset().AddUObject(this, &AIonCockpitHudActor::OnDataReset);
+        }
+    }
+}
+
+void AIonCockpitHudActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+    if (UGeoDataSubsystem* Data = DataSubsystem.Get())
+    {
+        Data->OnMessageAccepted().Remove(MessageAcceptedHandle);
+        Data->OnDataReset().Remove(DataResetHandle);
+    }
+    Super::EndPlay(EndPlayReason);
+}
+
+void AIonCockpitHudActor::CycleMode()
+{
+    switch (Mode)
+    {
+    case EIonCockpitMode::Full: Mode = EIonCockpitMode::Minimal; break;
+    case EIonCockpitMode::Minimal: Mode = EIonCockpitMode::Hidden; break;
+    default: Mode = EIonCockpitMode::Full; break;
+    }
+}
+
+void AIonCockpitHudActor::OnMessageAccepted(const FGeoMessageEnvelope& Message)
+{
+    if (Message.SemanticType == TEXT("spaceweather.state"))
+    {
+        double Value = 0.0;
+        if (PropertyAsDouble(Message.Properties, TEXT("kp"), Value)) EnvKp = FMath::Clamp(Value, 0.0, 9.0);
+        if (PropertyAsDouble(Message.Properties, TEXT("aIndex"), Value)) EnvAIndex = Value;
+        if (PropertyAsDouble(Message.Properties, TEXT("solarFlux"), Value)) EnvSolarFlux = Value;
+        if (PropertyAsDouble(Message.Properties, TEXT("solarWindSpeedKms"), Value)) EnvWindKms = Value;
+        if (PropertyAsDouble(Message.Properties, TEXT("imfBzNt"), Value)) { EnvBzNt = Value; bHasEnvBz = true; }
+        return;
+    }
+    const bool bPathTraffic = (Message.Geometry.Type == EGeoGeometryType::GreatCircle || Message.Geometry.Type == EGeoGeometryType::Arc) && Message.Geometry.Positions.Num() >= 2;
+    if (!bPathTraffic) return;
+    const int64 NowSecond = static_cast<int64>(FPlatformTime::Seconds());
+    AdvanceRateBuckets(NowSecond);
+    ++RateBuckets[NowSecond % 60];
+    RecordEndpoint(Message.FromEntityId, Message.Properties.FindRef(TEXT("display.from")), Message.Geometry.Positions[0]);
+    RecordEndpoint(Message.ToEntityId, Message.Properties.FindRef(TEXT("display.to")), Message.Geometry.Positions.Last());
+}
+
+void AIonCockpitHudActor::OnDataReset()
+{
+    EndpointStats.Reset();
+    CachedTopEndpoints.Reset();
+    CachedBreakdown.Reset();
+    FMemory::Memzero(RateBuckets, sizeof(RateBuckets));
+    LastBucketSecond = 0;
+}
+
+void AIonCockpitHudActor::AdvanceRateBuckets(int64 NowSecond)
+{
+    if (LastBucketSecond == 0 || NowSecond - LastBucketSecond >= 60)
+    {
+        FMemory::Memzero(RateBuckets, sizeof(RateBuckets));
+        LastBucketSecond = NowSecond;
+        return;
+    }
+    while (LastBucketSecond < NowSecond)
+    {
+        ++LastBucketSecond;
+        RateBuckets[LastBucketSecond % 60] = 0;
+    }
+}
+
+void AIonCockpitHudActor::RecordEndpoint(const FString& EntityId, const FString& Label, const FGeoPosition& Position)
+{
+    if (EntityId.IsEmpty() || Label.IsEmpty()) return;
+    FIonEndpointStat* Stat = EndpointStats.Find(EntityId);
+    if (!Stat)
+    {
+        if (EndpointStats.Num() >= MaxEndpointStats) return;
+        Stat = &EndpointStats.Add(EntityId);
+        Stat->Label = Label;
+    }
+    Stat->Position = Position;
+    Stat->Weight += 1.0;
+    Stat->LastSeenSeconds = FPlatformTime::Seconds();
+}
+
+void AIonCockpitHudActor::RefreshAggregates(double NowSeconds)
+{
+    if (!ArcLayer.IsValid())
+    {
+        for (TActorIterator<AGeoArcLayerActor> It(GetWorld()); It; ++It) { ArcLayer = *It; break; }
+    }
+    if (AGeoArcLayerActor* Layer = ArcLayer.Get())
+    {
+        Layer->GetPaletteBreakdown(CachedBreakdown);
+        CachedPanelTitle = Layer->GetTrafficPanelTitle();
+        CachedBandFocus = Layer->GetBandFocus();
+    }
+    // Decay endpoint weights so the label set follows current traffic, and
+    // prune silent or negligible stations to keep the map bounded.
+    for (auto It = EndpointStats.CreateIterator(); It; ++It)
+    {
+        It->Value.Weight *= 0.97;
+        if (It->Value.Weight < 0.05 || NowSeconds - It->Value.LastSeenSeconds > EndpointRetentionSeconds) It.RemoveCurrent();
+    }
+    CachedTopEndpoints.Reset();
+    for (const TPair<FString, FIonEndpointStat>& Pair : EndpointStats) CachedTopEndpoints.Add(Pair.Value);
+    CachedTopEndpoints.Sort([](const FIonEndpointStat& A, const FIonEndpointStat& B) { return A.Weight > B.Weight; });
+    if (CachedTopEndpoints.Num() > MaxLabelCandidates) CachedTopEndpoints.SetNum(MaxLabelCandidates);
+}
+
+void AIonCockpitHudActor::DrawHUD()
+{
+    Super::DrawHUD();
+    if (!Canvas || Mode == EIonCockpitMode::Hidden) return;
+    const double NowSeconds = FPlatformTime::Seconds();
+    AdvanceRateBuckets(static_cast<int64>(NowSeconds));
+    if (NowSeconds - LastAggregateSeconds > 0.5)
+    {
+        LastAggregateSeconds = NowSeconds;
+        RefreshAggregates(NowSeconds);
+    }
+    const float Scale = FMath::Clamp(Canvas->SizeY / 1440.0f, 0.5f, 2.5f);
+    // Match the boot camera fade so the cockpit materialises with the scene.
+    const double WorldSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : 10.0;
+    const float Alpha = FMath::Clamp((static_cast<float>(WorldSeconds) - 2.5f) / 2.5f, 0.0f, 1.0f);
+    if (Alpha <= 0.0f) return;
+
+    DrawStatusBar(Scale, Alpha);
+    if (Mode == EIonCockpitMode::Full)
+    {
+        DrawTrafficPanel(Scale, Alpha);
+        DrawRatePanel(Scale, Alpha, TrafficPanelBottomY + 16.0f * Scale);
+        DrawPolarPanel(Scale, Alpha);
+        DrawEndpointLabels(Scale, Alpha);
+    }
+    DrawModeHint(Scale, Alpha);
+}
+
+void AIonCockpitHudActor::DrawStatusBar(float Scale, float Alpha)
+{
+    const float BarHeight = 46.0f * Scale;
+    DrawRect(0.0f, 0.0f, Canvas->SizeX, BarHeight, WithAlpha(PanelFill, 0.55f * Alpha));
+    DrawLineSegment(FVector2D(0.0f, BarHeight), FVector2D(Canvas->SizeX, BarHeight), WithAlpha(CockpitCyan, 0.55f * Alpha), FMath::Max(1.0f, 1.5f * Scale));
+
+    const UGeoTimelineSubsystem* Timeline = GetGameInstance() ? GetGameInstance()->GetSubsystem<UGeoTimelineSubsystem>() : nullptr;
+    const UGeoStreamSubsystem* Stream = GetGameInstance() ? GetGameInstance()->GetSubsystem<UGeoStreamSubsystem>() : nullptr;
+    const UGeoDataSubsystem* Data = DataSubsystem.Get();
+
+    const float TextY = 12.0f * Scale;
+    float CursorX = 18.0f * Scale;
+
+    const FDateTime Utc = Timeline ? Timeline->GetTimelineUtc() : FDateTime::UtcNow();
+    DrawLabelValue(CursorX, TextY, TEXT("UTC"), Utc.ToString(TEXT("%H:%M:%S")), CockpitWhite, Scale, Alpha);
+
+    FString TimelineState = TEXT("LIVE");
+    FLinearColor TimelineColor = CockpitGreen;
+    if (Timeline && Timeline->IsPaused()) { TimelineState = TEXT("PAUSED"); TimelineColor = CockpitAmber; }
+    else if (Timeline && !Timeline->IsLive()) { TimelineState = TEXT("REPLAY"); TimelineColor = CockpitCyan; }
+    DrawLabelValue(CursorX, TextY, TEXT("MODE"), TimelineState, TimelineColor, Scale, Alpha);
+
+    FString LinkState = TEXT("OFFLINE");
+    FLinearColor LinkColor = CockpitAmber;
+    if (Stream)
+    {
+        switch (Stream->GetState())
+        {
+        case EGeoStreamState::Connected: LinkState = TEXT("CONNECTED"); LinkColor = CockpitGreen; break;
+        case EGeoStreamState::Connecting: LinkState = TEXT("CONNECTING"); LinkColor = CockpitCyan; break;
+        case EGeoStreamState::Degraded: LinkState = TEXT("DEGRADED"); LinkColor = CockpitAmber; break;
+        default: break;
+        }
+    }
+    DrawLabelValue(CursorX, TextY, TEXT("LINK"), LinkState, LinkColor, Scale, Alpha);
+
+    DrawLabelValue(CursorX, TextY, TEXT("KP"), EnvKp < 0.0 ? TEXT("--") : FString::Printf(TEXT("%.1f"), EnvKp), EnvKp < 0.0 ? CockpitDim : SeverityColor(EnvKp, 4.0, 6.0), Scale, Alpha);
+    DrawLabelValue(CursorX, TextY, TEXT("FLUX"), EnvSolarFlux < 0.0 ? TEXT("--") : FString::Printf(TEXT("%.0f"), EnvSolarFlux), EnvSolarFlux < 0.0 ? CockpitDim : CockpitWhite, Scale, Alpha);
+    DrawLabelValue(CursorX, TextY, TEXT("A"), EnvAIndex < 0.0 ? TEXT("--") : FString::Printf(TEXT("%.0f"), EnvAIndex), EnvAIndex < 0.0 ? CockpitDim : SeverityColor(EnvAIndex, 15.0, 30.0), Scale, Alpha);
+    DrawLabelValue(CursorX, TextY, TEXT("WIND"), EnvWindKms < 0.0 ? TEXT("--") : FString::Printf(TEXT("%.0f KM/S"), EnvWindKms), EnvWindKms < 0.0 ? CockpitDim : CockpitWhite, Scale, Alpha);
+    DrawLabelValue(CursorX, TextY, TEXT("BZ"), !bHasEnvBz ? TEXT("--") : FString::Printf(TEXT("%+.1f NT"), EnvBzNt), !bHasEnvBz ? CockpitDim : SeverityColor(-EnvBzNt, 2.0, 5.0), Scale, Alpha);
+
+    int32 PerMinute = 0;
+    for (int32 Bucket : RateBuckets) PerMinute += Bucket;
+    DrawLabelValue(CursorX, TextY, TEXT("PATHS/MIN"), FString::Printf(TEXT("%d"), PerMinute), CockpitCyan, Scale, Alpha);
+
+    if (Data)
+    {
+        const FGeoRuntimeStatistics Stats = Data->GetStatistics();
+        DrawLabelValue(CursorX, TextY, TEXT("ACTIVE"), FString::Printf(TEXT("%d"), Stats.ActiveMessages), CockpitWhite, Scale, Alpha);
+        DrawLabelValue(CursorX, TextY, TEXT("RX"), FString::Printf(TEXT("%lld"), Stats.AcceptedMessages), CockpitWhite, Scale, Alpha);
+        DrawLabelValue(CursorX, TextY, TEXT("DROP"), FString::Printf(TEXT("%lld"), Stats.DroppedMessages), Stats.DroppedMessages > 0 ? CockpitRed : CockpitGreen, Scale, Alpha);
+    }
+}
+
+void AIonCockpitHudActor::DrawTrafficPanel(float Scale, float Alpha)
+{
+    const float PanelX = 18.0f * Scale;
+    const float PanelY = 66.0f * Scale;
+    const float PanelWidth = 330.0f * Scale;
+    const float RowHeight = 24.0f * Scale;
+    const float HeaderHeight = 34.0f * Scale;
+    const int32 Rows = CachedBreakdown.Num();
+    const float PanelHeight = HeaderHeight + FMath::Max(Rows, 1) * RowHeight + 12.0f * Scale;
+    DrawPanelFrame(PanelX, PanelY, PanelWidth, PanelHeight, CachedPanelTitle.IsEmpty() ? TEXT("TRAFFIC BY CLASS") : CachedPanelTitle, Scale, Alpha);
+    TrafficPanelBottomY = PanelY + PanelHeight;
+
+    int32 MaxCount = 1;
+    for (const FGeoPaletteBreakdownEntry& Entry : CachedBreakdown) MaxCount = FMath::Max(MaxCount, Entry.Count);
+    const float LabelWidth = 86.0f * Scale;
+    const float CountWidth = 56.0f * Scale;
+    const float BarMaxWidth = PanelWidth - LabelWidth - CountWidth - 30.0f * Scale;
+    float RowY = PanelY + HeaderHeight;
+    for (const FGeoPaletteBreakdownEntry& Entry : CachedBreakdown)
+    {
+        const bool bDimmed = CachedBandFocus != INDEX_NONE && Entry.PaletteIndex != CachedBandFocus;
+        const float RowAlpha = Alpha * (bDimmed ? 0.28f : 1.0f);
+        DrawTextAt(Entry.Label, PanelX + 12.0f * Scale, RowY + 4.0f * Scale, WithAlpha(CockpitWhite, RowAlpha), 1.15f * Scale);
+        const float BarWidth = BarMaxWidth * (MaxCount > 0 ? static_cast<float>(Entry.Count) / MaxCount : 0.0f);
+        DrawRect(PanelX + LabelWidth, RowY + 6.0f * Scale, FMath::Max(BarWidth, Entry.Count > 0 ? 2.0f * Scale : 0.0f), RowHeight - 12.0f * Scale, WithAlpha(Entry.Color, 0.85f * RowAlpha));
+        DrawTextAt(FString::Printf(TEXT("%d"), Entry.Count), PanelX + LabelWidth + BarMaxWidth + 10.0f * Scale, RowY + 4.0f * Scale, WithAlpha(CockpitCyan, RowAlpha), 1.15f * Scale);
+        if (CachedBandFocus == Entry.PaletteIndex)
+        {
+            DrawRect(PanelX + 4.0f * Scale, RowY + 6.0f * Scale, 3.0f * Scale, RowHeight - 12.0f * Scale, WithAlpha(CockpitWhite, Alpha));
+        }
+        RowY += RowHeight;
+    }
+}
+
+void AIonCockpitHudActor::DrawRatePanel(float Scale, float Alpha, float PanelY)
+{
+    const float PanelX = 18.0f * Scale;
+    const float PanelWidth = 330.0f * Scale;
+    const float PanelHeight = 96.0f * Scale;
+    DrawPanelFrame(PanelX, PanelY, PanelWidth, PanelHeight, TEXT("PATH RATE // 60 S"), Scale, Alpha);
+
+    int32 MaxBucket = 1;
+    for (int32 Bucket : RateBuckets) MaxBucket = FMath::Max(MaxBucket, Bucket);
+    const float ChartX = PanelX + 12.0f * Scale;
+    const float ChartWidth = PanelWidth - 24.0f * Scale;
+    const float ChartBottom = PanelY + PanelHeight - 10.0f * Scale;
+    const float ChartMaxHeight = PanelHeight - 46.0f * Scale;
+    const float BarStep = ChartWidth / 60.0f;
+    for (int32 Offset = 0; Offset < 60; ++Offset)
+    {
+        // Oldest bucket on the left, the current second on the right.
+        const int64 BucketSecond = LastBucketSecond - 59 + Offset;
+        const int32 Count = BucketSecond > 0 ? RateBuckets[BucketSecond % 60] : 0;
+        if (Count <= 0) continue;
+        const float BarHeight = FMath::Max(ChartMaxHeight * Count / MaxBucket, 1.5f * Scale);
+        DrawRect(ChartX + Offset * BarStep, ChartBottom - BarHeight, FMath::Max(BarStep - 1.0f, 1.0f), BarHeight, WithAlpha(CockpitCyan, 0.8f * Alpha));
+    }
+}
+
+void AIonCockpitHudActor::DrawPolarPanel(float Scale, float Alpha)
+{
+    const float PanelWidth = 250.0f * Scale;
+    const float PanelHeight = 288.0f * Scale;
+    const float PanelX = Canvas->SizeX - PanelWidth - 18.0f * Scale;
+    const float PanelY = 66.0f * Scale;
+    DrawPanelFrame(PanelX, PanelY, PanelWidth, PanelHeight, TEXT("AURORAL OVAL // N"), Scale, Alpha);
+
+    const FVector2D Center(PanelX + PanelWidth * 0.5f, PanelY + 40.0f * Scale + (PanelHeight - 78.0f * Scale) * 0.5f);
+    const float MaxRadius = (PanelHeight - 96.0f * Scale) * 0.5f;
+    const float GridAlpha = 0.35f * Alpha;
+    // Polar grid from latitude 90 (center) to 50 (rim).
+    for (int32 LatitudeRing = 80; LatitudeRing >= 50; LatitudeRing -= 10)
+    {
+        const float Radius = MaxRadius * (90 - LatitudeRing) / 40.0f;
+        FVector2D Previous = Center + FVector2D(Radius, 0.0f);
+        for (int32 Segment = 1; Segment <= 48; ++Segment)
+        {
+            const float Angle = 2.0f * PI * Segment / 48.0f;
+            const FVector2D Point = Center + FVector2D(FMath::Cos(Angle), FMath::Sin(Angle)) * Radius;
+            DrawLineSegment(Previous, Point, WithAlpha(CockpitDim, GridAlpha), 1.0f);
+            Previous = Point;
+        }
+    }
+    DrawLineSegment(Center - FVector2D(MaxRadius, 0.0f), Center + FVector2D(MaxRadius, 0.0f), WithAlpha(CockpitDim, GridAlpha), 1.0f);
+    DrawLineSegment(Center - FVector2D(0.0f, MaxRadius), Center + FVector2D(0.0f, MaxRadius), WithAlpha(CockpitDim, GridAlpha), 1.0f);
+
+    // Same equatorward expansion as the 3D aurora oval.
+    const bool bHasKp = EnvKp >= 0.0;
+    const double OvalKp = bHasKp ? EnvKp : 2.0;
+    const double CenterLatitude = FMath::Clamp(71.0 - 2.2 * OvalKp, 48.0, 74.0);
+    const float OvalRadius = MaxRadius * (90.0f - static_cast<float>(CenterLatitude)) / 40.0f;
+    const float OvalThickness = (2.5f + static_cast<float>(OvalKp) * 0.9f) * Scale;
+    const FLinearColor OvalColor = bHasKp ? FLinearColor(0.35f, 1.0f, 0.55f) : CockpitDim;
+    FVector2D Previous = Center + FVector2D(OvalRadius, 0.0f);
+    for (int32 Segment = 1; Segment <= 72; ++Segment)
+    {
+        const float Angle = 2.0f * PI * Segment / 72.0f;
+        const FVector2D Point = Center + FVector2D(FMath::Cos(Angle), FMath::Sin(Angle)) * OvalRadius;
+        DrawLineSegment(Previous, Point, WithAlpha(OvalColor, (bHasKp ? 0.85f : 0.4f) * Alpha), OvalThickness);
+        Previous = Point;
+    }
+    DrawTextAt(bHasKp ? FString::Printf(TEXT("KP %.1f  //  OVAL %.0f N"), EnvKp, CenterLatitude) : TEXT("KP --  //  AWAITING DATA"), Center.X, PanelY + PanelHeight - 24.0f * Scale, WithAlpha(bHasKp ? CockpitWhite : CockpitDim, Alpha), 1.1f * Scale, true);
+}
+
+void AIonCockpitHudActor::DrawEndpointLabels(float Scale, float Alpha)
+{
+    APlayerController* Player = PlayerOwner.Get();
+    if (!Player || !Player->PlayerCameraManager) return;
+    const FVector CameraLocation = Player->PlayerCameraManager->GetCameraLocation();
+
+    auto DrawStationLabel = [&](const FGeoPosition& Position, const FString& Label, const FLinearColor& Color, float TextScale) -> bool
+    {
+        const FVector Unit = UGeoMathLibrary::LatitudeLongitudeToUnitSphere(Position.Latitude, Position.Longitude);
+        const FVector WorldPosition = Unit * LabelRadiusUnits;
+        // Cull labels whose surface point faces away from the camera.
+        if (FVector::DotProduct(Unit, (CameraLocation - WorldPosition).GetSafeNormal()) < 0.12) return false;
+        const FVector Screen = Canvas->Project(WorldPosition);
+        if (Screen.Z <= 0.0f) return false;
+        DrawRect(Screen.X - 1.5f * Scale, Screen.Y - 1.5f * Scale, 3.0f * Scale, 3.0f * Scale, WithAlpha(Color, Alpha));
+        DrawTextAt(Label, Screen.X + 6.0f * Scale, Screen.Y - 14.0f * Scale, WithAlpha(Color, Alpha), TextScale);
+        return true;
+    };
+
+    // Busiest visible stations first; far-side candidates make room for the
+    // next visible ones instead of consuming label slots.
+    int32 DrawnLabels = 0;
+    for (const FIonEndpointStat& Stat : CachedTopEndpoints)
+    {
+        if (DrawnLabels >= MaxGlobeLabels) break;
+        if (DrawStationLabel(Stat.Position, Stat.Label, CockpitCyan, 1.05f * Scale)) ++DrawnLabels;
+    }
+    const UGeoSelectionSubsystem* Selection = GetGameInstance() ? GetGameInstance()->GetSubsystem<UGeoSelectionSubsystem>() : nullptr;
+    if (Selection && Selection->HasSelection())
+    {
+        const FGeoMessageEnvelope Message = Selection->GetSelection();
+        if (Message.Geometry.Positions.Num() >= 2)
+        {
+            const FString From = Message.Properties.FindRef(TEXT("display.from"));
+            const FString To = Message.Properties.FindRef(TEXT("display.to"));
+            if (!From.IsEmpty()) DrawStationLabel(Message.Geometry.Positions[0], From, CockpitWhite, 1.25f * Scale);
+            if (!To.IsEmpty()) DrawStationLabel(Message.Geometry.Positions.Last(), To, CockpitWhite, 1.25f * Scale);
+        }
+    }
+}
+
+void AIonCockpitHudActor::DrawModeHint(float Scale, float Alpha)
+{
+    const TCHAR* ModeName = Mode == EIonCockpitMode::Full ? TEXT("FULL") : TEXT("MIN");
+    DrawTextAt(FString::Printf(TEXT("HUD %s // TAB"), ModeName), Canvas->SizeX - 18.0f * Scale, Canvas->SizeY - 26.0f * Scale, WithAlpha(CockpitDim, Alpha), 1.0f * Scale, true);
+}
+
+void AIonCockpitHudActor::DrawPanelFrame(float X, float Y, float Width, float Height, const FString& Title, float Scale, float Alpha)
+{
+    DrawRect(X, Y, Width, Height, WithAlpha(PanelFill, 0.5f * Alpha));
+    const FLinearColor Border = WithAlpha(CockpitCyan, 0.45f * Alpha);
+    const float Thickness = FMath::Max(1.0f, 1.2f * Scale);
+    DrawLineSegment(FVector2D(X, Y), FVector2D(X + Width, Y), Border, Thickness);
+    DrawLineSegment(FVector2D(X, Y + Height), FVector2D(X + Width, Y + Height), Border, Thickness);
+    DrawLineSegment(FVector2D(X, Y), FVector2D(X, Y + Height), Border, Thickness);
+    DrawLineSegment(FVector2D(X + Width, Y), FVector2D(X + Width, Y + Height), Border, Thickness);
+    DrawTextAt(Title, X + 12.0f * Scale, Y + 8.0f * Scale, WithAlpha(CockpitCyan, Alpha), 1.2f * Scale);
+}
+
+void AIonCockpitHudActor::DrawLabelValue(float& CursorX, float Y, const FString& Label, const FString& Value, const FLinearColor& ValueColor, float Scale, float Alpha)
+{
+    const UFont* Font = GEngine->GetMediumFont();
+    const float LabelScale = 1.1f * Scale;
+    const float ValueScale = 1.35f * Scale;
+    float LabelW = 0.0f, LabelH = 0.0f, ValueW = 0.0f, ValueH = 0.0f;
+    Canvas->TextSize(Font, Label, LabelW, LabelH, LabelScale, LabelScale);
+    Canvas->TextSize(Font, Value, ValueW, ValueH, ValueScale, ValueScale);
+    DrawTextAt(Label, CursorX, Y + (ValueH - LabelH), WithAlpha(CockpitDim, Alpha), LabelScale);
+    DrawTextAt(Value, CursorX + LabelW + 7.0f * Scale, Y, WithAlpha(ValueColor, Alpha), ValueScale);
+    CursorX += LabelW + ValueW + 33.0f * Scale;
+}
+
+void AIonCockpitHudActor::DrawTextAt(const FString& Text, float X, float Y, const FLinearColor& Color, float TextScale, bool bCentered)
+{
+    const UFont* Font = GEngine->GetMediumFont();
+    float DrawX = X;
+    if (bCentered)
+    {
+        float Width = 0.0f, Height = 0.0f;
+        Canvas->TextSize(Font, Text, Width, Height, TextScale, TextScale);
+        DrawX = X - Width * 0.5f;
+    }
+    FCanvasTextItem Item(FVector2D(DrawX, Y), FText::FromString(Text), Font, Color);
+    Item.Scale = FVector2D(TextScale, TextScale);
+    Item.EnableShadow(FLinearColor(0.0f, 0.0f, 0.0f, Color.A * 0.9f));
+    Canvas->DrawItem(Item);
+}
+
+void AIonCockpitHudActor::DrawRect(float X, float Y, float Width, float Height, const FLinearColor& Color)
+{
+    if (Width <= 0.0f || Height <= 0.0f) return;
+    FCanvasTileItem Item(FVector2D(X, Y), FVector2D(Width, Height), Color);
+    Item.BlendMode = SE_BLEND_Translucent;
+    Canvas->DrawItem(Item);
+}
+
+void AIonCockpitHudActor::DrawLineSegment(const FVector2D& From, const FVector2D& To, const FLinearColor& Color, float Thickness)
+{
+    FCanvasLineItem Item(From, To);
+    Item.SetColor(Color);
+    Item.LineThickness = Thickness;
+    Canvas->DrawItem(Item);
+}

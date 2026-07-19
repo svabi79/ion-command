@@ -1,7 +1,50 @@
 # Implementation status
 
-Status date: **2026-07-19** (third pass: packaged build, GPU age fade, own
-station, WSJT-X, NOAA SWPC, operator controls).
+Status date: **2026-07-19** (fourth pass: cockpit stage 1 — screen-space
+instrument HUD from data already flowing).
+
+## Cockpit stage 1 (2026-07-19)
+
+Stage 1 of the mission-control cockpit ("instruments from data we already
+have"; stage 2 = DXCC + forecast, stage 3 = GIRO/path analysis/heatmap):
+
+- **`AIonCockpitHudActor`** (IonCommandUI, Canvas-drawn `AHUD`, no assets):
+  - **Status bar**: UTC + timeline mode (LIVE/REPLAY/PAUSED), link state,
+    KP / FLUX / A / WIND / BZ with severity colors (`--` until the first
+    `spaceweather.state` sample arrives), PATHS/MIN, ACTIVE / RX / DROP.
+  - **Traffic panel**: per-palette bars with domain labels and counts from the
+    new generic `AGeoArcLayerActor::GetPaletteBreakdown` API; the band-preset
+    focus (keys 1-9) highlights its row and dims the rest.
+  - **Path-rate panel**: 60 one-second buckets as a sparkline.
+  - **Polar dial**: auroral-oval instrument using the same
+    `71 - 2.2 * Kp` expansion as the 3D ovals.
+  - **On-globe labels**: the busiest *visible* relationship endpoints
+    (display.from/display.to aggregation, weight decay, far-side candidates
+    yield their slots to visible ones — at 06 UTC the global top list can be
+    entirely on the far hemisphere) plus both endpoints of the selection.
+  - **Tab navigation**: TAB cycles FULL → MINIMAL (status bar only) → OFF.
+  - Aggregation is bounded (4096 endpoint entries, 120 s retention) and
+    cadenced (0.5 s); per-frame work is drawing plus one 60-bucket sum.
+- **Modularity**: the UI module stays ham-free. Palette labels/panel title come
+  from `ResolvePaletteLabel`/`ResolveTrafficPanelTitle` virtuals that the
+  HamRadio layer overrides ("BAND ACTIVITY", "20M", "15M/12M", "OTHER");
+  station labels are generic `display.*` properties.
+- **Collector**: the SWPC source now fills `aIndex` from the wwv.txt
+  geophysical alert message ("estimated planetary A-index N", verified against
+  the live product; degrades to null), unit-tested with the real format.
+- **Automation screenshots** now capture the UI layer
+  (`RequestScreenshot(..., bShowUI=true, ...)`), so `first-light.ps1` proves
+  the cockpit.
+
+Verification: `go test ./...` + `go vet` green; editor target compiles; mock
+First Light (40 links/s, space weather every 10 s) captured the full cockpit —
+KP 2.0 / FLUX 234 / A 33 / WIND 672 / BZ -2.9 populated and severity-colored,
+all bands with counts, even sparkline, polar dial "KP 2.0 // OVAL 67 N",
+endpoint labels on the globe, DROP 0, zero game-log errors. An earlier run
+against a stale live collector (~1,150 events/s PSKReporter) also rendered the
+cockpit with PATHS/MIN 25,887; its space-weather columns showed `--` because
+SWPC polls every 5 min and the live socket only streams new samples — a
+last-state snapshot on connect is a known follow-up.
 
 ## Phase 2 second slice (2026-07-19, packages A-D)
 

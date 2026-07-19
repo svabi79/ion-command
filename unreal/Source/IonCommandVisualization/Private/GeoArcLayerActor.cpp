@@ -406,6 +406,37 @@ FLinearColor AGeoArcLayerActor::ResolvePaletteColor(int32 PaletteIndex) const
     return FLinearColor::MakeFromHSV8(Hue, 185, 255);
 }
 
+FString AGeoArcLayerActor::ResolvePaletteLabel(int32 PaletteIndex) const
+{
+    return FString();
+}
+
+FString AGeoArcLayerActor::ResolveTrafficPanelTitle() const
+{
+    return TEXT("TRAFFIC BY CLASS");
+}
+
+void AGeoArcLayerActor::GetPaletteBreakdown(TArray<FGeoPaletteBreakdownEntry>& OutEntries) const
+{
+    TArray<int32> Counts;
+    Counts.SetNumZeroed(PaletteMeshes.Num());
+    for (const FRenderedGeoArc& Arc : ActiveArcs)
+    {
+        const int32 PaletteIndex = Counts.IsValidIndex(Arc.PaletteIndex) ? Arc.PaletteIndex : Counts.Num() - 1;
+        if (Counts.IsValidIndex(PaletteIndex)) ++Counts[PaletteIndex];
+    }
+    OutEntries.Reset();
+    for (int32 Index = 0; Index < Counts.Num(); ++Index)
+    {
+        FGeoPaletteBreakdownEntry Entry;
+        Entry.PaletteIndex = Index;
+        Entry.Label = ResolvePaletteLabel(Index);
+        Entry.Color = ResolvePaletteColor(Index);
+        Entry.Count = Counts[Index];
+        if (!Entry.Label.IsEmpty() || Entry.Count > 0) OutEntries.Add(Entry);
+    }
+}
+
 FGeoLayerManifest AGeoArcLayerActor::CreateLayerManifest() const
 {
     FGeoLayerManifest Manifest;

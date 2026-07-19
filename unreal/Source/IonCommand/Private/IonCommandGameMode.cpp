@@ -12,6 +12,7 @@
 #include "GeoPointLayerActor.h"
 #include "HamRadioLinkLayerActor.h"
 #include "HamRadioOwnStationActor.h"
+#include "IonCockpitHudActor.h"
 #include "IonCommandCameraPawn.h"
 #include "IonCommandDeckActor.h"
 #include "IonCommandPlayerController.h"
@@ -23,6 +24,7 @@ AIonCommandGameMode::AIonCommandGameMode()
 {
     DefaultPawnClass = AIonCommandCameraPawn::StaticClass();
     PlayerControllerClass = AIonCommandPlayerController::StaticClass();
+    HUDClass = AIonCockpitHudActor::StaticClass();
 }
 
 void AIonCommandGameMode::BeginPlay()
@@ -67,7 +69,8 @@ void AIonCommandGameMode::ScheduleAutomationScreenshot()
 
 void AIonCommandGameMode::TakeAutomationScreenshot()
 {
-    FScreenshotRequest::RequestScreenshot(AutomationScreenshotFile, false, false);
+    // bShowUI so the capture proves the screen-space cockpit, not just the scene.
+    FScreenshotRequest::RequestScreenshot(AutomationScreenshotFile, true, false);
     UE_LOG(LogTemp, Display, TEXT("ION COMMAND automation screenshot requested: %s"), *AutomationScreenshotFile);
     if (bExitAfterScreenshot)
     {

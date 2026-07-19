@@ -26,6 +26,25 @@ FLinearColor AHamRadioLinkLayerActor::ResolvePaletteColor(int32 PaletteIndex) co
     return Super::ResolvePaletteColor(PaletteIndex);
 }
 
+FString AHamRadioLinkLayerActor::ResolvePaletteLabel(int32 PaletteIndex) const
+{
+    // Palettes can carry several bands (15m/12m share one); join their ids.
+    const UHamBandVisualConfig* Config = BandVisualConfig ? BandVisualConfig.Get() : GetDefault<UHamBandVisualConfig>();
+    FString Label;
+    for (const FHamBandVisualDefinition& Band : Config->Bands)
+    {
+        if (Band.PaletteIndex != PaletteIndex) continue;
+        if (!Label.IsEmpty()) Label += TEXT("/");
+        Label += Band.BandId.ToUpper();
+    }
+    return Label.IsEmpty() ? TEXT("OTHER") : Label;
+}
+
+FString AHamRadioLinkLayerActor::ResolveTrafficPanelTitle() const
+{
+    return TEXT("BAND ACTIVITY");
+}
+
 FGeoLayerManifest AHamRadioLinkLayerActor::CreateLayerManifest() const
 {
     FGeoLayerManifest Manifest;

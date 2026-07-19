@@ -9,6 +9,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"regexp"
 	"strconv"
 	"time"
 
@@ -21,8 +22,13 @@ const (
 	fluxURL     = "https://services.swpc.noaa.gov/products/summary/10cm-flux.json"
 	windURL     = "https://services.swpc.noaa.gov/products/summary/solar-wind-speed.json"
 	magURL      = "https://services.swpc.noaa.gov/products/summary/solar-wind-mag-field.json"
+	wwvURL      = "https://services.swpc.noaa.gov/text/wwv.txt"
 	pollDefault = 5 * time.Minute
 )
+
+// wwv.txt carries the only machine-readable estimated planetary A-index SWPC
+// publishes ("Solar flux 110 and estimated planetary A-index 4.").
+var aIndexPattern = regexp.MustCompile(`estimated planetary A-index (\d+)`)
 
 type Source struct {
 	id       string
@@ -103,12 +109,13 @@ func (s *Source) sample(ctx context.Context) (plugins.RawRecord, error) {
 	flux := s.summaryValue(ctx, fluxURL, "flux")
 	windSpeed := s.summaryValue(ctx, windURL, "proton_speed")
 	bz := s.summaryValue(ctx, magURL, "bz_gsm")
+	aIndex := s.estimatedAIndex(ctx)
 
 	s.sequence++
 	payload, err := json.Marshal(map[string]any{
 		"sampleId":          fmt.Sprintf("swpc-%d", s.sequence),
 		"kp":                kp,
-		"aIndex":            nil,
+		"aIndex":            aIndex,
 		"solarFlux":         flux,
 		"solarWindSpeedKms": windSpeed,
 		"solarWindDensity":  nil,
@@ -153,6 +160,27 @@ func (s *Source) latestKp(ctx context.Context) (float64, error) {
 	default:
 		return 0, fmt.Errorf("unexpected Kp type %T", rows[len(rows)-1]["Kp"])
 	}
+}
+
+// estimatedAIndex parses the daily estimated planetary A-index out of the
+// wwv.txt geophysical alert message. Failures degrade to null instead of
+// failing the whole sample.
+func (s *Source) estimatedAIndex(ctx context.Context) any {
+	body, err := s.fetch(ctx, wwvURL)
+	if err != nil {
+		s.logger.Warn("SWPC wwv fetch failed", "url", wwvURL, "error", err)
+		return nil
+	}
+	match := aIndexPattern.FindSubmatch(body)
+	if match == nil {
+		s.logger.Warn("SWPC wwv message has no estimated planetary A-index", "url", wwvURL)
+		return nil
+	}
+	aIndex, err := strconv.ParseFloat(string(match[1]), 64)
+	if err != nil {
+		return nil
+	}
+	return aIndex
 }
 
 // summaryValue reads one numeric field from a SWPC summary product (an array

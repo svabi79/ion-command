@@ -23,6 +23,7 @@ private:
     void ToggleOwnStationFilter();
     void SelectBandPreset(int32 PaletteIndex);
     void ClearBandPreset();
+    void CycleHudMode();
     void StartRecentReplay();
     void ChangeReplaySpeed(double Factor);
     void ReplaySlower();

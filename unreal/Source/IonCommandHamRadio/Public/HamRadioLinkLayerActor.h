@@ -18,6 +18,8 @@ public:
 protected:
     virtual int32 ResolvePaletteIndex(const FGeoMessageEnvelope& Message) const override;
     virtual FLinearColor ResolvePaletteColor(int32 PaletteIndex) const override;
+    virtual FString ResolvePaletteLabel(int32 PaletteIndex) const override;
+    virtual FString ResolveTrafficPanelTitle() const override;
     virtual FGeoLayerManifest CreateLayerManifest() const override;
 
 private:

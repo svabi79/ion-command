@@ -6,6 +6,7 @@
 #include "GeoSelectionSubsystem.h"
 #include "GeoReplaySubsystem.h"
 #include "HamRadioOwnStationActor.h"
+#include "IonCockpitHudActor.h"
 #include "IonCommandCameraPawn.h"
 #include "IonIonosphereActor.h"
 
@@ -34,6 +35,15 @@ void AIonCommandPlayerController::SetupInputComponent()
     InputComponent->BindAction(TEXT("ReplayRecent"), IE_Pressed, this, &AIonCommandPlayerController::StartRecentReplay);
     InputComponent->BindAction(TEXT("ReplaySlower"), IE_Pressed, this, &AIonCommandPlayerController::ReplaySlower);
     InputComponent->BindAction(TEXT("ReplayFaster"), IE_Pressed, this, &AIonCommandPlayerController::ReplayFaster);
+    InputComponent->BindAction(TEXT("CycleHud"), IE_Pressed, this, &AIonCommandPlayerController::CycleHudMode);
+}
+
+void AIonCommandPlayerController::CycleHudMode()
+{
+    if (AIonCockpitHudActor* Cockpit = Cast<AIonCockpitHudActor>(GetHUD()))
+    {
+        Cockpit->CycleMode();
+    }
 }
 
 void AIonCommandPlayerController::SelectBandPreset(int32 PaletteIndex)

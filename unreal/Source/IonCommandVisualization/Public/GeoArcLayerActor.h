@@ -19,6 +19,17 @@ struct FRenderedGeoArc
     int32 PaletteIndex = 0;
 };
 
+// One palette class of the active traffic window, for instrument panels.
+USTRUCT()
+struct FGeoPaletteBreakdownEntry
+{
+    GENERATED_BODY()
+    int32 PaletteIndex = 0;
+    FString Label;
+    FLinearColor Color = FLinearColor::White;
+    int32 Count = 0;
+};
+
 UCLASS()
 class IONCOMMANDVISUALIZATION_API AGeoArcLayerActor : public AActor, public IGeoRenderAdapter
 {
@@ -51,6 +62,12 @@ public:
     void SetBandFocus(int32 PaletteIndex);
     int32 GetBandFocus() const { return BandFocusIndex; }
 
+    // Aggregates the active window per palette class for instrument panels.
+    // Entries carry the domain label and color; classes without a label are
+    // included only while they hold traffic.
+    void GetPaletteBreakdown(TArray<FGeoPaletteBreakdownEntry>& OutEntries) const;
+    FString GetTrafficPanelTitle() const { return ResolveTrafficPanelTitle(); }
+
     UPROPERTY(EditAnywhere, Category="ION COMMAND|Layer") double GlobeRadius = 1000.0;
     UPROPERTY(EditAnywhere, Category="ION COMMAND|Layer") int32 SegmentsPerArc = 16;
     // Above the steady state of the live firehose (~480/s * 18 s), so the
@@ -66,6 +83,8 @@ public:
 protected:
     virtual int32 ResolvePaletteIndex(const FGeoMessageEnvelope& Message) const;
     virtual FLinearColor ResolvePaletteColor(int32 PaletteIndex) const;
+    virtual FString ResolvePaletteLabel(int32 PaletteIndex) const;
+    virtual FString ResolveTrafficPanelTitle() const;
     virtual FGeoLayerManifest CreateLayerManifest() const;
 
 private:
