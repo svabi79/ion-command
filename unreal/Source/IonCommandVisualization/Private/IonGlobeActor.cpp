@@ -33,6 +33,15 @@ AIonGlobeActor::AIonGlobeActor()
     Earth->SetCollisionEnabled(ECollisionEnabled::NoCollision);
     Earth->SetRelativeScale3D(FVector(20.0));
 
+    Clouds = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Clouds"));
+    Clouds->SetupAttachment(SceneRoot);
+    Clouds->SetStaticMesh(SphereMesh.Object);
+    // Just above the surface, below markers (1008) and arcs.
+    Clouds->SetRelativeScale3D(FVector(20.1));
+    Clouds->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    Clouds->SetCastShadow(false);
+    Clouds->SetVisibility(false);
+
     Atmosphere = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Atmosphere"));
     Atmosphere->SetupAttachment(SceneRoot);
     Atmosphere->SetStaticMesh(SphereMesh.Object);
@@ -77,6 +86,12 @@ AIonGlobeActor::AIonGlobeActor()
         Atmosphere->SetMaterial(0, AtmosphereMaterial);
         Atmosphere->SetVisibility(true);
     }
+
+    if (UMaterialInterface* CloudMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/ION/Materials/M_CloudLayer.M_CloudLayer")))
+    {
+        Clouds->SetMaterial(0, CloudMaterial);
+        Clouds->SetVisibility(true);
+    }
 }
 
 void AIonGlobeActor::Tick(float DeltaSeconds)
@@ -97,4 +112,7 @@ void AIonGlobeActor::Tick(float DeltaSeconds)
         EarthMID->SetVectorParameterValue(TEXT("SunDirection"), FLinearColor(DirectionToSun.X, DirectionToSun.Y, DirectionToSun.Z, 0.0f));
     }
     if (Atmosphere->IsVisible()) Atmosphere->AddLocalRotation(FRotator(0.0, DeltaSeconds * 0.03, 0.0));
+    // Clouds drift slowly relative to the terrain; the geographic frame of
+    // arcs and markers stays pinned to the Earth mesh itself.
+    if (Clouds->IsVisible()) Clouds->AddLocalRotation(FRotator(0.0, DeltaSeconds * 0.06, 0.0));
 }

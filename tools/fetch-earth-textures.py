@@ -19,7 +19,9 @@ Image.MAX_IMAGE_PIXELS = None
 
 DAY_URL = "https://eoimages.gsfc.nasa.gov/images/imagerecords/73000/73751/world.topo.bathy.200407.3x5400x2700.jpg"
 NIGHT_URL = "https://eoimages.gsfc.nasa.gov/images/imagerecords/144000/144898/BlackMarble_2016_3km.jpg"
+CLOUD_URL = "https://eoimages.gsfc.nasa.gov/images/imagerecords/57000/57747/cloud_combined_2048.jpg"
 TARGET = (4096, 2048)
+CLOUD_TARGET = (2048, 1024)
 OUTPUT_DIR = pathlib.Path(__file__).resolve().parent.parent / "unreal" / "SourceAssets" / "NASA"
 
 
@@ -32,10 +34,10 @@ def fetch(url: str, name: str) -> pathlib.Path:
     return cache
 
 
-def convert(source: pathlib.Path, output_name: str) -> None:
+def convert(source: pathlib.Path, output_name: str, target=TARGET) -> None:
     image = Image.open(source).convert("RGB")
-    print(f"{source.name}: {image.size} -> {TARGET}")
-    image = image.resize(TARGET, Image.LANCZOS)
+    print(f"{source.name}: {image.size} -> {target}")
+    image = image.resize(target, Image.LANCZOS)
     image.save(OUTPUT_DIR / output_name, optimize=True)
     print(f"wrote {OUTPUT_DIR / output_name}")
 
@@ -44,6 +46,7 @@ def main() -> None:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     convert(fetch(DAY_URL, "download-bluemarble-5400.jpg"), "bluemarble-4096.png")
     convert(fetch(NIGHT_URL, "download-blackmarble-13500.jpg"), "earthatnight-4096.png")
+    convert(fetch(CLOUD_URL, "download-clouds-2048.jpg"), "clouds-2048.png", CLOUD_TARGET)
 
 
 if __name__ == "__main__":

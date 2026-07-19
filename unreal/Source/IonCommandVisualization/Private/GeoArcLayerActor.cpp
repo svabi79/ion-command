@@ -46,7 +46,9 @@ AGeoArcLayerActor::AGeoArcLayerActor()
     SelectionMesh->SetStaticMesh(SegmentMesh.Object);
     SelectionMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
     SelectionMesh->SetCastShadow(false);
-    if (UMaterialInterface* SelectionMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/ION/Materials/MI_Signal_Selected.MI_Signal_Selected")))
+    // Custom data 0 = position along the path for the travelling pulse.
+    SelectionMesh->SetNumCustomDataFloats(1);
+    if (UMaterialInterface* SelectionMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/ION/Materials/M_SelectedPath.M_SelectedPath")))
     {
         SelectionMesh->SetMaterial(0, SelectionMaterial);
     }
@@ -314,12 +316,22 @@ float AGeoArcLayerActor::SegmentBrightness(const FRenderedGeoArc& Arc, int32 Seg
     return FMath::Min(ToFactor, FromFactor);
 }
 
-void AGeoArcLayerActor::AddArcInstancesTo(UInstancedStaticMeshComponent* Instances, const FGeoMessageEnvelope& Message, double Thickness)
+void AGeoArcLayerActor::AddArcInstancesTo(UInstancedStaticMeshComponent* Instances, const FGeoMessageEnvelope& Message, double Thickness, bool bWritePathAlpha)
 {
     TArray<FTransform> Transforms;
     Transforms.Reserve(SegmentsPerArc);
     AppendArcTransforms(Transforms, Message, Thickness);
-    Instances->AddInstances(Transforms, false, true);
+    const TArray<int32> Indices = Instances->AddInstances(Transforms, true, true);
+    if (bWritePathAlpha)
+    {
+        // Custom data 0 carries the position along the path so the selected
+        // path material can run its energy pulse from TX to RX.
+        for (int32 Segment = 0; Segment < Indices.Num(); ++Segment)
+        {
+            Instances->SetCustomDataValue(Indices[Segment], 0, (Segment + 0.5f) / FMath::Max(SegmentsPerArc, 1), false);
+        }
+        Instances->MarkRenderStateDirty();
+    }
 }
 
 void AGeoArcLayerActor::AppendArcTransforms(TArray<FTransform>& Out, const FGeoMessageEnvelope& Message, double Thickness) const
@@ -393,7 +405,7 @@ void AGeoArcLayerActor::RefreshSelectionHighlight()
     EndpointMesh->ClearInstances();
     if (!HighlightedMessageId.IsEmpty())
     {
-        AddArcInstancesTo(SelectionMesh, Selected, SelectedArcThickness);
+        AddArcInstancesTo(SelectionMesh, Selected, SelectedArcThickness, true);
         const FVector FromLocation = CalculateArcPoint(Selected, 0.0);
         const FVector ToLocation = CalculateArcPoint(Selected, 1.0);
         EndpointMesh->AddInstance(FTransform(FQuat::Identity, FromLocation, FVector(0.15)), true);

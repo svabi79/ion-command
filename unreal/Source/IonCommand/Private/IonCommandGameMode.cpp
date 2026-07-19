@@ -18,6 +18,8 @@
 #include "IonCommandPlayerController.h"
 #include "GeoDataSubsystem.h"
 #include "GeoSelectionSubsystem.h"
+#include "Kismet/GameplayStatics.h"
+#include "Sound/SoundBase.h"
 #include "IonActivityHeatmapActor.h"
 #include "IonAuroraActor.h"
 #include "IonGlobeActor.h"
@@ -54,6 +56,15 @@ void AIonCommandGameMode::BeginPlay()
     }
     ScheduleAutomationScreenshot();
     ScheduleAutomationSelection();
+    // Diegetic control-room ambience (ADR 0004); quiet by design, muteable
+    // for captures with -IonMute.
+    if (!FParse::Param(FCommandLine::Get(), TEXT("IonMute")))
+    {
+        if (USoundBase* Ambience = LoadObject<USoundBase>(nullptr, TEXT("/Game/ION/Audio/S_DeckAmbience.S_DeckAmbience")))
+        {
+            UGameplayStatics::SpawnSound2D(this, Ambience, 0.22f);
+        }
+    }
     if (FParse::Param(FCommandLine::Get(), TEXT("IonHeatmapVisible")))
     {
         for (TActorIterator<AIonActivityHeatmapActor> It(World); It; ++It) It->SetActorHiddenInGame(false);

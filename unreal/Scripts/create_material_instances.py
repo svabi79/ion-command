@@ -191,6 +191,90 @@ def build_signal_master() -> unreal.Material:
     return material
 
 
+def build_cloud_master(cloud_texture) -> unreal.Material:
+    """Lit translucent cloud shell: the mosaic brightness becomes opacity, so
+    lighting gives day-side white clouds and a dark night side for free."""
+    material = ensure_material("M_CloudLayer")
+    material.set_editor_property("blend_mode", unreal.BlendMode.BLEND_TRANSLUCENT)
+    material.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_DEFAULT_LIT)
+    material.set_editor_property("two_sided", False)
+
+    sample = expression(material, unreal.MaterialExpressionTextureSample, -700, -60)
+    sample.set_editor_property("texture", cloud_texture)
+    base = expression(material, unreal.MaterialExpressionConstant3Vector, -700, -220)
+    base.set_editor_property("constant", unreal.LinearColor(0.92, 0.94, 0.98, 1.0))
+    density = scalar(material, "Density", 0.55, -700, 140)
+    opacity = expression(material, unreal.MaterialExpressionMultiply, -420, 60)
+    MEL.connect_material_expressions(sample, "R", opacity, "A")
+    MEL.connect_material_expressions(density, "", opacity, "B")
+    rough = expression(material, unreal.MaterialExpressionConstant, -420, 220)
+    rough.set_editor_property("r", 0.9)
+
+    MEL.connect_material_property(base, "", unreal.MaterialProperty.MP_BASE_COLOR)
+    MEL.connect_material_property(opacity, "", unreal.MaterialProperty.MP_OPACITY)
+    MEL.connect_material_property(rough, "", unreal.MaterialProperty.MP_ROUGHNESS)
+    MEL.recompile_material(material)
+    save_asset(f"{MATERIAL_DIR}/M_CloudLayer")
+    return material
+
+
+def build_selected_path_master() -> unreal.Material:
+    """Energy pulse for the selected path: custom data 0 carries the segment's
+    position along the path, and a travelling sine wave sweeps TX -> RX."""
+    material = ensure_material("M_SelectedPath")
+    material.set_editor_property("blend_mode", unreal.BlendMode.BLEND_ADDITIVE)
+    material.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
+    material.set_editor_property("two_sided", True)
+    material.set_editor_property("used_with_instanced_static_meshes", True)
+
+    color = vector(material, "Color", unreal.LinearColor(0.75, 1.0, 1.0, 1.0), -900, -160)
+    intensity = scalar(material, "Intensity", 9.0, -900, 0)
+
+    alpha = expression(material, unreal.MaterialExpressionPerInstanceCustomData, -900, 200)
+    alpha.set_editor_property("data_index", 0)
+    now = expression(material, unreal.MaterialExpressionTime, -900, 300)
+    speed = expression(material, unreal.MaterialExpressionConstant, -900, 380)
+    speed.set_editor_property("r", 1.1)
+    travel = expression(material, unreal.MaterialExpressionMultiply, -760, 320)
+    MEL.connect_material_expressions(now, "", travel, "A")
+    MEL.connect_material_expressions(speed, "", travel, "B")
+    stretch = expression(material, unreal.MaterialExpressionConstant, -900, 460)
+    stretch.set_editor_property("r", 2.4)
+    phase_pos = expression(material, unreal.MaterialExpressionMultiply, -760, 420)
+    MEL.connect_material_expressions(alpha, "", phase_pos, "A")
+    MEL.connect_material_expressions(stretch, "", phase_pos, "B")
+    phase = expression(material, unreal.MaterialExpressionSubtract, -620, 360)
+    MEL.connect_material_expressions(travel, "", phase, "A")
+    MEL.connect_material_expressions(phase_pos, "", phase, "B")
+    wave = expression(material, unreal.MaterialExpressionSine, -520, 360)
+    MEL.connect_material_expressions(phase, "", wave, "")
+    half = expression(material, unreal.MaterialExpressionConstant, -520, 440)
+    half.set_editor_property("r", 0.45)
+    swing = expression(material, unreal.MaterialExpressionMultiply, -420, 380)
+    MEL.connect_material_expressions(wave, "", swing, "A")
+    MEL.connect_material_expressions(half, "", swing, "B")
+    base_level = expression(material, unreal.MaterialExpressionConstant, -420, 460)
+    base_level.set_editor_property("r", 0.6)
+    pulse = expression(material, unreal.MaterialExpressionAdd, -320, 400)
+    MEL.connect_material_expressions(swing, "", pulse, "A")
+    MEL.connect_material_expressions(base_level, "", pulse, "B")
+
+    lit = expression(material, unreal.MaterialExpressionMultiply, -560, -100)
+    MEL.connect_material_expressions(color, "", lit, "A")
+    MEL.connect_material_expressions(intensity, "", lit, "B")
+    emissive = expression(material, unreal.MaterialExpressionMultiply, -300, -40)
+    MEL.connect_material_expressions(lit, "", emissive, "A")
+    MEL.connect_material_expressions(pulse, "", emissive, "B")
+    opacity = expression(material, unreal.MaterialExpressionSaturate, -300, 200)
+    MEL.connect_material_expressions(pulse, "", opacity, "")
+
+    MEL.connect_material_property(emissive, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    MEL.connect_material_property(opacity, "", unreal.MaterialProperty.MP_OPACITY)
+    MEL.recompile_material(material)
+    save_asset(f"{MATERIAL_DIR}/M_SelectedPath")
+    return material
+
+
 def build_heat_master() -> unreal.Material:
     """Additive splat for the activity heatmap: instance custom data 0 is the
     normalized heat, the quad UV drives a soft radial falloff, and hot cells
@@ -380,6 +464,9 @@ def main() -> None:
 
     day = import_texture(SOURCE_DIR / "NASA" / "bluemarble-4096.png", "T_EarthDay")
     night = import_texture(SOURCE_DIR / "NASA" / "earthatnight-4096.png", "T_EarthNight")
+    clouds = import_texture(SOURCE_DIR / "NASA" / "clouds-2048.png", "T_CloudFraction")
+    build_cloud_master(clouds)
+    build_selected_path_master()
     stars = import_texture(SOURCE_DIR / "Generated" / "starfield.png", "T_Starfield")
     build_earth_master(day, night)
     build_starfield_master(stars)

@@ -27,6 +27,7 @@ private:
     UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> Starfield;
     UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> Earth;
     UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> Atmosphere;
+    UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> Clouds;
     UPROPERTY(VisibleAnywhere) TObjectPtr<UDirectionalLightComponent> SunLight;
     UPROPERTY(VisibleAnywhere) TObjectPtr<UDirectionalLightComponent> RimLight;
     UPROPERTY(VisibleAnywhere) TObjectPtr<UPointLightComponent> CoreGlow;

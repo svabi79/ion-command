@@ -102,7 +102,7 @@ private:
     void BuildEditorPreview();
     void AddArcInstances(const FRenderedGeoArc& Arc);
     float SegmentBrightness(const FRenderedGeoArc& Arc, int32 Segment) const;
-    void AddArcInstancesTo(UInstancedStaticMeshComponent* Instances, const FGeoMessageEnvelope& Message, double Thickness);
+    void AddArcInstancesTo(UInstancedStaticMeshComponent* Instances, const FGeoMessageEnvelope& Message, double Thickness, bool bWritePathAlpha = false);
     void AppendArcTransforms(TArray<FTransform>& Out, const FGeoMessageEnvelope& Message, double Thickness) const;
     FVector CalculateArcPoint(const FGeoMessageEnvelope& Message, double Alpha) const;
     void RebuildInstances();
