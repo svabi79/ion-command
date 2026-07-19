@@ -21,6 +21,12 @@ struct FRenderedGeoPoint
     // Per-message size multiplier (visual.markerScale property).
     float Scale = 1.0f;
     bool bObservation = false;
+    // Domain drives the overlay menu's per-category visibility; the display
+    // strings feed the hover tooltip.
+    FString Domain;
+    FString Title;
+    FString Primary;
+    FString Secondary;
 };
 
 UCLASS()
@@ -38,6 +44,16 @@ public:
     virtual bool Supports(const FGeoMessageEnvelope& Message) const override;
     virtual void Submit(const FGeoMessageEnvelope& Message) override;
     virtual void Reset() override;
+
+    // Overlay-menu support: domains present in the active window and their
+    // per-category visibility (hidden domains skip rendering, data stays).
+    void GetPresentDomains(TArray<FString>& OutDomains) const;
+    bool IsDomainVisible(const FString& Domain) const { return !HiddenDomains.Contains(Domain); }
+    void SetDomainVisible(const FString& Domain, bool bVisible);
+
+    // Hover pick: nearest visible marker to the ray within MaxDistance world
+    // units, or nullptr. CPU scan, call throttled.
+    const FRenderedGeoPoint* FindNearestToRay(const FVector& RayOrigin, const FVector& RayDirection, double MaxDistance) const;
 
     UPROPERTY(EditAnywhere, Category="ION COMMAND|Layer") double GlobeRadius = 1000.0;
     UPROPERTY(EditAnywhere, Category="ION COMMAND|Layer") int32 MaxVisiblePoints = 25000;
@@ -62,6 +78,7 @@ private:
     // Stable per-entity markers with age-based expiry and coalesced rebuilds.
     TArray<FRenderedGeoPoint> ActivePoints;
     TMap<FString, int32> EntityToPoint;
+    TSet<FString> HiddenDomains;
     bool bNeedsRebuild = false;
     double LastExpiryCheck = 0.0;
 };

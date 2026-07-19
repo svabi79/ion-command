@@ -27,6 +27,7 @@ private:
     void ToggleHeatmap();
     void TogglePaths();
     void CycleModeFilter();
+    void ToggleOverlayMenu();
     FString ActiveModeFilter;
     void StartRecentReplay();
     void ChangeReplaySpeed(double Factor);

@@ -51,6 +51,12 @@ public:
     void CycleMode();
     EIonCockpitMode GetMode() const { return Mode; }
 
+    // Overlay menu: O toggles it; clicks on its rows toggle layers. Returns
+    // true when the click was consumed (the controller then skips path
+    // selection).
+    void ToggleOverlayMenu() { bOverlayMenuOpen = !bOverlayMenuOpen; }
+    bool HandleClick(const FVector2D& ScreenPosition);
+
 private:
     void OnMessageAccepted(const FGeoMessageEnvelope& Message);
     void OnDataReset();
@@ -65,6 +71,8 @@ private:
     void DrawPolarPanel(float Scale, float Alpha);
     void DrawProviderPanels(float Scale, float Alpha, float PanelY);
     void DrawEndpointLabels(float Scale, float Alpha);
+    void DrawOverlayMenu(float Scale, float Alpha);
+    void DrawHoverTooltip(float Scale, float Alpha);
     void DrawModeHint(float Scale, float Alpha);
 
     void DrawPanelFrame(float X, float Y, float Width, float Height, const FString& Title, float Scale, float Alpha);
@@ -115,4 +123,26 @@ private:
     TWeakObjectPtr<UGeoDataSubsystem> DataSubsystem;
     FDelegateHandle MessageAcceptedHandle;
     FDelegateHandle DataResetHandle;
+
+    // Overlay menu state: one row per toggle, rects rebuilt every draw.
+    struct FMenuRow
+    {
+        FString Label;
+        FString Kind;   // "paths", "heatmap", "ionosphere", or "domain"
+        FString Domain; // set for kind == "domain"
+        bool bVisible = true;
+        FVector2D Min = FVector2D::ZeroVector;
+        FVector2D Max = FVector2D::ZeroVector;
+    };
+    TArray<FMenuRow> MenuRows;
+    bool bOverlayMenuOpen = false;
+    void ApplyMenuToggle(const FMenuRow& Row);
+
+    // Hover tooltip cache (picked on a short throttle, drawn every frame).
+    FString HoverTitle;
+    FString HoverPrimary;
+    FString HoverSecondary;
+    FString HoverDomain;
+    double LastHoverPickSeconds = 0.0;
+    bool bHoverValid = false;
 };

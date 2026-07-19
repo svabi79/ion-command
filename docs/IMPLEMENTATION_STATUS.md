@@ -1,7 +1,27 @@
 # Implementation status
 
-Status date: **2026-07-19** (thirteenth pass: ADS-B aircraft and Reverse
-Beacon Network — eight live sources).
+Status date: **2026-07-19** (fourteenth pass: overlay menu and marker
+tooltips — the cockpit becomes point-and-click).
+
+## Overlay menu and tooltips (2026-07-19)
+
+- **Overlay menu** (O key, or click rows): toggles the fixed render layers
+  (paths, heatmap, ionosphere shells) plus one row per marker *domain*
+  currently present (aviation, hamradio, orbital, weather, geophysics,
+  ionosphere...). Rows are derived from live data, so new domains appear in
+  the menu without UI changes. The point layer gained per-domain visibility
+  (hidden domains skip rendering, data is kept); clicks route through the
+  HUD before path selection.
+- **Hover tooltips**: hovering a marker shows its display title, primary and
+  secondary lines plus the domain (aircraft: callsign, flight level, speed,
+  type; quakes: magnitude and place; satellites: name and altitude; sounders:
+  foF2/MUF). Throttled CPU ray-pick over visible markers, same approach as
+  the arc click-pick. `-IonHoverProbe` pins the probe to the screen center
+  and `-IonOverlayMenu` opens the menu for unattended captures.
+- Proof capture showed the menu with all domain rows and a live tooltip
+  (M0NMK, hamradio) over England. During verification the operator was
+  actively using the new menu on the live wall - the truest acceptance test
+  there is.
 
 ## Aircraft and RBN (2026-07-19)
 

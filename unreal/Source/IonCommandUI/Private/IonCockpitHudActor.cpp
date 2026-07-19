@@ -7,10 +7,15 @@
 #include "EngineUtils.h"
 #include "GeoDataSubsystem.h"
 #include "GeoMathLibrary.h"
+#include "GeoPointLayerActor.h"
 #include "GeoSelectionSubsystem.h"
 #include "GeoStreamSubsystem.h"
 #include "GeoTimelineSubsystem.h"
 #include "HAL/PlatformTime.h"
+#include "IonActivityHeatmapActor.h"
+#include "IonIonosphereActor.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
 
 namespace
 {
@@ -147,6 +152,8 @@ AIonCockpitHudActor::AIonCockpitHudActor()
 void AIonCockpitHudActor::BeginPlay()
 {
     Super::BeginPlay();
+    // -IonOverlayMenu opens the menu at startup for unattended captures.
+    bOverlayMenuOpen = FParse::Param(FCommandLine::Get(), TEXT("IonOverlayMenu"));
     if (UGameInstance* GameInstance = GetGameInstance())
     {
         if (UGeoDataSubsystem* Data = GameInstance->GetSubsystem<UGeoDataSubsystem>())
@@ -321,6 +328,8 @@ void AIonCockpitHudActor::DrawHUD()
         DrawProviderPanels(Scale, Alpha, PolarPanelBottomY + 16.0f * Scale);
         DrawEndpointLabels(Scale, Alpha);
     }
+    if (bOverlayMenuOpen) DrawOverlayMenu(Scale, Alpha);
+    DrawHoverTooltip(Scale, Alpha);
     DrawModeHint(Scale, Alpha);
 }
 
@@ -618,10 +627,180 @@ void AIonCockpitHudActor::DrawEndpointLabels(float Scale, float Alpha)
     }
 }
 
+void AIonCockpitHudActor::DrawOverlayMenu(float Scale, float Alpha)
+{
+    // Rebuild the row list from the actual scene: fixed render layers first,
+    // then every domain the point layer currently holds. New domains appear
+    // automatically.
+    MenuRows.Reset();
+    AGeoPointLayerActor* PointLayer = nullptr;
+    for (TActorIterator<AGeoPointLayerActor> It(GetWorld()); It; ++It) { PointLayer = *It; break; }
+    if (const AGeoArcLayerActor* Layer = ArcLayer.Get())
+    {
+        MenuRows.Add({TEXT("PATHS"), TEXT("paths"), FString(), !Layer->IsHidden()});
+    }
+    for (TActorIterator<AIonActivityHeatmapActor> It(GetWorld()); It; ++It)
+    {
+        MenuRows.Add({TEXT("HEATMAP"), TEXT("heatmap"), FString(), !It->IsHidden()});
+        break;
+    }
+    for (TActorIterator<AIonIonosphereActor> It(GetWorld()); It; ++It)
+    {
+        MenuRows.Add({TEXT("IONOSPHERE SHELLS"), TEXT("ionosphere"), FString(), !It->IsHidden()});
+        break;
+    }
+    if (PointLayer)
+    {
+        TArray<FString> Domains;
+        PointLayer->GetPresentDomains(Domains);
+        for (const FString& Domain : Domains)
+        {
+            MenuRows.Add({Domain.ToUpper() + TEXT(" MARKERS"), TEXT("domain"), Domain, PointLayer->IsDomainVisible(Domain)});
+        }
+    }
+
+    const float RowHeight = 26.0f * Scale;
+    const float PanelWidth = 250.0f * Scale;
+    const float HeaderHeight = 34.0f * Scale;
+    const float PanelHeight = HeaderHeight + MenuRows.Num() * RowHeight + 12.0f * Scale;
+    const float PanelX = 18.0f * Scale;
+    const float PanelY = Canvas->SizeY - PanelHeight - 44.0f * Scale;
+    DrawPanelFrame(PanelX, PanelY, PanelWidth, PanelHeight, TEXT("OVERLAYS // O"), Scale, Alpha);
+
+    FVector2D Mouse(-1, -1);
+    if (const APlayerController* Player = PlayerOwner.Get())
+    {
+        float MouseX = 0, MouseY = 0;
+        if (Player->GetMousePosition(MouseX, MouseY)) Mouse = FVector2D(MouseX, MouseY);
+    }
+    float RowY = PanelY + HeaderHeight;
+    for (FMenuRow& Row : MenuRows)
+    {
+        Row.Min = FVector2D(PanelX, RowY);
+        Row.Max = FVector2D(PanelX + PanelWidth, RowY + RowHeight);
+        const bool bHovered = Mouse.X >= Row.Min.X && Mouse.X <= Row.Max.X && Mouse.Y >= Row.Min.Y && Mouse.Y <= Row.Max.Y;
+        if (bHovered)
+        {
+            DrawRect(Row.Min.X + 2.0f * Scale, Row.Min.Y + 1.0f * Scale, PanelWidth - 4.0f * Scale, RowHeight - 2.0f * Scale, WithAlpha(CockpitCyan, 0.12f * Alpha));
+        }
+        const FLinearColor Mark = Row.bVisible ? CockpitGreen : CockpitDim;
+        DrawTextAt(Row.bVisible ? TEXT("[x]") : TEXT("[ ]"), PanelX + 12.0f * Scale, RowY + 5.0f * Scale, WithAlpha(Mark, Alpha), 1.15f * Scale);
+        DrawTextAt(Row.Label, PanelX + 48.0f * Scale, RowY + 5.0f * Scale, WithAlpha(Row.bVisible ? CockpitWhite : CockpitDim, Alpha), 1.15f * Scale);
+        RowY += RowHeight;
+    }
+}
+
+bool AIonCockpitHudActor::HandleClick(const FVector2D& ScreenPosition)
+{
+    if (!bOverlayMenuOpen) return false;
+    for (const FMenuRow& Row : MenuRows)
+    {
+        if (ScreenPosition.X >= Row.Min.X && ScreenPosition.X <= Row.Max.X && ScreenPosition.Y >= Row.Min.Y && ScreenPosition.Y <= Row.Max.Y)
+        {
+            ApplyMenuToggle(Row);
+            return true;
+        }
+    }
+    return false;
+}
+
+void AIonCockpitHudActor::ApplyMenuToggle(const FMenuRow& Row)
+{
+    if (Row.Kind == TEXT("paths"))
+    {
+        for (TActorIterator<AGeoArcLayerActor> It(GetWorld()); It; ++It) It->SetActorHiddenInGame(!It->IsHidden());
+    }
+    else if (Row.Kind == TEXT("heatmap"))
+    {
+        for (TActorIterator<AIonActivityHeatmapActor> It(GetWorld()); It; ++It) It->SetActorHiddenInGame(!It->IsHidden());
+    }
+    else if (Row.Kind == TEXT("ionosphere"))
+    {
+        for (TActorIterator<AIonIonosphereActor> It(GetWorld()); It; ++It) It->SetActorHiddenInGame(!It->IsHidden());
+    }
+    else if (Row.Kind == TEXT("domain"))
+    {
+        for (TActorIterator<AGeoPointLayerActor> It(GetWorld()); It; ++It) It->SetDomainVisible(Row.Domain, !It->IsDomainVisible(Row.Domain));
+    }
+}
+
+void AIonCockpitHudActor::DrawHoverTooltip(float Scale, float Alpha)
+{
+    APlayerController* Player = PlayerOwner.Get();
+    if (!Player) return;
+    float MouseX = 0, MouseY = 0;
+    bool bHaveMouse = Player->GetMousePosition(MouseX, MouseY);
+    // -IonHoverProbe pins the probe to the screen center for unattended
+    // captures of the tooltip path.
+    if (!bHaveMouse && FParse::Param(FCommandLine::Get(), TEXT("IonHoverProbe")))
+    {
+        MouseX = Canvas->SizeX * 0.5f;
+        MouseY = Canvas->SizeY * 0.5f;
+        bHaveMouse = true;
+    }
+    if (!bHaveMouse) { bHoverValid = false; return; }
+
+    const double NowSeconds = FPlatformTime::Seconds();
+    if (NowSeconds - LastHoverPickSeconds > 0.15)
+    {
+        LastHoverPickSeconds = NowSeconds;
+        bHoverValid = false;
+        FVector RayOrigin, RayDirection;
+        if (Player->DeprojectScreenPositionToWorld(MouseX, MouseY, RayOrigin, RayDirection))
+        {
+            for (TActorIterator<AGeoPointLayerActor> It(GetWorld()); It; ++It)
+            {
+                if (const FRenderedGeoPoint* Point = It->FindNearestToRay(RayOrigin, RayDirection, 14.0))
+                {
+                    HoverTitle = Point->Title;
+                    HoverPrimary = Point->Primary;
+                    HoverSecondary = Point->Secondary;
+                    HoverDomain = Point->Domain.ToUpper();
+                    bHoverValid = true;
+                }
+                break;
+            }
+        }
+    }
+    if (!bHoverValid) return;
+
+    TArray<FString> Lines;
+    if (!HoverTitle.IsEmpty()) Lines.Add(HoverTitle);
+    if (!HoverPrimary.IsEmpty()) Lines.Add(HoverPrimary);
+    if (!HoverSecondary.IsEmpty()) Lines.Add(HoverSecondary);
+    if (!HoverDomain.IsEmpty()) Lines.Add(HoverDomain);
+    if (Lines.IsEmpty()) return;
+    const UFont* Font = GEngine->GetMediumFont();
+    float Widest = 0.0f;
+    for (const FString& Line : Lines)
+    {
+        float Width = 0, Height = 0;
+        Canvas->TextSize(Font, Line, Width, Height, 1.15f * Scale, 1.15f * Scale);
+        Widest = FMath::Max(Widest, Width);
+    }
+    const float LineHeight = 19.0f * Scale;
+    const float BoxWidth = Widest + 24.0f * Scale;
+    const float BoxHeight = Lines.Num() * LineHeight + 14.0f * Scale;
+    float BoxX = MouseX + 18.0f * Scale;
+    float BoxY = MouseY - BoxHeight - 10.0f * Scale;
+    BoxX = FMath::Clamp(BoxX, 0.0f, Canvas->SizeX - BoxWidth);
+    BoxY = FMath::Clamp(BoxY, 0.0f, Canvas->SizeY - BoxHeight);
+    DrawRect(BoxX, BoxY, BoxWidth, BoxHeight, WithAlpha(PanelFill, 0.85f * Alpha));
+    DrawLineSegment(FVector2D(BoxX, BoxY), FVector2D(BoxX + BoxWidth, BoxY), WithAlpha(CockpitCyan, 0.6f * Alpha), 1.0f);
+    DrawLineSegment(FVector2D(BoxX, BoxY + BoxHeight), FVector2D(BoxX + BoxWidth, BoxY + BoxHeight), WithAlpha(CockpitCyan, 0.6f * Alpha), 1.0f);
+    DrawLineSegment(FVector2D(BoxX, BoxY), FVector2D(BoxX, BoxY + BoxHeight), WithAlpha(CockpitCyan, 0.6f * Alpha), 1.0f);
+    DrawLineSegment(FVector2D(BoxX + BoxWidth, BoxY), FVector2D(BoxX + BoxWidth, BoxY + BoxHeight), WithAlpha(CockpitCyan, 0.6f * Alpha), 1.0f);
+    for (int32 Index = 0; Index < Lines.Num(); ++Index)
+    {
+        const FLinearColor Color = Index == 0 ? CockpitWhite : (Index == Lines.Num() - 1 ? CockpitDim : CockpitCyan);
+        DrawTextAt(Lines[Index], BoxX + 12.0f * Scale, BoxY + 7.0f * Scale + Index * LineHeight, WithAlpha(Color, Alpha), 1.15f * Scale);
+    }
+}
+
 void AIonCockpitHudActor::DrawModeHint(float Scale, float Alpha)
 {
     const TCHAR* ModeName = Mode == EIonCockpitMode::Full ? TEXT("FULL") : TEXT("MIN");
-    DrawTextAt(FString::Printf(TEXT("HUD %s // TAB"), ModeName), Canvas->SizeX - 18.0f * Scale, Canvas->SizeY - 26.0f * Scale, WithAlpha(CockpitDim, Alpha), 1.0f * Scale, true);
+    DrawTextAt(FString::Printf(TEXT("HUD %s // TAB   OVERLAYS // O"), ModeName), Canvas->SizeX - 18.0f * Scale, Canvas->SizeY - 26.0f * Scale, WithAlpha(CockpitDim, Alpha), 1.0f * Scale, true);
 }
 
 bool AIonCockpitHudActor::DrawRegionFlag(const FString& RegionName, float X, float Y, float Width, float Height, float Alpha)

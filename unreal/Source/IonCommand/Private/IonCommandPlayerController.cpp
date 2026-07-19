@@ -41,6 +41,15 @@ void AIonCommandPlayerController::SetupInputComponent()
     InputComponent->BindAction(TEXT("ToggleHeatmap"), IE_Pressed, this, &AIonCommandPlayerController::ToggleHeatmap);
     InputComponent->BindAction(TEXT("TogglePaths"), IE_Pressed, this, &AIonCommandPlayerController::TogglePaths);
     InputComponent->BindAction(TEXT("CycleModeFilter"), IE_Pressed, this, &AIonCommandPlayerController::CycleModeFilter);
+    InputComponent->BindAction(TEXT("ToggleOverlayMenu"), IE_Pressed, this, &AIonCommandPlayerController::ToggleOverlayMenu);
+}
+
+void AIonCommandPlayerController::ToggleOverlayMenu()
+{
+    if (AIonCockpitHudActor* Cockpit = Cast<AIonCockpitHudActor>(GetHUD()))
+    {
+        Cockpit->ToggleOverlayMenu();
+    }
 }
 
 void AIonCommandPlayerController::CycleModeFilter()
@@ -162,6 +171,15 @@ void AIonCommandPlayerController::FocusSelection()
 
 void AIonCommandPlayerController::SelectUnderCursor()
 {
+    // Clicks on the overlay menu toggle layers instead of selecting paths.
+    float MouseX = 0, MouseY = 0;
+    if (GetMousePosition(MouseX, MouseY))
+    {
+        if (AIonCockpitHudActor* Cockpit = Cast<AIonCockpitHudActor>(GetHUD()))
+        {
+            if (Cockpit->HandleClick(FVector2D(MouseX, MouseY))) return;
+        }
+    }
     FVector RayOrigin;
     FVector RayDirection;
     if (!DeprojectMousePositionToWorld(RayOrigin, RayDirection))

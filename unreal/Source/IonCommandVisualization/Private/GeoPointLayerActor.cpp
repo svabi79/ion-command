@@ -108,6 +108,12 @@ void AGeoPointLayerActor::Submit(const FGeoMessageEnvelope& Message)
         Point.Location = Location;
         if (ExpireAt > 0.0) Point.ExpireAtSeconds = ExpireAt;
         Point.Scale = PointScale;
+        // Tooltip data follows the latest sighting (a climbing aircraft's
+        // flight level, a station's newest report).
+        const FString NewPrimary = Message.Properties.FindRef(TEXT("display.primary"));
+        if (!NewPrimary.IsEmpty()) Point.Primary = NewPrimary;
+        const FString NewSecondary = Message.Properties.FindRef(TEXT("display.secondary"));
+        if (!NewSecondary.IsEmpty()) Point.Secondary = NewSecondary;
         return;
     }
     if (ActivePoints.Num() >= MaxVisiblePoints)
@@ -127,12 +133,61 @@ void AGeoPointLayerActor::Submit(const FGeoMessageEnvelope& Message)
     Point.ExpireAtSeconds = ExpireAt;
     Point.Scale = PointScale;
     Point.bObservation = Message.MessageType != EGeoMessageType::Entity;
+    Point.Domain = Message.Domain;
+    Point.Title = Message.Properties.FindRef(TEXT("display.title"));
+    if (Point.Title.IsEmpty()) Point.Title = Message.Properties.FindRef(TEXT("callsign"));
+    if (Point.Title.IsEmpty()) Point.Title = Message.SemanticType;
+    Point.Primary = Message.Properties.FindRef(TEXT("display.primary"));
+    Point.Secondary = Message.Properties.FindRef(TEXT("display.secondary"));
     EntityToPoint.Add(EntityKey, ActivePoints.Num() - 1);
-    if (!bNeedsRebuild)
+    if (!bNeedsRebuild && IsDomainVisible(Point.Domain))
     {
         UInstancedStaticMeshComponent* Instances = Point.bObservation ? ObservationInstances : EntityInstances;
         Instances->AddInstance(FTransform(FQuat::Identity, Location, FVector(MarkerScale * CurrentZoomFactor * PointScale)), true);
     }
+}
+
+void AGeoPointLayerActor::GetPresentDomains(TArray<FString>& OutDomains) const
+{
+    TSet<FString> Domains;
+    for (const FRenderedGeoPoint& Point : ActivePoints)
+    {
+        if (!Point.Domain.IsEmpty()) Domains.Add(Point.Domain);
+    }
+    for (const FString& Hidden : HiddenDomains) Domains.Add(Hidden);
+    OutDomains = Domains.Array();
+    OutDomains.Sort();
+}
+
+void AGeoPointLayerActor::SetDomainVisible(const FString& Domain, bool bVisible)
+{
+    const bool bChanged = bVisible ? HiddenDomains.Remove(Domain) > 0 : !HiddenDomains.Contains(Domain);
+    if (!bVisible) HiddenDomains.Add(Domain);
+    if (bChanged) bNeedsRebuild = true;
+}
+
+const FRenderedGeoPoint* AGeoPointLayerActor::FindNearestToRay(const FVector& RayOrigin, const FVector& RayDirection, double MaxDistance) const
+{
+    const FRenderedGeoPoint* Best = nullptr;
+    double BestDistance = MaxDistance;
+    double BestAlong = TNumericLimits<double>::Max();
+    for (const FRenderedGeoPoint& Point : ActivePoints)
+    {
+        if (!IsDomainVisible(Point.Domain)) continue;
+        const FVector ToPoint = Point.Location - RayOrigin;
+        const double Along = FVector::DotProduct(ToPoint, RayDirection);
+        if (Along <= 0.0) continue;
+        const double Distance = FVector::Dist(RayOrigin + RayDirection * Along, Point.Location);
+        // Prefer the closest lateral hit; among near-ties take the marker
+        // nearer the camera (the one visually in front).
+        if (Distance < BestDistance || (Distance < BestDistance + 2.0 && Along < BestAlong))
+        {
+            Best = &Point;
+            BestDistance = Distance;
+            BestAlong = Along;
+        }
+    }
+    return Best;
 }
 
 void AGeoPointLayerActor::Tick(float DeltaSeconds)
@@ -180,6 +235,7 @@ void AGeoPointLayerActor::RebuildInstances()
     Entities.Reserve(ActivePoints.Num());
     for (const FRenderedGeoPoint& Point : ActivePoints)
     {
+        if (!IsDomainVisible(Point.Domain)) continue;
         const FVector Scale(MarkerScale * CurrentZoomFactor * Point.Scale);
         (Point.bObservation ? Observations : Entities).Emplace(FQuat::Identity, Point.Location, Scale);
     }
