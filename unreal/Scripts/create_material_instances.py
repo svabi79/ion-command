@@ -191,6 +191,88 @@ def build_signal_master() -> unreal.Material:
     return material
 
 
+def build_scatter_atmosphere_master() -> unreal.Material:
+    """Physically inspired scattering shell: a Fresnel rim whose color follows
+    the sun angle - Rayleigh blue on the day side, a warm terminator band,
+    near-black night. Not a radiative transfer solve; an artist's model."""
+    material = ensure_material("M_AtmosphereScatter")
+    material.set_editor_property("blend_mode", unreal.BlendMode.BLEND_TRANSLUCENT)
+    material.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
+    material.set_editor_property("two_sided", False)
+
+    sun = vector(material, "SunDirection", unreal.LinearColor(1.0, 0.0, 0.0, 0.0), -1150, 260)
+    intensity = scalar(material, "Intensity", 2.2, -1150, 100)
+
+    normal = expression(material, unreal.MaterialExpressionPixelNormalWS, -1150, 420)
+    sun_dot = expression(material, unreal.MaterialExpressionDotProduct, -960, 340)
+    MEL.connect_material_expressions(normal, "", sun_dot, "A")
+    MEL.connect_material_expressions(sun, "", sun_dot, "B")
+
+    # Day factor: saturate(sunDot); terminator factor: 1 - |sunDot| squared.
+    day = expression(material, unreal.MaterialExpressionSaturate, -820, 300)
+    MEL.connect_material_expressions(sun_dot, "", day, "")
+    absdot = expression(material, unreal.MaterialExpressionAbs, -820, 400)
+    MEL.connect_material_expressions(sun_dot, "", absdot, "")
+    inv = expression(material, unreal.MaterialExpressionOneMinus, -720, 400)
+    MEL.connect_material_expressions(absdot, "", inv, "")
+    term_sq = expression(material, unreal.MaterialExpressionMultiply, -620, 400)
+    MEL.connect_material_expressions(inv, "", term_sq, "A")
+    MEL.connect_material_expressions(inv, "", term_sq, "B")
+    term_cub = expression(material, unreal.MaterialExpressionMultiply, -530, 420)
+    MEL.connect_material_expressions(term_sq, "", term_cub, "A")
+    MEL.connect_material_expressions(inv, "", term_cub, "B")
+
+    rayleigh = expression(material, unreal.MaterialExpressionConstant3Vector, -820, 120)
+    rayleigh.set_editor_property("constant", unreal.LinearColor(0.18, 0.42, 1.0, 1.0))
+    sunset = expression(material, unreal.MaterialExpressionConstant3Vector, -820, 200)
+    sunset.set_editor_property("constant", unreal.LinearColor(1.0, 0.38, 0.10, 1.0))
+
+    day_color = expression(material, unreal.MaterialExpressionMultiply, -620, 160)
+    MEL.connect_material_expressions(rayleigh, "", day_color, "A")
+    MEL.connect_material_expressions(day, "", day_color, "B")
+    sunset_gain = expression(material, unreal.MaterialExpressionConstant, -620, 260)
+    sunset_gain.set_editor_property("r", 1.4)
+    term_amount = expression(material, unreal.MaterialExpressionMultiply, -530, 300)
+    MEL.connect_material_expressions(term_cub, "", term_amount, "A")
+    MEL.connect_material_expressions(sunset_gain, "", term_amount, "B")
+    sunset_color = expression(material, unreal.MaterialExpressionMultiply, -440, 220)
+    MEL.connect_material_expressions(sunset, "", sunset_color, "A")
+    MEL.connect_material_expressions(term_amount, "", sunset_color, "B")
+    mixed = expression(material, unreal.MaterialExpressionAdd, -340, 170)
+    MEL.connect_material_expressions(day_color, "", mixed, "A")
+    MEL.connect_material_expressions(sunset_color, "", mixed, "B")
+
+    fresnel = expression(material, unreal.MaterialExpressionFresnel, -820, -40)
+    fresnel.set_editor_property("exponent", 3.2)
+    rim = expression(material, unreal.MaterialExpressionMultiply, -520, 40)
+    MEL.connect_material_expressions(fresnel, "", rim, "A")
+    MEL.connect_material_expressions(intensity, "", rim, "B")
+
+    emissive = expression(material, unreal.MaterialExpressionMultiply, -220, 100)
+    MEL.connect_material_expressions(mixed, "", emissive, "A")
+    MEL.connect_material_expressions(rim, "", emissive, "B")
+
+    # Opacity: rim strength scaled by how lit the limb is (night rim fades).
+    night_floor = expression(material, unreal.MaterialExpressionConstant, -520, 520)
+    night_floor.set_editor_property("r", 0.12)
+    lit_amount = expression(material, unreal.MaterialExpressionAdd, -430, 470)
+    MEL.connect_material_expressions(day, "", lit_amount, "A")
+    MEL.connect_material_expressions(night_floor, "", lit_amount, "B")
+    lit_clamped = expression(material, unreal.MaterialExpressionSaturate, -350, 470)
+    MEL.connect_material_expressions(lit_amount, "", lit_clamped, "")
+    opacity_raw = expression(material, unreal.MaterialExpressionMultiply, -260, 320)
+    MEL.connect_material_expressions(fresnel, "", opacity_raw, "A")
+    MEL.connect_material_expressions(lit_clamped, "", opacity_raw, "B")
+    opacity = expression(material, unreal.MaterialExpressionSaturate, -170, 320)
+    MEL.connect_material_expressions(opacity_raw, "", opacity, "")
+
+    MEL.connect_material_property(emissive, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    MEL.connect_material_property(opacity, "", unreal.MaterialProperty.MP_OPACITY)
+    MEL.recompile_material(material)
+    save_asset(f"{MATERIAL_DIR}/M_AtmosphereScatter")
+    return material
+
+
 def build_cloud_master(cloud_texture) -> unreal.Material:
     """Lit translucent cloud shell: the mosaic brightness becomes opacity, so
     lighting gives day-side white clouds and a dark night side for free."""
@@ -467,6 +549,7 @@ def main() -> None:
     clouds = import_texture(SOURCE_DIR / "NASA" / "clouds-2048.png", "T_CloudFraction")
     build_cloud_master(clouds)
     build_selected_path_master()
+    build_scatter_atmosphere_master()
     stars = import_texture(SOURCE_DIR / "Generated" / "starfield.png", "T_Starfield")
     build_earth_master(day, night)
     build_starfield_master(stars)

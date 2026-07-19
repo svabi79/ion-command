@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ion-command/ion-command/collector/internal/plugins"
@@ -50,6 +51,9 @@ type normalizedSpot struct {
 // A bounded window of recent sequence ids drops duplicates, which the broker
 // redelivers around reconnects.
 type SpotDecoder struct {
+	// The MQTT adapter decodes frames concurrently; the dedupe window is the
+	// decoder's only mutable state and must be locked.
+	mu              sync.Mutex
 	recentSequences map[int64]struct{}
 	recentOrder     []int64
 }
@@ -64,6 +68,8 @@ func (d *SpotDecoder) isDuplicate(sequence int64) bool {
 	if d.recentSequences == nil {
 		return false
 	}
+	d.mu.Lock()
+	defer d.mu.Unlock()
 	if _, seen := d.recentSequences[sequence]; seen {
 		return true
 	}

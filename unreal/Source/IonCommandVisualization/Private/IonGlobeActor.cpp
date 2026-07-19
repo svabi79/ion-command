@@ -81,7 +81,11 @@ AIonGlobeActor::AIonGlobeActor()
         Starfield->SetVisibility(true);
     }
 
-    if (UMaterialInterface* AtmosphereMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/ION/Materials/MI_Atmosphere.MI_Atmosphere")))
+    // Scattering-look shell preferred; the plain Fresnel instance stays as a
+    // fallback for content states before the material scripts ran.
+    UMaterialInterface* AtmosphereMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/ION/Materials/M_AtmosphereScatter.M_AtmosphereScatter"));
+    if (!AtmosphereMaterial) AtmosphereMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/ION/Materials/MI_Atmosphere.MI_Atmosphere"));
+    if (AtmosphereMaterial)
     {
         Atmosphere->SetMaterial(0, AtmosphereMaterial);
         Atmosphere->SetVisibility(true);
@@ -110,6 +114,15 @@ void AIonGlobeActor::Tick(float DeltaSeconds)
     {
         // The material masks the city-light emissive to the true night side.
         EarthMID->SetVectorParameterValue(TEXT("SunDirection"), FLinearColor(DirectionToSun.X, DirectionToSun.Y, DirectionToSun.Z, 0.0f));
+    }
+    if (!AtmosphereMID && Atmosphere->IsVisible())
+    {
+        AtmosphereMID = Atmosphere->CreateAndSetMaterialInstanceDynamic(0);
+    }
+    if (AtmosphereMID)
+    {
+        // Drives the day/terminator/night color bands of the scattering shell.
+        AtmosphereMID->SetVectorParameterValue(TEXT("SunDirection"), FLinearColor(DirectionToSun.X, DirectionToSun.Y, DirectionToSun.Z, 0.0f));
     }
     if (Atmosphere->IsVisible()) Atmosphere->AddLocalRotation(FRotator(0.0, DeltaSeconds * 0.03, 0.0));
     // Clouds drift slowly relative to the terrain; the geographic frame of

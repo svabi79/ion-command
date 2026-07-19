@@ -21,6 +21,7 @@ import (
 	"github.com/ion-command/ion-command/collector/internal/plugins/domains/ionosphere"
 	"github.com/ion-command/ion-command/collector/internal/plugins/domains/spaceweather"
 	"github.com/ion-command/ion-command/collector/internal/plugins/domains/weather"
+	"github.com/ion-command/ion-command/collector/internal/plugins/sources/blitzortung"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/kc2g"
 	mocksource "github.com/ion-command/ion-command/collector/internal/plugins/sources/mock"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/pskreporter"
@@ -72,6 +73,8 @@ func run(configPath string, logger *slog.Logger) error {
 			source, err = swpc.New(sourceConfig, logger)
 		case sourceConfig.Type == "ionosonde.kc2g":
 			source, err = kc2g.New(sourceConfig, logger)
+		case sourceConfig.Type == "lightning.blitzortung":
+			source, err = blitzortung.New(sourceConfig, logger)
 		default:
 			err = fmt.Errorf("unknown source type %q", sourceConfig.Type)
 		}

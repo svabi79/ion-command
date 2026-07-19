@@ -46,15 +46,24 @@ def main() -> int:
         failures.append(f"globe region is blown out (brightness {globe_brightness:.1f})")
 
     # Neon fraction: share of bright, saturated pixels (the additive band
-    # beams) outside the HUD margins. Calibrated against real captures:
-    # healthy scenes measure 0.018-0.076 day or night; the gray
-    # default-material failures measured 0.0053-0.0065. Threshold 0.010.
+    # beams) outside the HUD margins, split by dominant channel. Calibrated
+    # against real captures: healthy scenes measure >= 0.009 total with a
+    # green-dominant share >= 0.0009 (the band palette always includes green
+    # and cyan beams); the gray default-material failures measured
+    # 0.0053-0.0065 total with green <= 0.0003 (their color came only from
+    # the blue atmosphere rim).
     scene = image.crop((int(width * 0.08), int(height * 0.04), int(width * 0.92), int(height * 0.96)))
     pixels = list(scene.getdata())
-    neon = sum(1 for p in pixels if max(p) > 150 and (max(p) - min(p)) > 0.5 * max(p))
-    neon_fraction = neon / len(pixels)
-    if neon_fraction < 0.010:
-        failures.append(f"scene has no saturated beams (neon fraction {neon_fraction:.4f}) - default material fallback?")
+    classes = [0, 0, 0]
+    for p in pixels:
+        peak = max(p)
+        if peak > 150 and (peak - min(p)) > 0.5 * peak:
+            classes[p.index(peak)] += 1
+    neon_fraction = sum(classes) / len(pixels)
+    green_fraction = classes[1] / len(pixels)
+    if neon_fraction < 0.006 or green_fraction < 0.0006:
+        failures.append(
+            f"scene lacks saturated beams (neon {neon_fraction:.4f}, green {green_fraction:.4f}) - default material fallback?")
 
     # Left instrument column.
     panel_brightness, _ = region_stats(image, (0, int(height * 0.04), int(width * 0.08), int(height * 0.5)))

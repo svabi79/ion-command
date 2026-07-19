@@ -32,4 +32,5 @@ private:
     UPROPERTY(VisibleAnywhere) TObjectPtr<UDirectionalLightComponent> RimLight;
     UPROPERTY(VisibleAnywhere) TObjectPtr<UPointLightComponent> CoreGlow;
     UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> EarthMID;
+    UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> AtmosphereMID;
 };

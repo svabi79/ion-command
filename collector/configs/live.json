@@ -46,6 +46,11 @@
       "type": "ionosonde.kc2g",
       "enabled": true,
       "pollSeconds": 600
+    },
+    {
+      "id": "blitzortung-primary",
+      "type": "lightning.blitzortung",
+      "enabled": true
     }
   ]
 }

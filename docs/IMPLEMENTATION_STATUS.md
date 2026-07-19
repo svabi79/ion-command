@@ -1,7 +1,41 @@
 # Implementation status
 
-Status date: **2026-07-19** (tenth pass: connect-time state snapshot,
-drop/evict split, and region flags).
+Status date: **2026-07-19** (eleventh pass: live lightning, scattering-look
+atmosphere).
+
+## Live lightning and atmosphere (2026-07-19)
+
+- **Blitzortung.org source** (`lightning.blitzortung`): streams the community
+  network's websocket fan-out (ws1/ws7/ws8, rotated, reconnect with backoff;
+  data courtesy of Blitzortung.org and its station operators, non-commercial
+  use). Frames arrive LZW-compressed with the project's dictionary scheme;
+  the decoder is regression-tested against a captured live frame. Strikes
+  flow through the *existing* weather domain untouched by design — the
+  platform's modularity claim held: a real feed replaced the mock without any
+  core or client change. Live: 1,895 strikes recorded in the first ten
+  minutes, sky-to-disk latency ~4.5 s. One-shot observations now expire
+  after 30 s in the point layer (entities keep 300 s), so strikes flash and
+  fade while stations persist.
+- **Scattering-look atmosphere** (`M_AtmosphereScatter`): the Fresnel shell's
+  color now follows the sun angle — Rayleigh blue on the day side, a warm
+  terminator band, near-black night — driven by the same SunDirection the
+  Earth material uses. Explicitly an artist's model, not radiative transfer.
+- **Fix**: the PSKReporter dedupe window was not thread-safe (the MQTT
+  adapter decodes concurrently) and crashed the collector with "concurrent
+  map writes" on startup; now locked.
+- **Capture gate v2**: the neon metric is split by dominant channel — healthy
+  scenes always contain green-dominant beams (band palette), while the gray
+  default-material failures only had the blue atmosphere rim. Re-calibrated
+  against four real captures (two healthy, two broken).
+
+### Data roadmap (candidates, not commitments)
+
+The envelope/domain pattern makes these cheap to add: USGS earthquakes
+(GeoJSON feed -> geophysics domain), satellite TLE ground tracks
+(CelesTrak -> Track messages), NOAA GOES X-ray flux (flare alerts for the
+conditions panel), aircraft via local ADS-B (Argus link), reverse-beacon
+network CW/RTTY spots, and WSPR challenge data. Each needs a live format
+probe first, per the house rule.
 
 ## Cockpit polish (2026-07-19)
 

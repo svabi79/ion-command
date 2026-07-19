@@ -37,8 +37,10 @@ public:
     UPROPERTY(EditAnywhere, Category="ION COMMAND|Layer") double GlobeRadius = 1000.0;
     UPROPERTY(EditAnywhere, Category="ION COMMAND|Layer") int32 MaxVisiblePoints = 25000;
     UPROPERTY(EditAnywhere, Category="ION COMMAND|Layer") double MarkerScale = 0.14;
-    // A marker survives this long past its last sighting.
+    // A marker survives this long past its last sighting; one-shot
+    // observations (lightning strikes) fade much sooner than entities.
     UPROPERTY(EditAnywhere, Category="ION COMMAND|Layer") double MarkerLifetimeSeconds = 300.0;
+    UPROPERTY(EditAnywhere, Category="ION COMMAND|Layer") double ObservationLifetimeSeconds = 30.0;
 
 private:
     void OnMessageAccepted(const FGeoMessageEnvelope& Message);

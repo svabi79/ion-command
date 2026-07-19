@@ -121,11 +121,12 @@ void AGeoPointLayerActor::Tick(float DeltaSeconds)
     if (NowSeconds - LastExpiryCheck > 5.0)
     {
         LastExpiryCheck = NowSeconds;
+        auto Lifetime = [this](const FRenderedGeoPoint& Point) { return Point.bObservation ? ObservationLifetimeSeconds : MarkerLifetimeSeconds; };
         int32 ExpiredCount = 0;
-        for (const FRenderedGeoPoint& Point : ActivePoints) if (NowSeconds - Point.LastSeenSeconds > MarkerLifetimeSeconds) ++ExpiredCount;
+        for (const FRenderedGeoPoint& Point : ActivePoints) if (NowSeconds - Point.LastSeenSeconds > Lifetime(Point)) ++ExpiredCount;
         if (ExpiredCount > FMath::Max(16, ActivePoints.Num() / 20))
         {
-            ActivePoints.RemoveAll([this, NowSeconds](const FRenderedGeoPoint& Point) { return NowSeconds - Point.LastSeenSeconds > MarkerLifetimeSeconds; });
+            ActivePoints.RemoveAll([&](const FRenderedGeoPoint& Point) { return NowSeconds - Point.LastSeenSeconds > Lifetime(Point); });
             EntityToPoint.Reset();
             for (int32 Index = 0; Index < ActivePoints.Num(); ++Index) EntityToPoint.Add(ActivePoints[Index].EntityKey, Index);
             RebuildInstances();

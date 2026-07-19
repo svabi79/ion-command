@@ -16,6 +16,7 @@ type rawLightning struct {
 	Longitude     float64 `json:"longitude"`
 	Latitude      float64 `json:"latitude"`
 	PeakCurrentKa float64 `json:"peakCurrentKa"`
+	StationCount  int     `json:"stationCount"`
 }
 
 func New() *Domain               { return &Domain{} }
@@ -32,7 +33,13 @@ func (d *Domain) Normalize(_ context.Context, record plugins.RawRecord) ([]event
 	}
 	event := events.NewEnvelope(record.OriginalID, "weather", "weather.lightning", events.MessageObservation, events.SourceRef{PluginID: record.SourcePluginID, InstanceID: record.SourceInstanceID, OriginalID: record.OriginalID}, record.ObservedUTC)
 	event.Geometry = events.Point(raw.Longitude, raw.Latitude, 0)
-	event.Properties = map[string]any{"peakCurrentKa": raw.PeakCurrentKa, "unit": "kA"}
+	event.Properties = map[string]any{"peakCurrentKa": raw.PeakCurrentKa, "unit": "kA", "display.title": "Lightning strike"}
+	if raw.StationCount > 0 {
+		event.Properties["stationCount"] = raw.StationCount
+		event.Properties["display.primary"] = fmt.Sprintf("%d stations", raw.StationCount)
+	} else if raw.PeakCurrentKa != 0 {
+		event.Properties["display.primary"] = fmt.Sprintf("%.1f kA", raw.PeakCurrentKa)
+	}
 	measured := true
 	event.Quality.Measured = &measured
 	return []events.Envelope{event}, nil
