@@ -167,6 +167,82 @@ def build_signal_master() -> unreal.Material:
     return material
 
 
+def build_heat_master() -> unreal.Material:
+    """Additive splat for the activity heatmap: instance custom data 0 is the
+    normalized heat, the quad UV drives a soft radial falloff, and hot cells
+    shift from the base color toward white."""
+    material = ensure_material("M_ActivityHeat")
+    material.set_editor_property("blend_mode", unreal.BlendMode.BLEND_ADDITIVE)
+    material.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
+    material.set_editor_property("used_with_instanced_static_meshes", True)
+
+    color = vector(material, "Color", unreal.LinearColor(1.0, 0.36, 0.05, 1.0), -1100, -160)
+    intensity = scalar(material, "Intensity", 2.6, -1100, 0)
+    opacity = scalar(material, "Opacity", 0.85, -1100, 120)
+
+    heat = expression(material, unreal.MaterialExpressionPerInstanceCustomData, -1100, 240)
+    heat.set_editor_property("data_index", 0)
+
+    uv = expression(material, unreal.MaterialExpressionTextureCoordinate, -1100, 360)
+    center = expression(material, unreal.MaterialExpressionConstant2Vector, -1100, 460)
+    center.set_editor_property("r", 0.5)
+    center.set_editor_property("g", 0.5)
+    dist = expression(material, unreal.MaterialExpressionDistance, -930, 400)
+    MEL.connect_material_expressions(uv, "", dist, "A")
+    MEL.connect_material_expressions(center, "", dist, "B")
+    two = expression(material, unreal.MaterialExpressionConstant, -930, 480)
+    two.set_editor_property("r", 2.0)
+    doubled = expression(material, unreal.MaterialExpressionMultiply, -790, 420)
+    MEL.connect_material_expressions(dist, "", doubled, "A")
+    MEL.connect_material_expressions(two, "", doubled, "B")
+    inverted = expression(material, unreal.MaterialExpressionOneMinus, -670, 420)
+    MEL.connect_material_expressions(doubled, "", inverted, "")
+    clamped = expression(material, unreal.MaterialExpressionSaturate, -570, 420)
+    MEL.connect_material_expressions(inverted, "", clamped, "")
+    exponent = expression(material, unreal.MaterialExpressionConstant, -570, 500)
+    exponent.set_editor_property("r", 2.0)
+    falloff = expression(material, unreal.MaterialExpressionPower, -470, 420)
+    MEL.connect_material_expressions(clamped, "", falloff, "Base")
+    MEL.connect_material_expressions(exponent, "", falloff, "Exponent")
+
+    white = expression(material, unreal.MaterialExpressionConstant3Vector, -900, -260)
+    white.set_editor_property("constant", unreal.LinearColor(1.0, 0.95, 0.85, 1.0))
+    ramp_alpha = expression(material, unreal.MaterialExpressionMultiply, -900, -60)
+    hot_shift = expression(material, unreal.MaterialExpressionConstant, -1040, -40)
+    hot_shift.set_editor_property("r", 0.6)
+    MEL.connect_material_expressions(heat, "", ramp_alpha, "A")
+    MEL.connect_material_expressions(hot_shift, "", ramp_alpha, "B")
+    ramp = expression(material, unreal.MaterialExpressionLinearInterpolate, -720, -160)
+    MEL.connect_material_expressions(color, "", ramp, "A")
+    MEL.connect_material_expressions(white, "", ramp, "B")
+    MEL.connect_material_expressions(ramp_alpha, "", ramp, "Alpha")
+
+    lit = expression(material, unreal.MaterialExpressionMultiply, -560, -120)
+    MEL.connect_material_expressions(ramp, "", lit, "A")
+    MEL.connect_material_expressions(intensity, "", lit, "B")
+    heated = expression(material, unreal.MaterialExpressionMultiply, -420, -80)
+    MEL.connect_material_expressions(lit, "", heated, "A")
+    MEL.connect_material_expressions(heat, "", heated, "B")
+    emissive = expression(material, unreal.MaterialExpressionMultiply, -280, -40)
+    MEL.connect_material_expressions(heated, "", emissive, "A")
+    MEL.connect_material_expressions(falloff, "", emissive, "B")
+
+    opacity_heat = expression(material, unreal.MaterialExpressionMultiply, -420, 200)
+    MEL.connect_material_expressions(opacity, "", opacity_heat, "A")
+    MEL.connect_material_expressions(heat, "", opacity_heat, "B")
+    opacity_out = expression(material, unreal.MaterialExpressionMultiply, -280, 240)
+    MEL.connect_material_expressions(opacity_heat, "", opacity_out, "A")
+    MEL.connect_material_expressions(falloff, "", opacity_out, "B")
+    opacity_clamped = expression(material, unreal.MaterialExpressionSaturate, -170, 240)
+    MEL.connect_material_expressions(opacity_out, "", opacity_clamped, "")
+
+    MEL.connect_material_property(emissive, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    MEL.connect_material_property(opacity_clamped, "", unreal.MaterialProperty.MP_OPACITY)
+    MEL.recompile_material(material)
+    save_asset(f"{MATERIAL_DIR}/M_ActivityHeat")
+    return material
+
+
 def build_earth_master(day_texture, night_texture) -> unreal.Material:
     """Physically plausible globe: day albedo, city lights masked to the true
     night side via the SunDirection parameter, glossy oceans, matte land."""
@@ -298,6 +374,8 @@ def main() -> None:
     create_instance("MI_Aurora_North", signal, unreal.LinearColor(0.02, 1.0, 0.38, 1.0), 0.22, intensity=1.6)
     create_instance("MI_Aurora_South", signal, unreal.LinearColor(0.08, 0.55, 1.0, 1.0), 0.20, intensity=1.4)
     create_instance("MI_Console", signal, unreal.LinearColor(0.0, 0.16, 0.42, 1.0), 0.30, intensity=0.5)
+
+    build_heat_master()
 
     if unreal.EditorAssetLibrary.does_asset_exist("/Game/ION/Maps/L_CommandDeck"):
         unreal.EditorLevelLibrary.load_level("/Game/ION/Maps/L_CommandDeck")

@@ -24,6 +24,7 @@ private:
     void SelectBandPreset(int32 PaletteIndex);
     void ClearBandPreset();
     void CycleHudMode();
+    void ToggleHeatmap();
     void StartRecentReplay();
     void ChangeReplaySpeed(double Factor);
     void ReplaySlower();

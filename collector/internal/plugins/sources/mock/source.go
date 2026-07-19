@@ -21,7 +21,7 @@ func New(sourceConfig config.Source) (*Source, error) {
 		return nil, fmt.Errorf("eventsPerSecond must be positive")
 	}
 	switch sourceConfig.Type {
-	case "mock.radio", "mock.lightning", "mock.spaceweather":
+	case "mock.radio", "mock.lightning", "mock.spaceweather", "mock.ionosonde":
 	default:
 		return nil, fmt.Errorf("unsupported mock source type %q", sourceConfig.Type)
 	}
@@ -73,6 +73,9 @@ func (s *Source) generate(rng *rand.Rand, sequence uint64, observed time.Time) (
 	case "mock.spaceweather":
 		domain = "spaceweather"
 		payload = spaceWeatherPayload(rng, sequence)
+	case "mock.ionosonde":
+		domain = "ionosphere"
+		payload = ionosondePayload(rng, sequence)
 	}
 	encoded, err := json.Marshal(payload)
 	if err != nil {
@@ -129,6 +132,42 @@ func lightningPayload(rng *rand.Rand, sequence uint64) map[string]any {
 		"longitude":     lon,
 		"latitude":      lat,
 		"peakCurrentKa": math.Round((-100+rng.Float64()*200)*10) / 10,
+	}
+}
+
+// ionosondePayload cycles through a fixed set of plausible sounder sites so
+// path-analysis instruments can be exercised without the live feed.
+func ionosondePayload(rng *rand.Rand, sequence uint64) map[string]any {
+	stations := []struct {
+		id   string
+		name string
+		lat  float64
+		lon  float64
+	}{
+		{"MO155", "Moscow", 55.5, 37.3},
+		{"EA036", "El Arenosillo", 37.1, -6.7},
+		{"BC840", "Boulder", 40.0, -105.3},
+		{"WP937", "Wallops Is", 37.9, -75.5},
+		{"GA762", "Gakona", 62.4, -145.0},
+		{"JJ433", "Kokubunji", 35.7, 139.5},
+		{"CB53N", "Cocos Is", -12.2, 96.8},
+		{"GR13L", "Grahamstown", -33.3, 26.5},
+	}
+	station := stations[sequence%uint64(len(stations))]
+	foF2 := 4.0 + rng.Float64()*8.0
+	m3000 := 2.6 + rng.Float64()*0.9
+	return map[string]any{
+		"stationId":  station.id,
+		"name":       station.name,
+		"latitude":   station.lat,
+		"longitude":  station.lon,
+		"foF2Mhz":    math.Round(foF2*10) / 10,
+		"mufdMhz":    math.Round(foF2*m3000*10) / 10,
+		"hmF2Km":     220 + rng.IntN(140),
+		"foEMhz":     math.Round((2+rng.Float64()*2)*10) / 10,
+		"m3000":      math.Round(m3000*100) / 100,
+		"tec":        math.Round((5+rng.Float64()*30)*10) / 10,
+		"confidence": 100,
 	}
 }
 

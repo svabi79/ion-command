@@ -35,6 +35,12 @@
       "id": "swpc-primary",
       "type": "spaceweather.swpc",
       "enabled": true
+    },
+    {
+      "id": "kc2g-primary",
+      "type": "ionosonde.kc2g",
+      "enabled": true,
+      "pollSeconds": 600
     }
   ]
 }

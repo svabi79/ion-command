@@ -5,7 +5,10 @@ param(
     [int]$ResY = 1440,
     # Alternative port so verification never collides with an operator's live
     # collector/client pair on the default 7810.
-    [int]$Port = 7810
+    [int]$Port = 7810,
+    # Optional stage-3 instrument exercises for the capture.
+    [switch]$AutoSelect,
+    [switch]$ShowHeatmap
 )
 
 # End-to-end First Light proof: build collector, stream live mock traffic into
@@ -48,10 +51,13 @@ try {
     if (-not $health -or $health.status -ne 'ok') { throw 'collector did not become healthy' }
     Write-Output 'collector healthy, starting client capture...'
 
+    $extraArguments = @()
+    if ($AutoSelect) { $extraArguments += "-IonAutoSelectAfter=$([math]::Max($CaptureAfterSeconds - 12, 5))" }
+    if ($ShowHeatmap) { $extraArguments += '-IonHeatmapVisible' }
     & $editorCommand $project -game -windowed "-ResX=$ResX" "-ResY=$ResY" -NoSplash `
         "-IonCollectorUrl=ws://127.0.0.1:$Port/ws/live" `
         "-IonScreenshotAfter=$CaptureAfterSeconds" "-IonScreenshotFile=$screenshot" `
-        -IonExitAfterScreenshot "-AbsLog=$gameLog"
+        -IonExitAfterScreenshot "-AbsLog=$gameLog" @extraArguments
     if ($LASTEXITCODE -ne 0) { throw "game client exited with $LASTEXITCODE" }
 } finally {
     if (-not $collector.HasExited) { Stop-Process -Id $collector.Id -Force }

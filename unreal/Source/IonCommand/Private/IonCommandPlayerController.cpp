@@ -6,6 +6,7 @@
 #include "GeoSelectionSubsystem.h"
 #include "GeoReplaySubsystem.h"
 #include "HamRadioOwnStationActor.h"
+#include "IonActivityHeatmapActor.h"
 #include "IonCockpitHudActor.h"
 #include "IonCommandCameraPawn.h"
 #include "IonIonosphereActor.h"
@@ -36,6 +37,15 @@ void AIonCommandPlayerController::SetupInputComponent()
     InputComponent->BindAction(TEXT("ReplaySlower"), IE_Pressed, this, &AIonCommandPlayerController::ReplaySlower);
     InputComponent->BindAction(TEXT("ReplayFaster"), IE_Pressed, this, &AIonCommandPlayerController::ReplayFaster);
     InputComponent->BindAction(TEXT("CycleHud"), IE_Pressed, this, &AIonCommandPlayerController::CycleHudMode);
+    InputComponent->BindAction(TEXT("ToggleHeatmap"), IE_Pressed, this, &AIonCommandPlayerController::ToggleHeatmap);
+}
+
+void AIonCommandPlayerController::ToggleHeatmap()
+{
+    for (TActorIterator<AIonActivityHeatmapActor> It(GetWorld()); It; ++It)
+    {
+        It->SetActorHiddenInGame(!It->IsHidden());
+    }
 }
 
 void AIonCommandPlayerController::CycleHudMode()

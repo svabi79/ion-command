@@ -438,6 +438,8 @@ void AIonCockpitHudActor::DrawProviderPanels(float Scale, float Alpha, float Pan
     float CursorY = PanelY;
     for (const FIonCockpitPanelModel& Panel : CachedPanels)
     {
+        // Providers signal "nothing to show" with an untitled model.
+        if (Panel.Title.IsEmpty()) continue;
         const int32 Rows = FMath::Max(Panel.Rows.Num(), 1);
         const float PanelHeight = HeaderHeight + Rows * RowHeight + 12.0f * Scale;
         if (CursorY + PanelHeight > Canvas->SizeY - 40.0f * Scale) break;

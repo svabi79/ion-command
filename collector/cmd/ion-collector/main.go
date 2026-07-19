@@ -18,8 +18,10 @@ import (
 	"github.com/ion-command/ion-command/collector/internal/plugins"
 	"github.com/ion-command/ion-command/collector/internal/plugins/contexts/hfpropagation"
 	"github.com/ion-command/ion-command/collector/internal/plugins/domains/hamradio"
+	"github.com/ion-command/ion-command/collector/internal/plugins/domains/ionosphere"
 	"github.com/ion-command/ion-command/collector/internal/plugins/domains/spaceweather"
 	"github.com/ion-command/ion-command/collector/internal/plugins/domains/weather"
+	"github.com/ion-command/ion-command/collector/internal/plugins/sources/kc2g"
 	mocksource "github.com/ion-command/ion-command/collector/internal/plugins/sources/mock"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/pskreporter"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/swpc"
@@ -45,7 +47,7 @@ func run(configPath string, logger *slog.Logger) error {
 		return err
 	}
 	registry := plugins.NewRegistry()
-	for _, domain := range []plugins.Domain{hamradio.New(), weather.New(), spaceweather.New()} {
+	for _, domain := range []plugins.Domain{hamradio.New(), weather.New(), spaceweather.New(), ionosphere.New()} {
 		if err := registry.RegisterDomain(domain); err != nil {
 			return err
 		}
@@ -68,6 +70,8 @@ func run(configPath string, logger *slog.Logger) error {
 			source, err = wsjtx.New(sourceConfig, logger)
 		case sourceConfig.Type == "spaceweather.swpc":
 			source, err = swpc.New(sourceConfig, logger)
+		case sourceConfig.Type == "ionosonde.kc2g":
+			source, err = kc2g.New(sourceConfig, logger)
 		default:
 			err = fmt.Errorf("unknown source type %q", sourceConfig.Type)
 		}

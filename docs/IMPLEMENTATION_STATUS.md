@@ -1,7 +1,42 @@
 # Implementation status
 
-Status date: **2026-07-19** (sixth pass: renderer performance — the 60 fps
-target is met without Niagara, and the old benchmark numbers are retracted).
+Status date: **2026-07-19** (seventh pass: cockpit stage 3 — ionosonde feed,
+path analysis, and the activity heatmap).
+
+## Cockpit stage 3 (2026-07-19)
+
+- **Ionosonde source** (`ionosonde.kc2g`): polls the GIRO station snapshot at
+  prop.kc2g.com/api/stations.json (data courtesy of the Global Ionosphere
+  Radio Observatory; 10-min default poll, 5-min hard floor). The feed's traps
+  are handled and regression-tested against a captured live fixture: string
+  coordinates, 0-360 longitudes, months-stale entries for silent stations
+  (2-hour age gate), autoscaler nulls, and repeated readings (per-station
+  dedupe). A new generic `ionosphere` domain normalizes soundings to
+  per-station `ionosphere.sounding` observations (foF2, MUF(3000), hmF2, foE,
+  M(3000) factor, TEC, confidence) that render as station markers via the
+  generic point layer. `mock.ionosonde` cycles eight plausible sites so the
+  instruments verify offline.
+- **PATH ANALYSIS panel** (HamRadio module, explicitly heuristic): for the
+  selected link it derives hop count (max ~3,500 km per F2 hop), judges every
+  hop's reflection midpoint by the nearest fresh sounding within 3,000 km,
+  interpolates the hop MUF from foF2 and the M(3000) factor, and reports the
+  controlling minimum plus a SUPPORTED / MARGINAL / ABOVE F2 MUF verdict
+  against the link frequency, with honest coverage ("3/4 HOPS JUDGED") when
+  sounder geometry leaves gaps.
+- **Activity heatmap**: a generic globe overlay of decaying endpoint density
+  (72x36 grid, bounded splat budget, sqrt contrast, soft additive splats from
+  the scripted `M_ActivityHeat` master). Hidden by default, H toggles it.
+- **Automation hooks**: `-IonAutoSelectAfter=<s>` selects the first active
+  path unattended and `-IonHeatmapVisible` shows the heatmap, wired into
+  `first-light.ps1 -AutoSelect -ShowHeatmap` so captures prove the selection
+  staging, the path panel, and the heatmap without an operator.
+
+Verification: collector build/tests/vet green (live-fixture tests for the
+KC2G source and ionosphere domain), editor build clean, First Light on port
+7811 with both switches: PATH ANALYSIS showed "HOPS 4 x 2820 KM / MUF EST
+18.0 MHZ VIA BC840 / COVER 3/4 HOPS JUDGED / LINK 7.074 MHZ / SUPPORTED",
+HF CONDITIONS correctly degraded two steps under the mock's A=33, the heatmap
+rendered over the traffic clusters, zero game-log errors.
 
 ## Renderer performance (2026-07-19)
 

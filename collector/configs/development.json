@@ -38,6 +38,13 @@
       "enabled": true,
       "eventsPerSecond": 0.1,
       "seed": 7812
+    },
+    {
+      "id": "mock-ionosonde-primary",
+      "type": "mock.ionosonde",
+      "enabled": true,
+      "eventsPerSecond": 0.5,
+      "seed": 7813
     }
   ]
 }
