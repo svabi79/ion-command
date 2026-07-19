@@ -31,6 +31,10 @@ type rawSpot struct {
 	SNRDb       int     `json:"snrDb"`
 	TXDxcc      *int    `json:"txDxcc"`
 	RXDxcc      *int    `json:"rxDxcc"`
+	// Region names resolved by the source itself (RBN via the country file)
+	// when no ADIF DXCC codes are available.
+	TXRegion string `json:"txRegion"`
+	RXRegion string `json:"rxRegion"`
 }
 
 // regionName resolves an ADIF DXCC entity code to a display name. Code 0 is
@@ -87,10 +91,14 @@ func (d *Domain) Normalize(_ context.Context, record plugins.RawRecord) ([]event
 	if region := regionName(raw.TXDxcc); region != "" {
 		relationship.Properties["txDxcc"] = *raw.TXDxcc
 		relationship.Properties["display.fromRegion"] = region
+	} else if raw.TXRegion != "" {
+		relationship.Properties["display.fromRegion"] = raw.TXRegion
 	}
 	if region := regionName(raw.RXDxcc); region != "" {
 		relationship.Properties["rxDxcc"] = *raw.RXDxcc
 		relationship.Properties["display.toRegion"] = region
+	} else if raw.RXRegion != "" {
+		relationship.Properties["display.toRegion"] = raw.RXRegion
 	}
 	measured := true
 	relationship.Quality.Measured = &measured

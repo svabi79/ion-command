@@ -1,7 +1,29 @@
 # Implementation status
 
-Status date: **2026-07-19** (twelfth pass: earthquakes, GOES X-ray, and
-satellite tracks — three more live worlds on the globe).
+Status date: **2026-07-19** (thirteenth pass: ADS-B aircraft and Reverse
+Beacon Network — eight live sources).
+
+## Aircraft and RBN (2026-07-19)
+
+- **ADS-B** (`aviation.adsb`): polls a readsb-style /v2/point area query
+  (default api.adsb.lol, courtesy of the adsb.lol community; configurable
+  position/radius, broker override points at any local receiver later).
+  New `aviation` domain: callsign/hex, flight level and ground speed,
+  altitude in the geometry (aircraft float at scaled height like
+  satellites), one-minute validity, `alt_baro` may be the string "ground"
+  (handled, tested against a 254-aircraft live fixture). Live: 1,245
+  aircraft positions recorded in minutes; Swiss SWR59K at FL370.
+- **Reverse Beacon Network** (`hamradio.rbn`): telnet feed (login with the
+  own callsign from config), line parser tested against captured live spots.
+  Both endpoints resolve to DXCC entity centroids via the embedded AD1C
+  country file (new `internal/cty` package; cty.dat longitudes are positive
+  WEST — negated on parse). Spots flow through the existing hamradio domain
+  as `radio.reception`, so CW/RTTY arcs appear on the globe, join the band
+  histogram and the N mode filter, and count into TOP REGIONS via
+  source-supplied region names. Live: 445 CW spots in the first minutes
+  (HA8TA -> DM5GG on 15 m verified end to end).
+- Eight sources now run in parallel: PSKReporter, SWPC+GOES, GIRO,
+  Blitzortung, USGS, CelesTrak, ADS-B, RBN.
 
 ## Data feast (2026-07-19)
 

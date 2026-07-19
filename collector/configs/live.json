@@ -61,6 +61,20 @@
       "id": "celestrak-amateur",
       "type": "orbital.celestrak",
       "enabled": true
+    },
+    {
+      "id": "adsb-qth",
+      "type": "aviation.adsb",
+      "enabled": true,
+      "latitude": 47.3,
+      "longitude": 8.5,
+      "radiusNm": 200
+    },
+    {
+      "id": "rbn-primary",
+      "type": "hamradio.rbn",
+      "enabled": true,
+      "login": "HB9HSJ"
     }
   ]
 }

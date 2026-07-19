@@ -17,17 +17,20 @@ import (
 	"github.com/ion-command/ion-command/collector/internal/pipeline"
 	"github.com/ion-command/ion-command/collector/internal/plugins"
 	"github.com/ion-command/ion-command/collector/internal/plugins/contexts/hfpropagation"
+	"github.com/ion-command/ion-command/collector/internal/plugins/domains/aviation"
 	"github.com/ion-command/ion-command/collector/internal/plugins/domains/geophysics"
 	"github.com/ion-command/ion-command/collector/internal/plugins/domains/hamradio"
 	"github.com/ion-command/ion-command/collector/internal/plugins/domains/ionosphere"
 	"github.com/ion-command/ion-command/collector/internal/plugins/domains/orbital"
 	"github.com/ion-command/ion-command/collector/internal/plugins/domains/spaceweather"
 	"github.com/ion-command/ion-command/collector/internal/plugins/domains/weather"
+	"github.com/ion-command/ion-command/collector/internal/plugins/sources/adsb"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/blitzortung"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/celestrak"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/kc2g"
 	mocksource "github.com/ion-command/ion-command/collector/internal/plugins/sources/mock"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/pskreporter"
+	"github.com/ion-command/ion-command/collector/internal/plugins/sources/rbn"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/swpc"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/usgs"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/wsjtx"
@@ -52,7 +55,7 @@ func run(configPath string, logger *slog.Logger) error {
 		return err
 	}
 	registry := plugins.NewRegistry()
-	for _, domain := range []plugins.Domain{hamradio.New(), weather.New(), spaceweather.New(), ionosphere.New(), geophysics.New(), orbital.New()} {
+	for _, domain := range []plugins.Domain{hamradio.New(), weather.New(), spaceweather.New(), ionosphere.New(), geophysics.New(), orbital.New(), aviation.New()} {
 		if err := registry.RegisterDomain(domain); err != nil {
 			return err
 		}
@@ -83,6 +86,10 @@ func run(configPath string, logger *slog.Logger) error {
 			source, err = usgs.New(sourceConfig, logger)
 		case sourceConfig.Type == "orbital.celestrak":
 			source, err = celestrak.New(sourceConfig, logger)
+		case sourceConfig.Type == "aviation.adsb":
+			source, err = adsb.New(sourceConfig, logger)
+		case sourceConfig.Type == "hamradio.rbn":
+			source, err = rbn.New(sourceConfig, logger)
 		default:
 			err = fmt.Errorf("unknown source type %q", sourceConfig.Type)
 		}

@@ -48,6 +48,13 @@ type Source struct {
 	Topic           string  `json:"topic,omitempty"`
 	ClientID        string  `json:"clientId,omitempty"`
 	PollSeconds     int     `json:"pollSeconds,omitempty"`
+	// Login is the callsign or account used by sources that authenticate
+	// (e.g. the RBN telnet feed).
+	Login string `json:"login,omitempty"`
+	// Geographic scope for area-query sources (e.g. ADS-B around a point).
+	Latitude  float64 `json:"latitude,omitempty"`
+	Longitude float64 `json:"longitude,omitempty"`
+	RadiusNm  float64 `json:"radiusNm,omitempty"`
 }
 
 type Config struct {
