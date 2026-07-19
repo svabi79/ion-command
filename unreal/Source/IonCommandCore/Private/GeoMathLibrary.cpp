@@ -25,10 +25,18 @@ double AngularDistanceRadians(const FGeoPosition& From, const FGeoPosition& To)
 
 FVector UGeoMathLibrary::LatitudeLongitudeToUnitSphere(double Latitude, double Longitude)
 {
+    // The world frame is anchored to the rendered Earth: the engine
+    // BasicShapes sphere maps its equirectangular texture with U starting at
+    // world longitude -90 and running WESTWARD (measured via
+    // Scripts/probe_sphere_uv.py), so the terrain shown at classic
+    // right-handed longitude L is (90 - L). Using X = sin(lon), Y = cos(lon)
+    // places geography exactly where the texture shows it; the naive
+    // right-handed X = cos(lon), Y = sin(lon) put every station one mirrored
+    // quarter turn away (a German station rendered over Siberia).
     const double LatRad = FMath::DegreesToRadians(Latitude);
     const double LonRad = FMath::DegreesToRadians(Longitude);
     const double CosLat = FMath::Cos(LatRad);
-    return FVector(CosLat * FMath::Cos(LonRad), CosLat * FMath::Sin(LonRad), FMath::Sin(LatRad));
+    return FVector(CosLat * FMath::Sin(LonRad), CosLat * FMath::Cos(LonRad), FMath::Sin(LatRad));
 }
 
 FGeoPosition UGeoMathLibrary::UnitSphereToLatitudeLongitude(const FVector& UnitPosition)
@@ -36,7 +44,7 @@ FGeoPosition UGeoMathLibrary::UnitSphereToLatitudeLongitude(const FVector& UnitP
     const FVector Normal = UnitPosition.GetSafeNormal();
     FGeoPosition Result;
     Result.Latitude = FMath::RadiansToDegrees(FMath::Asin(Normal.Z));
-    Result.Longitude = FMath::RadiansToDegrees(FMath::Atan2(Normal.Y, Normal.X));
+    Result.Longitude = FMath::RadiansToDegrees(FMath::Atan2(Normal.X, Normal.Y));
     return Result;
 }
 

@@ -1,7 +1,32 @@
 # Implementation status
 
-Status date: **2026-07-19** (seventh pass: cockpit stage 3 — ionosonde feed,
-path analysis, and the activity heatmap).
+Status date: **2026-07-19** (eighth pass: georeference fix — every station
+was rendered a mirrored quarter turn away from its terrain).
+
+## Georeference fix (2026-07-19)
+
+Operator report: a German station rendered over Siberia. Root cause: the
+engine BasicShapes sphere maps its equirectangular texture with U starting at
+world longitude -90 and running **westward** (measured with the new
+`Scripts/probe_sphere_uv.py` diagnostic), so the terrain visible at classic
+right-handed longitude L is `90 - L` — mirrored plus a quarter turn. All
+geographic content (arcs, markers, labels, own station, subsolar point) used
+the right-handed `X = cos(lon), Y = sin(lon)` frame; everything was mutually
+consistent and the terminator is computed from world normals, so nothing
+looked obviously wrong until callsigns were checked against terrain.
+
+Fix: `LatitudeLongitudeToUnitSphere`/`UnitSphereToLatitudeLongitude` now use
+`X = sin(lon), Y = cos(lon)` (and `atan2(X, Y)`), anchoring the world frame
+to the rendered Earth: Greenwich at +Y, 90E at +X. A new
+`IONCOMMAND.Core.Geo.SphereFrame` automation test pins the convention to the
+measured mapping. All spherical math (distance, bearing, interpolation,
+Grayline) works in the lat/lon domain and is unaffected.
+
+Verified: Core.Geo automation tests green; live capture at 09:45 UTC shows
+the Americas night side under the default camera with K9/VE3/W4 callsigns
+and an `SWL/FN11OD` locator label over northeastern North America and PT5PR
+over southern Brazil. Lesson recorded: "First Light" passes never included a
+known-landmark check — station-vs-terrain is now part of visual QA.
 
 ## Cockpit stage 3 (2026-07-19)
 
