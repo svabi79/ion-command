@@ -51,6 +51,16 @@
       "id": "blitzortung-primary",
       "type": "lightning.blitzortung",
       "enabled": true
+    },
+    {
+      "id": "usgs-primary",
+      "type": "earthquake.usgs",
+      "enabled": true
+    },
+    {
+      "id": "celestrak-amateur",
+      "type": "orbital.celestrak",
+      "enabled": true
     }
   ]
 }

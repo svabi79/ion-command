@@ -101,6 +101,8 @@ void UHamConditionsSubsystem::OnMessageAccepted(const FGeoMessageEnvelope& Messa
     Read(TEXT("solarFlux"), SolarFlux);
     Read(TEXT("kp"), Kp);
     Read(TEXT("aIndex"), AIndex);
+    const FString Xray = Message.Properties.FindRef(TEXT("xrayClass"));
+    if (!Xray.IsEmpty() && Xray != TEXT("null")) XrayClass = Xray;
 }
 
 FIonCockpitPanelModel UHamConditionsSubsystem::BuildPanel() const
@@ -119,13 +121,18 @@ FIonCockpitPanelModel UHamConditionsSubsystem::BuildPanel() const
     int32 Penalty = 0;
     if (Kp >= 4.0 || AIndex >= 20.0) Penalty = 1;
     if (Kp >= 5.0 || AIndex >= 30.0) Penalty = 2;
+    // M/X flares ionize the D layer and absorb the sunlit side
+    // (Moegel-Dellinger); the night side is untouched.
+    int32 FlarePenalty = 0;
+    if (XrayClass.StartsWith(TEXT("M"))) FlarePenalty = 1;
+    if (XrayClass.StartsWith(TEXT("X"))) FlarePenalty = 2;
     static const TCHAR* GroupLabels[] = {TEXT("80M-40M"), TEXT("30M-20M"), TEXT("17M-15M"), TEXT("12M-10M")};
     for (int32 Group = 0; Group < 4; ++Group)
     {
         EBandRating Day = EBandRating::Poor;
         EBandRating Night = EBandRating::Poor;
         GroupRatings(Group, SolarFlux, Day, Night);
-        Day = Degrade(Day, Penalty);
+        Day = Degrade(Day, Penalty + FlarePenalty);
         Night = Degrade(Night, Penalty);
         FIonCockpitPanelRow Row;
         Row.Label = GroupLabels[Group];

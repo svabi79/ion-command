@@ -15,6 +15,11 @@ struct FRenderedGeoPoint
     FString EntityKey;
     FVector Location = FVector::ZeroVector;
     double LastSeenSeconds = 0.0;
+    // Render-clock deadline derived from the envelope's validUntil; zero
+    // falls back to the class lifetime defaults.
+    double ExpireAtSeconds = 0.0;
+    // Per-message size multiplier (visual.markerScale property).
+    float Scale = 1.0f;
     bool bObservation = false;
 };
 
@@ -46,7 +51,6 @@ private:
     void OnMessageAccepted(const FGeoMessageEnvelope& Message);
     void BuildEditorPreview();
     void OnLayerVisibilityChanged(const FString& LayerId, bool bVisible);
-    void ApplyZoomFactor(UInstancedStaticMeshComponent* Instances) const;
     void RebuildInstances();
     UPROPERTY(VisibleAnywhere) TObjectPtr<USceneComponent> SceneRoot;
     UPROPERTY(VisibleAnywhere) TObjectPtr<UInstancedStaticMeshComponent> EntityInstances;

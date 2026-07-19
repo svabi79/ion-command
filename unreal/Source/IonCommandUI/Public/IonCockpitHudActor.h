@@ -83,6 +83,7 @@ private:
     double EnvWindKms = -1.0;
     double EnvBzNt = 0.0;
     bool bHasEnvBz = false;
+    FString EnvXrayClass;
 
     // 60 one-second buckets of accepted path traffic (renderable relationships).
     int32 RateBuckets[60] = {};

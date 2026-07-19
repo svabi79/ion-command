@@ -188,6 +188,8 @@ void AIonCockpitHudActor::OnMessageAccepted(const FGeoMessageEnvelope& Message)
         if (PropertyAsDouble(Message.Properties, TEXT("solarFlux"), Value)) EnvSolarFlux = Value;
         if (PropertyAsDouble(Message.Properties, TEXT("solarWindSpeedKms"), Value)) EnvWindKms = Value;
         if (PropertyAsDouble(Message.Properties, TEXT("imfBzNt"), Value)) { EnvBzNt = Value; bHasEnvBz = true; }
+        const FString XrayClass = Message.Properties.FindRef(TEXT("xrayClass"));
+        if (!XrayClass.IsEmpty() && XrayClass != TEXT("null")) EnvXrayClass = XrayClass;
         return;
     }
     const bool bPathTraffic = (Message.Geometry.Type == EGeoGeometryType::GreatCircle || Message.Geometry.Type == EGeoGeometryType::Arc) && Message.Geometry.Positions.Num() >= 2;
@@ -363,6 +365,18 @@ void AIonCockpitHudActor::DrawStatusBar(float Scale, float Alpha)
     DrawLabelValue(CursorX, TextY, TEXT("A"), EnvAIndex < 0.0 ? TEXT("--") : FString::Printf(TEXT("%.0f"), EnvAIndex), EnvAIndex < 0.0 ? CockpitDim : SeverityColor(EnvAIndex, 15.0, 30.0), Scale, Alpha);
     DrawLabelValue(CursorX, TextY, TEXT("WIND"), EnvWindKms < 0.0 ? TEXT("--") : FString::Printf(TEXT("%.0f KM/S"), EnvWindKms), EnvWindKms < 0.0 ? CockpitDim : CockpitWhite, Scale, Alpha);
     DrawLabelValue(CursorX, TextY, TEXT("BZ"), !bHasEnvBz ? TEXT("--") : FString::Printf(TEXT("%+.1f NT"), EnvBzNt), !bHasEnvBz ? CockpitDim : SeverityColor(-EnvBzNt, 2.0, 5.0), Scale, Alpha);
+    FLinearColor XrayColor = CockpitDim;
+    if (!EnvXrayClass.IsEmpty())
+    {
+        switch (EnvXrayClass[0])
+        {
+        case 'X': XrayColor = CockpitRed; break;
+        case 'M': XrayColor = CockpitAmber; break;
+        case 'C': XrayColor = FLinearColor(1.0f, 0.9f, 0.2f); break;
+        default: XrayColor = CockpitGreen; break;
+        }
+    }
+    DrawLabelValue(CursorX, TextY, TEXT("XRAY"), EnvXrayClass.IsEmpty() ? TEXT("--") : EnvXrayClass, XrayColor, Scale, Alpha);
 
     int32 PerMinute = 0;
     for (int32 Bucket : RateBuckets) PerMinute += Bucket;

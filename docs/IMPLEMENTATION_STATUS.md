@@ -1,7 +1,32 @@
 # Implementation status
 
-Status date: **2026-07-19** (eleventh pass: live lightning, scattering-look
-atmosphere).
+Status date: **2026-07-19** (twelfth pass: earthquakes, GOES X-ray, and
+satellite tracks — three more live worlds on the globe).
+
+## Data feast (2026-07-19)
+
+- **USGS earthquakes** (`earthquake.usgs`): polls the public-domain all_hour
+  GeoJSON summary (2-min default), dedupes by event id and revision, and a
+  new generic `geophysics` domain renders quakes as magnitude-scaled markers
+  (new generic `visual.markerScale` property) that stay for two hours (new:
+  the point layer honors envelope `validUntil`). Live fixture tests.
+- **GOES X-ray flux**: the SWPC source now derives the flare class from the
+  latest long-wave GOES sample (A/B/C/M/X with decimal, e.g. "B7.5"). The
+  status bar shows XRAY color-coded, and the HF-conditions panel degrades
+  DAY ratings one step for M and two for X flares (Moegel-Dellinger
+  absorption; the night side is untouched). Caught in the same run: the
+  spaceweather normalizer silently dropped the new fields — the same trap as
+  the DXCC sa/ra episode; normalizers must be extended with their sources.
+- **Satellite ground positions** (`orbital.celestrak`): CelesTrak amateur
+  group TLEs (courtesy CelesTrak/T.S. Kelso; 6-hour refresh) propagated with
+  SGP4 (go-satellite) every 10 s for ~93 objects into a new `orbital` domain.
+  The point layer now honors geometry altitude, so satellites float above
+  the globe at true scaled height (AO-10 verified at 30,580 km apogee, live).
+  A one-minute validUntil clears markers if the feed stops.
+- Live proof: six sources active simultaneously; 1,209 satellite positions
+  and 3 quakes ("M 1.7, 26 km SE of Mina, Nevada") recorded within minutes;
+  XRAY B7.5 in the status bar 60 s after client start via the connect
+  snapshot; capture gate green.
 
 ## Live lightning and atmosphere (2026-07-19)
 

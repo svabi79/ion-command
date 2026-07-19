@@ -28,6 +28,7 @@ private:
     double SolarFlux = -1.0;
     double Kp = -1.0;
     double AIndex = -1.0;
+    FString XrayClass;
 
     int32 PanelHandle = 0;
     FDelegateHandle MessageAcceptedHandle;

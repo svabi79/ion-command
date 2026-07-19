@@ -78,12 +78,36 @@ void AGeoPointLayerActor::Submit(const FGeoMessageEnvelope& Message)
     const FString& EntityKey = !Message.EntityId.IsEmpty() ? Message.EntityId : Message.MessageId;
     const double NowSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
     const FGeoPosition& Position = Message.Geometry.Positions[0];
-    const FVector Location = UGeoMathLibrary::LatitudeLongitudeToUnitSphere(Position.Latitude, Position.Longitude) * (GlobeRadius + 8.0);
+    // Altitude lifts markers off the surface at globe scale (satellites);
+    // surface events keep the small readability offset.
+    const double AltitudeUnits = FMath::Max(Position.AltitudeMeters, 0.0) / 6371000.0 * GlobeRadius;
+    const FVector Location = UGeoMathLibrary::LatitudeLongitudeToUnitSphere(Position.Latitude, Position.Longitude) * (GlobeRadius + 8.0 + AltitudeUnits);
+    // validUntil bounds the marker's visual lifetime when the domain set one.
+    double ExpireAt = 0.0;
+    if (Message.Time.bHasValidUntil)
+    {
+        ExpireAt = NowSeconds + FMath::Clamp((Message.Time.ValidUntilUtc - FDateTime::UtcNow()).GetTotalSeconds(), 5.0, 7200.0);
+    }
+    float PointScale = 1.0f;
+    const FString ScaleProperty = Message.Properties.FindRef(TEXT("visual.markerScale"));
+    if (!ScaleProperty.IsEmpty())
+    {
+        PointScale = FMath::Clamp(FCString::Atof(*ScaleProperty), 0.3f, 5.0f);
+    }
+    const bool bMoves = Position.AltitudeMeters > 1000.0;
     if (int32* ExistingIndex = EntityToPoint.Find(EntityKey))
     {
         FRenderedGeoPoint& Point = ActivePoints[*ExistingIndex];
         Point.LastSeenSeconds = NowSeconds;
+        // Moving markers (satellites) need their instance transform updated,
+        // not just the bookkeeping refresh static stations get.
+        if (bMoves && !Point.Location.Equals(Location, 1.0))
+        {
+            bNeedsRebuild = true;
+        }
         Point.Location = Location;
+        if (ExpireAt > 0.0) Point.ExpireAtSeconds = ExpireAt;
+        Point.Scale = PointScale;
         return;
     }
     if (ActivePoints.Num() >= MaxVisiblePoints)
@@ -100,12 +124,14 @@ void AGeoPointLayerActor::Submit(const FGeoMessageEnvelope& Message)
     Point.EntityKey = EntityKey;
     Point.Location = Location;
     Point.LastSeenSeconds = NowSeconds;
+    Point.ExpireAtSeconds = ExpireAt;
+    Point.Scale = PointScale;
     Point.bObservation = Message.MessageType != EGeoMessageType::Entity;
     EntityToPoint.Add(EntityKey, ActivePoints.Num() - 1);
     if (!bNeedsRebuild)
     {
         UInstancedStaticMeshComponent* Instances = Point.bObservation ? ObservationInstances : EntityInstances;
-        Instances->AddInstance(FTransform(FQuat::Identity, Location, FVector(MarkerScale * CurrentZoomFactor)), true);
+        Instances->AddInstance(FTransform(FQuat::Identity, Location, FVector(MarkerScale * CurrentZoomFactor * PointScale)), true);
     }
 }
 
@@ -121,12 +147,16 @@ void AGeoPointLayerActor::Tick(float DeltaSeconds)
     if (NowSeconds - LastExpiryCheck > 5.0)
     {
         LastExpiryCheck = NowSeconds;
-        auto Lifetime = [this](const FRenderedGeoPoint& Point) { return Point.bObservation ? ObservationLifetimeSeconds : MarkerLifetimeSeconds; };
-        int32 ExpiredCount = 0;
-        for (const FRenderedGeoPoint& Point : ActivePoints) if (NowSeconds - Point.LastSeenSeconds > Lifetime(Point)) ++ExpiredCount;
-        if (ExpiredCount > FMath::Max(16, ActivePoints.Num() / 20))
+        auto Expired = [this, NowSeconds](const FRenderedGeoPoint& Point)
         {
-            ActivePoints.RemoveAll([&](const FRenderedGeoPoint& Point) { return NowSeconds - Point.LastSeenSeconds > Lifetime(Point); });
+            if (Point.ExpireAtSeconds > 0.0) return NowSeconds > Point.ExpireAtSeconds;
+            return NowSeconds - Point.LastSeenSeconds > (Point.bObservation ? ObservationLifetimeSeconds : MarkerLifetimeSeconds);
+        };
+        int32 ExpiredCount = 0;
+        for (const FRenderedGeoPoint& Point : ActivePoints) if (Expired(Point)) ++ExpiredCount;
+        if (ExpiredCount > FMath::Max(8, ActivePoints.Num() / 20))
+        {
+            ActivePoints.RemoveAll(Expired);
             EntityToPoint.Reset();
             for (int32 Index = 0; Index < ActivePoints.Num(); ++Index) EntityToPoint.Add(ActivePoints[Index].EntityKey, Index);
             RebuildInstances();
@@ -140,8 +170,7 @@ void AGeoPointLayerActor::Tick(float DeltaSeconds)
     const double Target = FMath::Clamp((CameraDistance - GlobeRadius) / 2400.0, 0.22, 1.15);
     if (FMath::Abs(Target - CurrentZoomFactor) / CurrentZoomFactor < 0.08) return;
     CurrentZoomFactor = Target;
-    ApplyZoomFactor(EntityInstances);
-    ApplyZoomFactor(ObservationInstances);
+    RebuildInstances();
 }
 
 void AGeoPointLayerActor::RebuildInstances()
@@ -149,9 +178,9 @@ void AGeoPointLayerActor::RebuildInstances()
     TArray<FTransform> Entities;
     TArray<FTransform> Observations;
     Entities.Reserve(ActivePoints.Num());
-    const FVector Scale(MarkerScale * CurrentZoomFactor);
     for (const FRenderedGeoPoint& Point : ActivePoints)
     {
+        const FVector Scale(MarkerScale * CurrentZoomFactor * Point.Scale);
         (Point.bObservation ? Observations : Entities).Emplace(FQuat::Identity, Point.Location, Scale);
     }
     EntityInstances->ClearInstances();
@@ -162,20 +191,6 @@ void AGeoPointLayerActor::RebuildInstances()
     ObservationInstances->MarkRenderStateDirty();
 }
 
-void AGeoPointLayerActor::ApplyZoomFactor(UInstancedStaticMeshComponent* Instances) const
-{
-    const int32 Count = Instances->GetInstanceCount();
-    if (Count == 0) return;
-    const FVector NewScale(MarkerScale * CurrentZoomFactor);
-    FTransform Transform;
-    for (int32 Index = 0; Index < Count; ++Index)
-    {
-        Instances->GetInstanceTransform(Index, Transform, false);
-        Transform.SetScale3D(NewScale);
-        Instances->UpdateInstanceTransform(Index, Transform, false, false, true);
-    }
-    Instances->MarkRenderStateDirty();
-}
 void AGeoPointLayerActor::Reset()
 {
     ActivePoints.Reset();

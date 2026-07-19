@@ -23,6 +23,7 @@ const (
 	windURL     = "https://services.swpc.noaa.gov/products/summary/solar-wind-speed.json"
 	magURL      = "https://services.swpc.noaa.gov/products/summary/solar-wind-mag-field.json"
 	wwvURL      = "https://services.swpc.noaa.gov/text/wwv.txt"
+	xrayURL     = "https://services.swpc.noaa.gov/json/goes/primary/xrays-6-hour.json"
 	pollDefault = 5 * time.Minute
 )
 
@@ -110,6 +111,7 @@ func (s *Source) sample(ctx context.Context) (plugins.RawRecord, error) {
 	windSpeed := s.summaryValue(ctx, windURL, "proton_speed")
 	bz := s.summaryValue(ctx, magURL, "bz_gsm")
 	aIndex := s.estimatedAIndex(ctx)
+	xrayFlux, xrayClass := s.xray(ctx)
 
 	s.sequence++
 	payload, err := json.Marshal(map[string]any{
@@ -120,6 +122,8 @@ func (s *Source) sample(ctx context.Context) (plugins.RawRecord, error) {
 		"solarWindSpeedKms": windSpeed,
 		"solarWindDensity":  nil,
 		"imfBzNt":           bz,
+		"xrayFluxWm2":       xrayFlux,
+		"xrayClass":         xrayClass,
 	})
 	if err != nil {
 		return plugins.RawRecord{}, err
@@ -181,6 +185,42 @@ func (s *Source) estimatedAIndex(ctx context.Context) any {
 		return nil
 	}
 	return aIndex
+}
+
+// xray reads the latest GOES long-wave (0.1-0.8 nm) X-ray flux and derives
+// the flare class (A/B/C/M/X with a decimal multiplier, e.g. "B7.8").
+// Failures degrade to null instead of failing the whole sample.
+func (s *Source) xray(ctx context.Context) (any, any) {
+	body, err := s.fetch(ctx, xrayURL)
+	if err != nil {
+		s.logger.Warn("SWPC xray fetch failed", "error", err)
+		return nil, nil
+	}
+	var entries []struct {
+		Flux   float64 `json:"flux"`
+		Energy string  `json:"energy"`
+	}
+	if err := json.Unmarshal(body, &entries); err != nil {
+		s.logger.Warn("SWPC xray decode failed", "error", err)
+		return nil, nil
+	}
+	for index := len(entries) - 1; index >= 0; index-- {
+		if entries[index].Energy != "0.1-0.8nm" || entries[index].Flux <= 0 {
+			continue
+		}
+		flux := entries[index].Flux
+		classes := []struct {
+			letter string
+			base   float64
+		}{{"X", 1e-4}, {"M", 1e-5}, {"C", 1e-6}, {"B", 1e-7}, {"A", 1e-8}}
+		for _, class := range classes {
+			if flux >= class.base {
+				return flux, fmt.Sprintf("%s%.1f", class.letter, flux/class.base)
+			}
+		}
+		return flux, "A0.1"
+	}
+	return nil, nil
 }
 
 // summaryValue reads one numeric field from a SWPC summary product (an array

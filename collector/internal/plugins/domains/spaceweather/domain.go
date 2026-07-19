@@ -18,6 +18,8 @@ type rawState struct {
 	SolarWindSpeedKms int     `json:"solarWindSpeedKms"`
 	SolarWindDensity  float64 `json:"solarWindDensity"`
 	IMFBzNt           float64 `json:"imfBzNt"`
+	XrayFluxWm2       float64 `json:"xrayFluxWm2"`
+	XrayClass         string  `json:"xrayClass"`
 }
 
 func New() *Domain               { return &Domain{} }
@@ -33,6 +35,10 @@ func (d *Domain) Normalize(_ context.Context, record plugins.RawRecord) ([]event
 	}
 	event := events.NewEnvelope(record.OriginalID, "spaceweather", "spaceweather.state", events.MessageObservation, events.SourceRef{PluginID: record.SourcePluginID, InstanceID: record.SourceInstanceID, OriginalID: record.OriginalID}, record.ObservedUTC)
 	event.Properties = map[string]any{"kp": raw.Kp, "aIndex": raw.AIndex, "solarFlux": raw.SolarFlux, "solarWindSpeedKms": raw.SolarWindSpeedKms, "solarWindDensity": raw.SolarWindDensity, "imfBzNt": raw.IMFBzNt}
+	if raw.XrayClass != "" {
+		event.Properties["xrayFluxWm2"] = raw.XrayFluxWm2
+		event.Properties["xrayClass"] = raw.XrayClass
+	}
 	modelled := false
 	event.Quality.Measured = &modelled
 	return []events.Envelope{event}, nil

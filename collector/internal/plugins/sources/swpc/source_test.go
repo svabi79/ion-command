@@ -33,6 +33,7 @@ func TestSampleParsesProducts(t *testing.T) {
 		"10cm-flux":              `[{"flux":165,"time_tag":"2026-07-18T20:00:00"}]`,
 		"solar-wind-speed":       `[{"proton_speed":434.4,"time_tag":"2026-07-19T05:41:00Z"}]`,
 		"solar-wind-mag-field":   `[{"bt":5.1,"bz_gsm":-2.3,"time_tag":"2026-07-19T05:41:00Z"}]`,
+		"xrays-6-hour": `[{"time_tag":"2026-07-19T14:57:00Z","flux":9.1e-09,"energy":"0.05-0.4nm"},{"time_tag":"2026-07-19T14:58:00Z","flux":7.818933909220505e-07,"energy":"0.1-0.8nm"},{"time_tag":"2026-07-19T14:59:00Z","flux":9.1e-09,"energy":"0.05-0.4nm"}]`,
 		"wwv": ":Product: Geophysical Alert Message wwv.txt\n:Issued: 2026 Jul 19 0605 UTC\nSolar-terrestrial indices for 18 July follow.\nSolar flux 110 and estimated planetary A-index 4.\nThe estimated planetary K-index at 0600 UTC on 19 July was 0.67.\n",
 	})
 	record, err := source.sample(context.Background())
@@ -43,7 +44,7 @@ func TestSampleParsesProducts(t *testing.T) {
 		t.Fatalf("unexpected routing: %+v", record)
 	}
 	payload := string(record.Payload)
-	for _, expected := range []string{`"kp":2.33`, `"solarFlux":165`, `"solarWindSpeedKms":434.4`, `"imfBzNt":-2.3`, `"aIndex":4`} {
+	for _, expected := range []string{`"kp":2.33`, `"solarFlux":165`, `"solarWindSpeedKms":434.4`, `"imfBzNt":-2.3`, `"aIndex":4`, `"xrayClass":"B7.8"`} {
 		if !strings.Contains(payload, expected) {
 			t.Fatalf("payload missing %s: %s", expected, payload)
 		}
