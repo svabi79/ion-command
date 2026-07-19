@@ -88,7 +88,7 @@ func run(configPath string, logger *slog.Logger) error {
 	if flush <= 0 {
 		flush = time.Second
 	}
-	recorder := recording.New(cfg.Recording.Directory, cfg.Recording.Enabled, flush)
+	recorder := recording.New(cfg.Recording.Directory, cfg.Recording.Enabled, flush).WithRetention(int64(cfg.Recording.MaxTotalGigabytes * 1024 * 1024 * 1024))
 	pipe := pipeline.New(registry, cfg.Pipeline.QueueCapacity, cfg.Pipeline.WorkerCount, hub, recorder, stats, logger, cfg.Pipeline.RetainLatest)
 	if err := pipe.Verify(); err != nil {
 		return err

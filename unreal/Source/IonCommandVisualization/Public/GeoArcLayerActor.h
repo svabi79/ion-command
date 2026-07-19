@@ -17,6 +17,11 @@ struct FRenderedGeoArc
     FDateTime AddedUtc;
     double SpawnTimeSeconds = 0.0;
     int32 PaletteIndex = 0;
+    // Per-end congestion dimming (1 = isolated). Only the segments closest
+    // to a congested endpoint fade, so the path keeps its color while the
+    // convergence zone stops blowing out white.
+    float BrightnessFrom = 1.0f;
+    float BrightnessTo = 1.0f;
 };
 
 // One palette class of the active traffic window, for instrument panels.
@@ -91,6 +96,7 @@ private:
     void OnMessageAccepted(const FGeoMessageEnvelope& Message);
     void BuildEditorPreview();
     void AddArcInstances(const FRenderedGeoArc& Arc);
+    float SegmentBrightness(const FRenderedGeoArc& Arc, int32 Segment) const;
     void AddArcInstancesTo(UInstancedStaticMeshComponent* Instances, const FGeoMessageEnvelope& Message, double Thickness);
     void AppendArcTransforms(TArray<FTransform>& Out, const FGeoMessageEnvelope& Message, double Thickness) const;
     FVector CalculateArcPoint(const FGeoMessageEnvelope& Message, double Alpha) const;
@@ -108,6 +114,8 @@ private:
     FString HighlightedMessageId;
     TArray<float> PaletteBaseIntensities;
     TArray<FString> EntityFilter;
+    // Decaying per-endpoint arc counts driving the hotspot dimming.
+    TMap<FString, float> EndpointDensity;
     int32 BandFocusIndex = INDEX_NONE;
     bool bSelectionDimmed = false;
     bool bNeedsRebuild = false;

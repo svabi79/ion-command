@@ -19,7 +19,8 @@
   "recording": {
     "enabled": false,
     "directory": "../../data/recordings",
-    "flushIntervalSeconds": 1
+    "flushIntervalSeconds": 1,
+    "maxTotalGigabytes": 40
   },
   "sources": [
     {

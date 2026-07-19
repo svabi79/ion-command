@@ -32,6 +32,10 @@ type Recording struct {
 	Enabled              bool   `json:"enabled"`
 	Directory            string `json:"directory"`
 	FlushIntervalSeconds int    `json:"flushIntervalSeconds"`
+	// MaxTotalGigabytes caps the recording directory: on every hourly
+	// rotation the oldest files are deleted until the total is back under
+	// the limit. Zero keeps the previous unbounded behavior.
+	MaxTotalGigabytes float64 `json:"maxTotalGigabytes"`
 }
 
 type Source struct {

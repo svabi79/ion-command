@@ -152,14 +152,39 @@ def build_signal_master() -> unreal.Material:
     fade = expression(material, unreal.MaterialExpressionSaturate, -330, 420)
     MEL.connect_material_expressions(inverted, "", fade, "")
 
+    # Custom data 2 dims arcs converging on a congested endpoint. Meshes that
+    # only allocate two custom floats read 0 there, which must mean "full
+    # brightness" - hence the If mapping 0 -> 1.
+    # brightness = data2 + (1 - saturate(data2 * 1e6)): exactly 1 when the
+    # mesh carries no third custom float (reads 0), otherwise data2. Built
+    # from plain nodes because the If node's python pin names silently fail
+    # to connect ("Missing If AGreaterThanB input" broke the whole material).
+    congestion = expression(material, unreal.MaterialExpressionPerInstanceCustomData, -900, 640)
+    congestion.set_editor_property("data_index", 2)
+    huge = expression(material, unreal.MaterialExpressionConstant, -900, 720)
+    huge.set_editor_property("r", 1000000.0)
+    amplified = expression(material, unreal.MaterialExpressionMultiply, -780, 660)
+    MEL.connect_material_expressions(congestion, "", amplified, "A")
+    MEL.connect_material_expressions(huge, "", amplified, "B")
+    presence = expression(material, unreal.MaterialExpressionSaturate, -690, 660)
+    MEL.connect_material_expressions(amplified, "", presence, "")
+    absent = expression(material, unreal.MaterialExpressionOneMinus, -620, 660)
+    MEL.connect_material_expressions(presence, "", absent, "")
+    brightness = expression(material, unreal.MaterialExpressionAdd, -540, 640)
+    MEL.connect_material_expressions(congestion, "", brightness, "A")
+    MEL.connect_material_expressions(absent, "", brightness, "B")
+
     faded_emissive = expression(material, unreal.MaterialExpressionMultiply, -180, 0)
     MEL.connect_material_expressions(multiply, "", faded_emissive, "A")
     MEL.connect_material_expressions(fade, "", faded_emissive, "B")
+    dimmed_emissive = expression(material, unreal.MaterialExpressionMultiply, -60, 40)
+    MEL.connect_material_expressions(faded_emissive, "", dimmed_emissive, "A")
+    MEL.connect_material_expressions(brightness, "", dimmed_emissive, "B")
     faded_opacity = expression(material, unreal.MaterialExpressionMultiply, -180, 260)
     MEL.connect_material_expressions(opacity, "", faded_opacity, "A")
     MEL.connect_material_expressions(fade, "", faded_opacity, "B")
 
-    MEL.connect_material_property(faded_emissive, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    MEL.connect_material_property(dimmed_emissive, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
     MEL.connect_material_property(faded_opacity, "", unreal.MaterialProperty.MP_OPACITY)
     MEL.recompile_material(material)
     save_asset(f"{MATERIAL_DIR}/M_HolographicSignal")

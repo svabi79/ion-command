@@ -31,8 +31,10 @@ AGeoArcLayerActor::AGeoArcLayerActor()
         Instances->SetStaticMesh(SegmentMesh.Object);
         Instances->SetCollisionEnabled(ECollisionEnabled::NoCollision);
         Instances->SetCastShadow(false);
-        // Custom data 0/1 carry spawn time and 1/lifetime for the GPU fade.
-        Instances->SetNumCustomDataFloats(2);
+        // Custom data 0/1 carry spawn time and 1/lifetime for the GPU fade;
+        // 2 carries the endpoint-congestion brightness (0 reads as 1 in the
+        // material so meshes without the slot stay at full brightness).
+        Instances->SetNumCustomDataFloats(3);
         if (UMaterialInterface* SignalMaterial = LoadObject<UMaterialInterface>(nullptr, *FString::Printf(TEXT("/Game/ION/Materials/MI_Signal_%02d.MI_Signal_%02d"), Index, Index)))
         {
             Instances->SetMaterial(0, SignalMaterial);
@@ -172,6 +174,13 @@ void AGeoArcLayerActor::Tick(float DeltaSeconds)
     // fully invisible before its instances are dropped.
     const double RenderNow = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
     const double AgeLimit = LifetimeSeconds + 0.5;
+    // Endpoint congestion decays on the same cadence so a hotspot recovers
+    // full brightness once its traffic subsides.
+    for (auto It = EndpointDensity.CreateIterator(); It; ++It)
+    {
+        It->Value *= 0.85f;
+        if (It->Value < 0.5f) It.RemoveCurrent();
+    }
     int32 ExpiredCount = 0;
     for (const FRenderedGeoArc& Arc : ActiveArcs) if (RenderNow - Arc.SpawnTimeSeconds > AgeLimit) ++ExpiredCount;
     if (ExpiredCount > FMath::Max(32, ActiveArcs.Num() / 20))
@@ -205,6 +214,22 @@ void AGeoArcLayerActor::Submit(const FGeoMessageEnvelope& Message)
     Arc.AddedUtc = Message.Time.ObservedUtc.GetTicks() > 0 ? Message.Time.ObservedUtc : FDateTime::UtcNow();
     Arc.SpawnTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
     Arc.PaletteIndex = ResolvePaletteIndex(Message);
+    // Endpoint congestion (a skimmer hearing hundreds of stations) dims the
+    // segments near that endpoint with the square root of its arc count;
+    // the rest of the path keeps full brightness and color.
+    auto BumpDensity = [this](const FString& EntityId) -> float
+    {
+        if (EntityId.IsEmpty()) return 0.0f;
+        if (float* Density = EndpointDensity.Find(EntityId)) return *Density += 1.0f;
+        if (EndpointDensity.Num() >= 8192) return 0.0f;
+        return EndpointDensity.Add(EntityId, 1.0f);
+    };
+    auto EndBrightness = [](float Density)
+    {
+        return Density > 16.0f ? FMath::Clamp(4.0f / FMath::Sqrt(Density), 0.25f, 1.0f) : 1.0f;
+    };
+    Arc.BrightnessFrom = EndBrightness(BumpDensity(Message.FromEntityId));
+    Arc.BrightnessTo = EndBrightness(BumpDensity(Message.ToEntityId));
     if (!bNeedsRebuild)
     {
         AddArcInstances(Arc);
@@ -214,6 +239,7 @@ void AGeoArcLayerActor::Submit(const FGeoMessageEnvelope& Message)
 void AGeoArcLayerActor::Reset()
 {
     ActiveArcs.Reset();
+    EndpointDensity.Reset();
     for (UInstancedStaticMeshComponent* Instances : PaletteMeshes) Instances->ClearInstances();
     SelectionMesh->ClearInstances();
     EndpointMesh->ClearInstances();
@@ -251,12 +277,25 @@ void AGeoArcLayerActor::AddArcInstances(const FRenderedGeoArc& Arc)
     AppendArcTransforms(Transforms, Arc.Message, ArcThickness);
     const TArray<int32> Indices = Instances->AddInstances(Transforms, true, true);
     const float InverseLifetime = LifetimeSeconds > 0.0 ? static_cast<float>(1.0 / LifetimeSeconds) : 0.0f;
-    for (const int32 InstanceIndex : Indices)
+    for (int32 Segment = 0; Segment < Indices.Num(); ++Segment)
     {
-        Instances->SetCustomDataValue(InstanceIndex, 0, static_cast<float>(Arc.SpawnTimeSeconds), false);
-        Instances->SetCustomDataValue(InstanceIndex, 1, InverseLifetime, false);
+        Instances->SetCustomDataValue(Indices[Segment], 0, static_cast<float>(Arc.SpawnTimeSeconds), false);
+        Instances->SetCustomDataValue(Indices[Segment], 1, InverseLifetime, false);
+        Instances->SetCustomDataValue(Indices[Segment], 2, SegmentBrightness(Arc, Segment), false);
     }
     Instances->MarkRenderStateDirty();
+}
+
+float AGeoArcLayerActor::SegmentBrightness(const FRenderedGeoArc& Arc, int32 Segment) const
+{
+    // Fade in over the outer 40% toward each congested end; mid-path
+    // segments always render at full brightness.
+    const float Alpha = (Segment + 0.5f) / FMath::Max(SegmentsPerArc, 1);
+    const float ToRamp = FMath::Clamp((Alpha - 0.6f) / 0.4f, 0.0f, 1.0f);
+    const float FromRamp = FMath::Clamp((0.4f - Alpha) / 0.4f, 0.0f, 1.0f);
+    const float ToFactor = FMath::Lerp(1.0f, Arc.BrightnessTo, ToRamp);
+    const float FromFactor = FMath::Lerp(1.0f, Arc.BrightnessFrom, FromRamp);
+    return FMath::Min(ToFactor, FromFactor);
 }
 
 void AGeoArcLayerActor::AddArcInstancesTo(UInstancedStaticMeshComponent* Instances, const FGeoMessageEnvelope& Message, double Thickness)
@@ -366,8 +405,10 @@ void AGeoArcLayerActor::RebuildInstances()
     // per segment; this keeps full rebuilds affordable at firehose feed rates.
     TArray<TArray<FTransform>> PerPalette;
     TArray<TArray<float>> PerPaletteSpawnTimes;
+    TArray<TArray<float>> PerPaletteBrightness;
     PerPalette.SetNum(PaletteMeshes.Num());
     PerPaletteSpawnTimes.SetNum(PaletteMeshes.Num());
+    PerPaletteBrightness.SetNum(PaletteMeshes.Num());
     for (const FRenderedGeoArc& Arc : ActiveArcs)
     {
         const int32 PaletteIndex = PaletteMeshes.IsValidIndex(Arc.PaletteIndex) ? Arc.PaletteIndex : PaletteMeshes.Num() - 1;
@@ -375,6 +416,7 @@ void AGeoArcLayerActor::RebuildInstances()
         for (int32 Segment = 0; Segment < SegmentsPerArc; ++Segment)
         {
             PerPaletteSpawnTimes[PaletteIndex].Add(static_cast<float>(Arc.SpawnTimeSeconds));
+            PerPaletteBrightness[PaletteIndex].Add(SegmentBrightness(Arc, Segment));
         }
     }
     const float InverseLifetime = LifetimeSeconds > 0.0 ? static_cast<float>(1.0 / LifetimeSeconds) : 0.0f;
@@ -387,6 +429,7 @@ void AGeoArcLayerActor::RebuildInstances()
         {
             Instances->SetCustomDataValue(Added[AddedIndex], 0, PerPaletteSpawnTimes[Index][AddedIndex], false);
             Instances->SetCustomDataValue(Added[AddedIndex], 1, InverseLifetime, false);
+            Instances->SetCustomDataValue(Added[AddedIndex], 2, PerPaletteBrightness[Index][AddedIndex], false);
         }
         Instances->MarkRenderStateDirty();
     }
