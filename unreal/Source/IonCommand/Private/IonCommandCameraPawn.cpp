@@ -6,6 +6,8 @@
 #include "GameFramework/SpringArmComponent.h"
 #include "GeoMathLibrary.h"
 #include "GeoReplaySubsystem.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
 #include "GeoSelectionSubsystem.h"
 #include "GeoTimelineSubsystem.h"
 
@@ -38,6 +40,22 @@ AIonCommandCameraPawn::AIonCommandCameraPawn()
 void AIonCommandCameraPawn::BeginPlay()
 {
     Super::BeginPlay();
+    // -IonCameraDistance=<units> pins the orbit distance for unattended
+    // captures (e.g. zoom-quality proofs).
+    double CameraDistance = 0.0;
+    if (FParse::Value(FCommandLine::Get(), TEXT("IonCameraDistance="), CameraDistance) && CameraDistance > 0.0)
+    {
+        SpringArm->TargetArmLength = FMath::Clamp(static_cast<float>(CameraDistance), 1450.0f, 6500.0f);
+    }
+    // -IonCameraLongitude=<deg> centers the given longitude for captures.
+    // The camera looks along the pawn's negative forward axis (the spring arm
+    // extends forward past the globe), hence yaw = -90 - longitude, verified
+    // against captures.
+    double CameraLongitude = 0.0;
+    if (FParse::Value(FCommandLine::Get(), TEXT("IonCameraLongitude="), CameraLongitude))
+    {
+        SetActorRotation(FRotator(0.0, -90.0 - CameraLongitude, 0.0));
+    }
     if (UGeoSelectionSubsystem* Selection = GetGameInstance()->GetSubsystem<UGeoSelectionSubsystem>())
     {
         Selection->OnSelectionChanged.AddDynamic(this, &AIonCommandCameraPawn::HandleSelectionChanged);

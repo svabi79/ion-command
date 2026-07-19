@@ -53,11 +53,10 @@ def import_texture(source: Path, asset_name: str) -> unreal.Texture2D:
     if not source.exists():
         raise RuntimeError(f"Missing visual source texture: {source}")
     asset_path = f"{TEXTURE_DIR}/{asset_name}"
-    existing = unreal.load_asset(asset_path)
-    if existing:
-        existing.set_editor_property("never_stream", True)
-        save_asset(asset_path)
-        return existing
+    # Always reimport: a cached asset would silently keep an outdated source
+    # resolution (the 2048 -> 4096 upgrade was invisible until forced).
+    if unreal.EditorAssetLibrary.does_asset_exist(asset_path):
+        unreal.EditorAssetLibrary.delete_asset(asset_path)
 
     task = unreal.AssetImportTask()
     task.set_editor_property("filename", str(source))
@@ -354,8 +353,8 @@ def main() -> None:
     unreal.EditorLevelLibrary.new_level("/Game/ION/Maps/L_TransientRebuild")
     unreal.SystemLibrary.collect_garbage()
 
-    day = import_texture(SOURCE_DIR / "NASA" / "bluemarble-2048.png", "T_EarthDay")
-    night = import_texture(SOURCE_DIR / "NASA" / "earthatnight-2048.png", "T_EarthNight")
+    day = import_texture(SOURCE_DIR / "NASA" / "bluemarble-4096.png", "T_EarthDay")
+    night = import_texture(SOURCE_DIR / "NASA" / "earthatnight-4096.png", "T_EarthNight")
     stars = import_texture(SOURCE_DIR / "Generated" / "starfield.png", "T_Starfield")
     build_earth_master(day, night)
     build_starfield_master(stars)

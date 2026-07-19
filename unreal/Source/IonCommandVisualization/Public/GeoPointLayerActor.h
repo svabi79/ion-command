@@ -19,19 +19,25 @@ public:
     virtual void PostRegisterAllComponents() override;
     virtual void BeginPlay() override;
     virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+    virtual void Tick(float DeltaSeconds) override;
     virtual bool Supports(const FGeoMessageEnvelope& Message) const override;
     virtual void Submit(const FGeoMessageEnvelope& Message) override;
     virtual void Reset() override;
 
     UPROPERTY(EditAnywhere, Category="ION COMMAND|Layer") double GlobeRadius = 1000.0;
     UPROPERTY(EditAnywhere, Category="ION COMMAND|Layer") int32 MaxVisiblePoints = 25000;
+    UPROPERTY(EditAnywhere, Category="ION COMMAND|Layer") double MarkerScale = 0.14;
 
 private:
     void OnMessageAccepted(const FGeoMessageEnvelope& Message);
     void BuildEditorPreview();
     void OnLayerVisibilityChanged(const FString& LayerId, bool bVisible);
+    void ApplyZoomFactor(UInstancedStaticMeshComponent* Instances) const;
     UPROPERTY(VisibleAnywhere) TObjectPtr<USceneComponent> SceneRoot;
     UPROPERTY(VisibleAnywhere) TObjectPtr<UInstancedStaticMeshComponent> EntityInstances;
     UPROPERTY(VisibleAnywhere) TObjectPtr<UInstancedStaticMeshComponent> ObservationInstances;
     TWeakObjectPtr<UGeoDataSubsystem> DataSubsystem;
+    // Markers keep a roughly constant screen size: world scale follows the
+    // camera distance instead of ballooning when the operator zooms in.
+    double CurrentZoomFactor = 1.0;
 };

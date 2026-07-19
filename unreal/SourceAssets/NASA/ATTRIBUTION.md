@@ -1,14 +1,16 @@
 # NASA source texture attribution
 
-`bluemarble-2048.png` is NASA's Blue Marble seamless global mosaic. Credit:
-NASA/Goddard Space Flight Center Scientific Visualization Studio; Blue Marble
-Next Generation data courtesy of Reto Stockli (NASA/GSFC) and NASA's Earth
-Observatory.
+Both files are produced by `tools/fetch-earth-textures.py` (download plus a
+Lanczos resize to the power-of-two 4096x2048 the engine needs for mips).
 
-Source: https://svs.gsfc.nasa.gov/2915/
+`bluemarble-4096.png` is NASA's Blue Marble Next Generation with topography
+and bathymetry, July 2004, 5400x2700. Credit: NASA Earth Observatory; Blue
+Marble Next Generation data courtesy of Reto Stockli (NASA/GSFC).
 
-`earthatnight-2048.png` is the NASA/GSFC Earth at Night global mosaic. Data
-courtesy Marc Imhoff (NASA/GSFC) and Christopher Elvidge (NOAA/NGDC); image by
-Craig Mayhew (NASA/GSFC) and Robert Simmon (NASA/GSFC).
+Source: https://eoimages.gsfc.nasa.gov/images/imagerecords/73000/73751/world.topo.bathy.200407.3x5400x2700.jpg
 
-Source: https://svs.gsfc.nasa.gov/2916/
+`earthatnight-4096.png` is NASA's Black Marble 2016 night lights mosaic
+(3 km grid, 13500x6750). Credit: NASA Earth Observatory / NOAA NCEI; imagery
+by Joshua Stevens using Suomi NPP VIIRS data from Miguel Roman (NASA/GSFC).
+
+Source: https://eoimages.gsfc.nasa.gov/images/imagerecords/144000/144898/BlackMarble_2016_3km.jpg
