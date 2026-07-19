@@ -139,8 +139,17 @@ def build_signal_master() -> unreal.Material:
     normalized = expression(material, unreal.MaterialExpressionMultiply, -580, 420)
     MEL.connect_material_expressions(age, "", normalized, "A")
     MEL.connect_material_expressions(inv_lifetime, "", normalized, "B")
+    clamped_age = expression(material, unreal.MaterialExpressionSaturate, -520, 500)
+    MEL.connect_material_expressions(normalized, "", clamped_age, "")
+    # Cubic age curve: stays near full brightness for most of the lifetime,
+    # then drops off steeply at the end.
+    steepness = expression(material, unreal.MaterialExpressionConstant, -520, 580)
+    steepness.set_editor_property("r", 3.0)
+    curved_age = expression(material, unreal.MaterialExpressionPower, -440, 500)
+    MEL.connect_material_expressions(clamped_age, "", curved_age, "Base")
+    MEL.connect_material_expressions(steepness, "", curved_age, "Exponent")
     inverted = expression(material, unreal.MaterialExpressionOneMinus, -450, 420)
-    MEL.connect_material_expressions(normalized, "", inverted, "")
+    MEL.connect_material_expressions(curved_age, "", inverted, "")
     fade = expression(material, unreal.MaterialExpressionSaturate, -330, 420)
     MEL.connect_material_expressions(inverted, "", fade, "")
 
