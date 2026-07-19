@@ -12,18 +12,41 @@ from _ion_common import ensure_directory, save_asset
 MATERIAL_DIR = "/Game/ION/Materials"
 TEXTURE_DIR = "/Game/ION/Textures"
 SOURCE_DIR = Path(__file__).resolve().parents[1] / "SourceAssets"
+MEL = unreal.MaterialEditingLibrary
 
 
-def create_material(name: str) -> tuple[unreal.Material, bool]:
+def ensure_material(name: str) -> unreal.Material:
+    """Delete and recreate the named master so every run rebuilds the graph
+    deterministically. Editing expressions of a live material asserts in 5.8,
+    so main() first switches to an empty transient level and collects garbage.
+    """
     path = f"{MATERIAL_DIR}/{name}"
-    existing = unreal.load_asset(path)
-    if existing:
-        return existing, False
+    if unreal.EditorAssetLibrary.does_asset_exist(path):
+        if not unreal.EditorAssetLibrary.delete_asset(path):
+            raise RuntimeError(f"Could not delete {path} for rebuild")
     tools = unreal.AssetToolsHelpers.get_asset_tools()
     material = tools.create_asset(name, MATERIAL_DIR, unreal.Material, unreal.MaterialFactoryNew())
     if material is None:
         raise RuntimeError(f"Could not create {path}")
-    return material, True
+    return material
+
+
+def expression(material, kind, x, y):
+    return MEL.create_material_expression(material, kind, x, y)
+
+
+def scalar(material, name, default, x, y):
+    node = expression(material, unreal.MaterialExpressionScalarParameter, x, y)
+    node.set_editor_property("parameter_name", name)
+    node.set_editor_property("default_value", default)
+    return node
+
+
+def vector(material, name, default, x, y):
+    node = expression(material, unreal.MaterialExpressionVectorParameter, x, y)
+    node.set_editor_property("parameter_name", name)
+    node.set_editor_property("default_value", default)
+    return node
 
 
 def import_texture(source: Path, asset_name: str) -> unreal.Texture2D:
@@ -52,120 +75,147 @@ def import_texture(source: Path, asset_name: str) -> unreal.Texture2D:
     return imported
 
 
-def create_translucent_master() -> unreal.Material:
-    path = f"{MATERIAL_DIR}/M_HolographicShell"
-    material, created = create_material("M_HolographicShell")
-    if not created:
-        return material
-
+def build_shell_master() -> unreal.Material:
+    """Translucent hologram shell: colour appears only on the fresnel rim, so
+    spheres read as atmosphere/field volumes instead of solid glass balls."""
+    material = ensure_material("M_HolographicShell")
     material.set_editor_property("blend_mode", unreal.BlendMode.BLEND_TRANSLUCENT)
+    material.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
     material.set_editor_property("two_sided", True)
-    color = unreal.MaterialEditingLibrary.create_material_expression(material, unreal.MaterialExpressionVectorParameter, -600, -100)
-    color.set_editor_property("parameter_name", "Color")
-    color.set_editor_property("default_value", unreal.LinearColor(0.0, 0.55, 1.0, 1.0))
-    fresnel = unreal.MaterialEditingLibrary.create_material_expression(material, unreal.MaterialExpressionFresnel, -600, 150)
-    opacity = unreal.MaterialEditingLibrary.create_material_expression(material, unreal.MaterialExpressionScalarParameter, -600, 330)
-    opacity.set_editor_property("parameter_name", "Opacity")
-    opacity.set_editor_property("default_value", 0.12)
-    multiply = unreal.MaterialEditingLibrary.create_material_expression(material, unreal.MaterialExpressionMultiply, -300, 100)
-    unreal.MaterialEditingLibrary.connect_material_expressions(color, "", multiply, "A")
-    unreal.MaterialEditingLibrary.connect_material_expressions(fresnel, "", multiply, "B")
-    unreal.MaterialEditingLibrary.connect_material_property(multiply, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
-    unreal.MaterialEditingLibrary.connect_material_property(opacity, "", unreal.MaterialProperty.MP_OPACITY)
-    unreal.MaterialEditingLibrary.recompile_material(material)
-    save_asset(path)
+
+    color = vector(material, "Color", unreal.LinearColor(0.0, 0.55, 1.0, 1.0), -800, -150)
+    intensity = scalar(material, "Intensity", 1.6, -800, 40)
+    opacity = scalar(material, "Opacity", 0.35, -800, 400)
+    rim_exponent = scalar(material, "RimExponent", 3.2, -800, 220)
+
+    fresnel = expression(material, unreal.MaterialExpressionFresnel, -560, 150)
+    rim = expression(material, unreal.MaterialExpressionPower, -420, 150)
+    MEL.connect_material_expressions(fresnel, "", rim, "Base")
+    MEL.connect_material_expressions(rim_exponent, "", rim, "Exponent")
+
+    tinted = expression(material, unreal.MaterialExpressionMultiply, -420, -80)
+    MEL.connect_material_expressions(color, "", tinted, "A")
+    MEL.connect_material_expressions(intensity, "", tinted, "B")
+    emissive = expression(material, unreal.MaterialExpressionMultiply, -240, 0)
+    MEL.connect_material_expressions(tinted, "", emissive, "A")
+    MEL.connect_material_expressions(rim, "", emissive, "B")
+
+    rim_opacity = expression(material, unreal.MaterialExpressionMultiply, -240, 330)
+    MEL.connect_material_expressions(opacity, "", rim_opacity, "A")
+    MEL.connect_material_expressions(rim, "", rim_opacity, "B")
+
+    MEL.connect_material_property(emissive, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    MEL.connect_material_property(rim_opacity, "", unreal.MaterialProperty.MP_OPACITY)
+    MEL.recompile_material(material)
+    save_asset(f"{MATERIAL_DIR}/M_HolographicShell")
     return material
 
 
-def create_signal_master() -> unreal.Material:
-    path = f"{MATERIAL_DIR}/M_HolographicSignal"
-    material, created = create_material("M_HolographicSignal")
-    if not created:
-        material.set_editor_property("used_with_instanced_static_meshes", True)
-        unreal.MaterialEditingLibrary.recompile_material(material)
-        save_asset(path)
-        return material
-
+def build_signal_master() -> unreal.Material:
+    material = ensure_material("M_HolographicSignal")
     material.set_editor_property("blend_mode", unreal.BlendMode.BLEND_ADDITIVE)
     material.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
     material.set_editor_property("two_sided", True)
     material.set_editor_property("used_with_instanced_static_meshes", True)
-    color = unreal.MaterialEditingLibrary.create_material_expression(material, unreal.MaterialExpressionVectorParameter, -650, -120)
-    color.set_editor_property("parameter_name", "Color")
-    color.set_editor_property("default_value", unreal.LinearColor(0.0, 0.8, 1.0, 1.0))
-    intensity = unreal.MaterialEditingLibrary.create_material_expression(material, unreal.MaterialExpressionScalarParameter, -650, 60)
-    intensity.set_editor_property("parameter_name", "Intensity")
-    intensity.set_editor_property("default_value", 3.0)
-    opacity = unreal.MaterialEditingLibrary.create_material_expression(material, unreal.MaterialExpressionScalarParameter, -650, 240)
-    opacity.set_editor_property("parameter_name", "Opacity")
-    opacity.set_editor_property("default_value", 0.85)
-    multiply = unreal.MaterialEditingLibrary.create_material_expression(material, unreal.MaterialExpressionMultiply, -330, -70)
-    unreal.MaterialEditingLibrary.connect_material_expressions(color, "", multiply, "A")
-    unreal.MaterialEditingLibrary.connect_material_expressions(intensity, "", multiply, "B")
-    unreal.MaterialEditingLibrary.connect_material_property(multiply, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
-    unreal.MaterialEditingLibrary.connect_material_property(opacity, "", unreal.MaterialProperty.MP_OPACITY)
-    unreal.MaterialEditingLibrary.recompile_material(material)
-    save_asset(path)
+
+    color = vector(material, "Color", unreal.LinearColor(0.0, 0.8, 1.0, 1.0), -650, -120)
+    intensity = scalar(material, "Intensity", 3.0, -650, 60)
+    opacity = scalar(material, "Opacity", 0.85, -650, 240)
+    multiply = expression(material, unreal.MaterialExpressionMultiply, -330, -70)
+    MEL.connect_material_expressions(color, "", multiply, "A")
+    MEL.connect_material_expressions(intensity, "", multiply, "B")
+    MEL.connect_material_property(multiply, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    MEL.connect_material_property(opacity, "", unreal.MaterialProperty.MP_OPACITY)
+    MEL.recompile_material(material)
+    save_asset(f"{MATERIAL_DIR}/M_HolographicSignal")
     return material
 
 
-def create_earth_material(day_texture: unreal.Texture2D, night_texture: unreal.Texture2D) -> unreal.Material:
-    path = f"{MATERIAL_DIR}/M_EarthSurface"
-    material, created = create_material("M_EarthSurface")
-    if not created:
-        return material
-
+def build_earth_master(day_texture, night_texture) -> unreal.Material:
+    """Physically plausible globe: day albedo, city lights masked to the true
+    night side via the SunDirection parameter, glossy oceans, matte land."""
+    material = ensure_material("M_EarthSurface")
+    material.set_editor_property("blend_mode", unreal.BlendMode.BLEND_OPAQUE)
+    material.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_DEFAULT_LIT)
     material.set_editor_property("two_sided", False)
-    day = unreal.MaterialEditingLibrary.create_material_expression(material, unreal.MaterialExpressionTextureSample, -720, -150)
+
+    day = expression(material, unreal.MaterialExpressionTextureSample, -1050, -260)
     day.set_editor_property("texture", day_texture)
-    night = unreal.MaterialEditingLibrary.create_material_expression(material, unreal.MaterialExpressionTextureSample, -720, 140)
+    night = expression(material, unreal.MaterialExpressionTextureSample, -1050, 60)
     night.set_editor_property("texture", night_texture)
-    night_strength = unreal.MaterialEditingLibrary.create_material_expression(material, unreal.MaterialExpressionScalarParameter, -480, 300)
-    night_strength.set_editor_property("parameter_name", "NightIntensity")
-    night_strength.set_editor_property("default_value", 1.8)
-    night_emissive = unreal.MaterialEditingLibrary.create_material_expression(material, unreal.MaterialExpressionMultiply, -250, 120)
-    roughness = unreal.MaterialEditingLibrary.create_material_expression(material, unreal.MaterialExpressionScalarParameter, -250, 350)
-    roughness.set_editor_property("parameter_name", "Roughness")
-    roughness.set_editor_property("default_value", 0.62)
-    unreal.MaterialEditingLibrary.connect_material_expressions(night, "RGB", night_emissive, "A")
-    unreal.MaterialEditingLibrary.connect_material_expressions(night_strength, "", night_emissive, "B")
-    unreal.MaterialEditingLibrary.connect_material_property(day, "RGB", unreal.MaterialProperty.MP_BASE_COLOR)
-    unreal.MaterialEditingLibrary.connect_material_property(night_emissive, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
-    unreal.MaterialEditingLibrary.connect_material_property(roughness, "", unreal.MaterialProperty.MP_ROUGHNESS)
-    unreal.MaterialEditingLibrary.recompile_material(material)
-    save_asset(path)
+
+    # Night mask: saturate(-dot(PixelNormalWS, SunDirection)) ^ 0.65 keeps a
+    # soft terminator and zero city lights on the day side.
+    sun_direction = vector(material, "SunDirection", unreal.LinearColor(1.0, 0.0, 0.0, 0.0), -1050, 330)
+    normal = expression(material, unreal.MaterialExpressionPixelNormalWS, -1050, 500)
+    dot_node = expression(material, unreal.MaterialExpressionDotProduct, -840, 400)
+    MEL.connect_material_expressions(normal, "", dot_node, "A")
+    MEL.connect_material_expressions(sun_direction, "", dot_node, "B")
+    negate = expression(material, unreal.MaterialExpressionMultiply, -700, 420)
+    minus_one = expression(material, unreal.MaterialExpressionConstant, -840, 560)
+    minus_one.set_editor_property("r", -1.0)
+    MEL.connect_material_expressions(dot_node, "", negate, "A")
+    MEL.connect_material_expressions(minus_one, "", negate, "B")
+    clamped = expression(material, unreal.MaterialExpressionSaturate, -560, 420)
+    MEL.connect_material_expressions(negate, "", clamped, "")
+    softness = expression(material, unreal.MaterialExpressionConstant, -560, 560)
+    softness.set_editor_property("r", 0.65)
+    night_mask = expression(material, unreal.MaterialExpressionPower, -430, 440)
+    MEL.connect_material_expressions(clamped, "", night_mask, "Base")
+    MEL.connect_material_expressions(softness, "", night_mask, "Exponent")
+
+    night_strength = scalar(material, "NightIntensity", 2.4, -700, 180)
+    night_scaled = expression(material, unreal.MaterialExpressionMultiply, -520, 120)
+    MEL.connect_material_expressions(night, "RGB", night_scaled, "A")
+    MEL.connect_material_expressions(night_strength, "", night_scaled, "B")
+    night_emissive = expression(material, unreal.MaterialExpressionMultiply, -300, 200)
+    MEL.connect_material_expressions(night_scaled, "", night_emissive, "A")
+    MEL.connect_material_expressions(night_mask, "", night_emissive, "B")
+
+    # Ocean gloss: blue-dominant day pixels become smooth, land stays matte.
+    blue_minus_red = expression(material, unreal.MaterialExpressionSubtract, -840, -80)
+    MEL.connect_material_expressions(day, "B", blue_minus_red, "A")
+    MEL.connect_material_expressions(day, "R", blue_minus_red, "B")
+    ocean_gain = expression(material, unreal.MaterialExpressionConstant, -840, 20)
+    ocean_gain.set_editor_property("r", 4.0)
+    ocean_scaled = expression(material, unreal.MaterialExpressionMultiply, -700, -60)
+    MEL.connect_material_expressions(blue_minus_red, "", ocean_scaled, "A")
+    MEL.connect_material_expressions(ocean_gain, "", ocean_scaled, "B")
+    ocean_mask = expression(material, unreal.MaterialExpressionSaturate, -560, -60)
+    MEL.connect_material_expressions(ocean_scaled, "", ocean_mask, "")
+    rough_land = scalar(material, "LandRoughness", 0.88, -560, -220)
+    rough_ocean = scalar(material, "OceanRoughness", 0.32, -560, -140)
+    roughness = expression(material, unreal.MaterialExpressionLinearInterpolate, -380, -140)
+    MEL.connect_material_expressions(rough_land, "", roughness, "A")
+    MEL.connect_material_expressions(rough_ocean, "", roughness, "B")
+    MEL.connect_material_expressions(ocean_mask, "", roughness, "Alpha")
+
+    MEL.connect_material_property(day, "RGB", unreal.MaterialProperty.MP_BASE_COLOR)
+    MEL.connect_material_property(night_emissive, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    MEL.connect_material_property(roughness, "", unreal.MaterialProperty.MP_ROUGHNESS)
+    MEL.recompile_material(material)
+    save_asset(f"{MATERIAL_DIR}/M_EarthSurface")
     return material
 
 
-def create_starfield_material(texture: unreal.Texture2D) -> unreal.Material:
-    path = f"{MATERIAL_DIR}/M_Starfield"
-    material, created = create_material("M_Starfield")
-    if not created:
-        return material
-
+def build_starfield_master(texture) -> unreal.Material:
+    material = ensure_material("M_Starfield")
+    material.set_editor_property("blend_mode", unreal.BlendMode.BLEND_OPAQUE)
     material.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
     material.set_editor_property("two_sided", True)
-    sample = unreal.MaterialEditingLibrary.create_material_expression(material, unreal.MaterialExpressionTextureSample, -600, -80)
+    sample = expression(material, unreal.MaterialExpressionTextureSample, -600, -80)
     sample.set_editor_property("texture", texture)
-    strength = unreal.MaterialEditingLibrary.create_material_expression(material, unreal.MaterialExpressionScalarParameter, -600, 150)
-    strength.set_editor_property("parameter_name", "Intensity")
-    strength.set_editor_property("default_value", 1.4)
-    emissive = unreal.MaterialEditingLibrary.create_material_expression(material, unreal.MaterialExpressionMultiply, -280, -20)
-    unreal.MaterialEditingLibrary.connect_material_expressions(sample, "RGB", emissive, "A")
-    unreal.MaterialEditingLibrary.connect_material_expressions(strength, "", emissive, "B")
-    unreal.MaterialEditingLibrary.connect_material_property(emissive, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
-    unreal.MaterialEditingLibrary.recompile_material(material)
-    save_asset(path)
+    strength = scalar(material, "Intensity", 0.8, -600, 150)
+    emissive = expression(material, unreal.MaterialExpressionMultiply, -280, -20)
+    MEL.connect_material_expressions(sample, "RGB", emissive, "A")
+    MEL.connect_material_expressions(strength, "", emissive, "B")
+    MEL.connect_material_property(emissive, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    MEL.recompile_material(material)
+    save_asset(f"{MATERIAL_DIR}/M_Starfield")
     return material
 
 
-def create_instance(
-    name: str,
-    parent: unreal.Material,
-    color: unreal.LinearColor,
-    opacity: float,
-    intensity: float | None = None,
-) -> None:
+def create_instance(name, parent, color, opacity, intensity=None, rim_exponent=None) -> None:
     path = f"{MATERIAL_DIR}/{name}"
     instance = unreal.load_asset(path)
     if instance is None:
@@ -173,11 +223,13 @@ def create_instance(
         instance = tools.create_asset(name, MATERIAL_DIR, unreal.MaterialInstanceConstant, unreal.MaterialInstanceConstantFactoryNew())
         if instance is None:
             raise RuntimeError(f"Could not create {path}")
-    unreal.MaterialEditingLibrary.set_material_instance_parent(instance, parent)
-    unreal.MaterialEditingLibrary.set_material_instance_vector_parameter_value(instance, "Color", color)
-    unreal.MaterialEditingLibrary.set_material_instance_scalar_parameter_value(instance, "Opacity", opacity)
+    MEL.set_material_instance_parent(instance, parent)
+    MEL.set_material_instance_vector_parameter_value(instance, "Color", color)
+    MEL.set_material_instance_scalar_parameter_value(instance, "Opacity", opacity)
     if intensity is not None:
-        unreal.MaterialEditingLibrary.set_material_instance_scalar_parameter_value(instance, "Intensity", intensity)
+        MEL.set_material_instance_scalar_parameter_value(instance, "Intensity", intensity)
+    if rim_exponent is not None:
+        MEL.set_material_instance_scalar_parameter_value(instance, "RimExponent", rim_exponent)
     save_asset(path)
 
 
@@ -185,26 +237,36 @@ def main() -> None:
     ensure_directory(MATERIAL_DIR)
     ensure_directory(TEXTURE_DIR)
 
+    # Release every level reference to the ION materials before rebuilding
+    # them: a loaded command-deck level roots the assets and deletion asserts.
+    unreal.EditorLevelLibrary.new_level("/Game/ION/Maps/L_TransientRebuild")
+    unreal.SystemLibrary.collect_garbage()
+
     day = import_texture(SOURCE_DIR / "NASA" / "bluemarble-2048.png", "T_EarthDay")
     night = import_texture(SOURCE_DIR / "NASA" / "earthatnight-2048.png", "T_EarthNight")
     stars = import_texture(SOURCE_DIR / "Generated" / "starfield.png", "T_Starfield")
-    create_earth_material(day, night)
-    create_starfield_material(stars)
+    build_earth_master(day, night)
+    build_starfield_master(stars)
 
-    shell = create_translucent_master()
-    create_instance("MI_Atmosphere", shell, unreal.LinearColor(0.0, 0.35, 1.0, 1.0), 0.08)
-    create_instance("MI_Ionosphere", shell, unreal.LinearColor(0.0, 0.8, 1.0, 1.0), 0.035)
+    shell = build_shell_master()
+    create_instance("MI_Atmosphere", shell, unreal.LinearColor(0.12, 0.45, 1.0, 1.0), 0.62, intensity=2.4, rim_exponent=2.6)
+    create_instance("MI_Ionosphere", shell, unreal.LinearColor(0.0, 0.85, 1.0, 1.0), 0.10, intensity=1.0, rim_exponent=4.0)
 
-    signal = create_signal_master()
+    signal = build_signal_master()
     for index in range(11):
-        red, green, blue = colorsys.hsv_to_rgb(index / 11.0, 0.86, 1.0)
-        create_instance(f"MI_Signal_{index:02d}", signal, unreal.LinearColor(red, green, blue, 1.0), 0.88, 3.4)
-    create_instance("MI_Signal_Selected", signal, unreal.LinearColor(0.78, 1.0, 1.0, 1.0), 1.0, 6.0)
-    create_instance("MI_Point_Entity", signal, unreal.LinearColor(0.0, 0.82, 1.0, 1.0), 0.95, 4.2)
-    create_instance("MI_Point_Observation", signal, unreal.LinearColor(1.0, 0.22, 0.03, 1.0), 1.0, 5.0)
-    create_instance("MI_Aurora_North", signal, unreal.LinearColor(0.02, 1.0, 0.38, 1.0), 0.36, 2.2)
-    create_instance("MI_Aurora_South", signal, unreal.LinearColor(0.08, 0.55, 1.0, 1.0), 0.32, 2.0)
-    create_instance("MI_Console", signal, unreal.LinearColor(0.0, 0.42, 1.0, 1.0), 0.18, 1.5)
+        red, green, blue = colorsys.hsv_to_rgb(index / 11.0, 0.72, 1.0)
+        create_instance(f"MI_Signal_{index:02d}", signal, unreal.LinearColor(red, green, blue, 1.0), 0.62, intensity=4.6)
+    create_instance("MI_Signal_Selected", signal, unreal.LinearColor(0.78, 1.0, 1.0, 1.0), 1.0, intensity=11.0)
+    create_instance("MI_Point_Entity", signal, unreal.LinearColor(0.0, 0.82, 1.0, 1.0), 0.8, intensity=3.2)
+    create_instance("MI_Point_Observation", signal, unreal.LinearColor(1.0, 0.32, 0.05, 1.0), 0.9, intensity=4.0)
+    create_instance("MI_Aurora_North", signal, unreal.LinearColor(0.02, 1.0, 0.38, 1.0), 0.22, intensity=1.6)
+    create_instance("MI_Aurora_South", signal, unreal.LinearColor(0.08, 0.55, 1.0, 1.0), 0.20, intensity=1.4)
+    create_instance("MI_Console", signal, unreal.LinearColor(0.0, 0.16, 0.42, 1.0), 0.30, intensity=0.5)
+
+    if unreal.EditorAssetLibrary.does_asset_exist("/Game/ION/Maps/L_CommandDeck"):
+        unreal.EditorLevelLibrary.load_level("/Game/ION/Maps/L_CommandDeck")
+    if unreal.EditorAssetLibrary.does_asset_exist("/Game/ION/Maps/L_TransientRebuild"):
+        unreal.EditorAssetLibrary.delete_asset("/Game/ION/Maps/L_TransientRebuild")
     unreal.log("ION COMMAND: visual material bootstrap complete")
 
 

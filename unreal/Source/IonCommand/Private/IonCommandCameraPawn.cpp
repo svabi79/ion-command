@@ -15,6 +15,19 @@ AIonCommandCameraPawn::AIonCommandCameraPawn()
     SceneRoot = CreateDefaultSubobject<USceneComponent>(TEXT("Root")); SetRootComponent(SceneRoot);
     SpringArm = CreateDefaultSubobject<USpringArmComponent>(TEXT("SpringArm")); SpringArm->SetupAttachment(SceneRoot); SpringArm->TargetArmLength = 3400.0f; SpringArm->bDoCollisionTest = false; SpringArm->SetRelativeRotation(FRotator(-7, 0, 0));
     Camera = CreateDefaultSubobject<UCameraComponent>(TEXT("Camera")); Camera->SetupAttachment(SpringArm, USpringArmComponent::SocketName); Camera->FieldOfView = 68.0f; Camera->bOverrideAspectRatioAxisConstraint = true; Camera->SetAspectRatioAxisConstraint(EAspectRatioAxisConstraint::AspectRatio_MaintainYFOV);
+    // Cinematic grade: fixed exposure so emissive holograms never pump, soft
+    // wide bloom for the light beams, and a gentle vignette for depth.
+    FPostProcessSettings& Grade = Camera->PostProcessSettings;
+    // Pin the histogram exposure instead of AEM_Manual: manual mode meters
+    // through the physical camera model and drowns this stylised scene.
+    Grade.bOverride_AutoExposureMinBrightness = true; Grade.AutoExposureMinBrightness = 1.0f;
+    Grade.bOverride_AutoExposureMaxBrightness = true; Grade.AutoExposureMaxBrightness = 1.0f;
+    Grade.bOverride_AutoExposureBias = true; Grade.AutoExposureBias = 0.3f;
+    Grade.bOverride_BloomIntensity = true; Grade.BloomIntensity = 1.1f;
+    Grade.bOverride_BloomThreshold = true; Grade.BloomThreshold = 0.35f;
+    Grade.bOverride_BloomSizeScale = true; Grade.BloomSizeScale = 5.5f;
+    Grade.bOverride_VignetteIntensity = true; Grade.VignetteIntensity = 0.38f;
+    Grade.bOverride_SceneFringeIntensity = true; Grade.SceneFringeIntensity = 0.3f;
     AutoPossessPlayer = EAutoReceiveInput::Player0;
 }
 

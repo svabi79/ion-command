@@ -57,15 +57,17 @@ void AIonAuroraActor::Tick(float DeltaSeconds)
 
 void AIonAuroraActor::BuildOval(UInstancedStaticMeshComponent* Instances, bool bNorth)
 {
-    constexpr int32 Samples = 180;
+    // Many small, flat, overlapping segments read as a continuous curtain
+    // instead of a chain of pearls.
+    constexpr int32 Samples = 320;
     for (int32 Index = 0; Index < Samples; ++Index)
     {
         const double Longitude = -180.0 + Index * (360.0 / Samples);
         const double Wave = FMath::Sin(FMath::DegreesToRadians(Longitude * 3.0)) * 3.5;
         const double Latitude = (bNorth ? 69.0 : -69.0) + Wave;
-        const FVector Location = UGeoMathLibrary::LatitudeLongitudeToUnitSphere(Latitude, Longitude) * 1032.0;
+        const FVector Location = UGeoMathLibrary::LatitudeLongitudeToUnitSphere(Latitude, Longitude) * 1030.0;
         const FQuat Rotation = FRotationMatrix::MakeFromZ(Location.GetSafeNormal()).ToQuat();
-        const FVector Scale(0.20, 0.035, 0.42 + 0.14 * FMath::Sin(Index * 0.31));
+        const FVector Scale(0.30, 0.016, 0.20 + 0.07 * FMath::Sin(Index * 0.31));
         Instances->AddInstance(FTransform(Rotation, Location, Scale), true);
     }
 }

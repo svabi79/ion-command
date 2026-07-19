@@ -153,6 +153,11 @@ void AGeoArcLayerActor::Tick(float DeltaSeconds)
 {
     Super::Tick(DeltaSeconds);
     RefreshSelectionHighlight();
+    if (bNeedsRebuild)
+    {
+        bNeedsRebuild = false;
+        RebuildInstances();
+    }
     const double Now = FPlatformTime::Seconds();
     if (Now - LastExpiryCheck < 2.0) return;
     LastExpiryCheck = Now;
@@ -174,14 +179,19 @@ void AGeoArcLayerActor::Submit(const FGeoMessageEnvelope& Message)
     if (!Supports(Message)) return;
     if (ActiveArcs.Num() >= MaxVisibleArcs)
     {
-        ActiveArcs.RemoveAt(0, FMath::Max(1, MaxVisibleArcs / 10), EAllowShrinking::No);
-        RebuildInstances();
+        // Trim without rebuilding: at firehose rates every submit would
+        // otherwise trigger a full instance rebuild. One rebuild per frame.
+        ActiveArcs.RemoveAt(0, FMath::Max(1, MaxVisibleArcs / 5), EAllowShrinking::No);
+        bNeedsRebuild = true;
     }
     FRenderedGeoArc& Arc = ActiveArcs.AddDefaulted_GetRef();
     Arc.Message = Message;
     Arc.AddedUtc = Message.Time.ObservedUtc.GetTicks() > 0 ? Message.Time.ObservedUtc : FDateTime::UtcNow();
     Arc.PaletteIndex = ResolvePaletteIndex(Message);
-    AddArcInstances(Arc);
+    if (!bNeedsRebuild)
+    {
+        AddArcInstances(Arc);
+    }
 }
 
 void AGeoArcLayerActor::Reset()
@@ -204,6 +214,14 @@ void AGeoArcLayerActor::AddArcInstances(const FRenderedGeoArc& Arc)
 
 void AGeoArcLayerActor::AddArcInstancesTo(UInstancedStaticMeshComponent* Instances, const FGeoMessageEnvelope& Message, double Thickness)
 {
+    TArray<FTransform> Transforms;
+    Transforms.Reserve(SegmentsPerArc);
+    AppendArcTransforms(Transforms, Message, Thickness);
+    Instances->AddInstances(Transforms, false, true);
+}
+
+void AGeoArcLayerActor::AppendArcTransforms(TArray<FTransform>& Out, const FGeoMessageEnvelope& Message, double Thickness) const
+{
     FVector Previous = CalculateArcPoint(Message, 0.0);
     for (int32 Segment = 1; Segment <= SegmentsPerArc; ++Segment)
     {
@@ -213,8 +231,7 @@ void AGeoArcLayerActor::AddArcInstancesTo(UInstancedStaticMeshComponent* Instanc
         const double Length = Delta.Size();
         const FVector Midpoint = (Previous + Current) * 0.5;
         const FRotator Rotation = FRotationMatrix::MakeFromZ(Delta.GetSafeNormal()).Rotator();
-        const FTransform Transform(Rotation, Midpoint, FVector(Thickness, Thickness, Length / 100.0));
-        Instances->AddInstance(Transform, true);
+        Out.Emplace(Rotation, Midpoint, FVector(Thickness, Thickness, Length / 100.0));
         Previous = Current;
     }
 }
@@ -225,7 +242,9 @@ FVector AGeoArcLayerActor::CalculateArcPoint(const FGeoMessageEnvelope& Message,
     const FGeoPosition& To = Message.Geometry.Positions.Last();
     const double DistanceKm = UGeoMathLibrary::GreatCircleDistanceKm(From, To);
     const double NormalizedDistance = FMath::Clamp(DistanceKm / 20000.0, 0.0, 1.0);
-    const double ArcHeight = FMath::Lerp(60.0, 650.0, FMath::Sin(NormalizedDistance * UE_PI));
+    // Keep even 20,000 km paths hugging the planet: tall arcs read as orbit
+    // rings instead of propagation paths once they clear the atmosphere.
+    const double ArcHeight = FMath::Lerp(22.0, 165.0, FMath::Sin(NormalizedDistance * UE_PI));
     const FGeoPosition Position = UGeoMathLibrary::GreatCircleInterpolation(From, To, Alpha);
     const double Radius = GlobeRadius + FMath::Sin(Alpha * UE_PI) * ArcHeight;
     return GetActorTransform().TransformPosition(UGeoMathLibrary::LatitudeLongitudeToUnitSphere(Position.Latitude, Position.Longitude) * Radius);
@@ -275,8 +294,8 @@ void AGeoArcLayerActor::RefreshSelectionHighlight()
         AddArcInstancesTo(SelectionMesh, Selected, SelectedArcThickness);
         const FVector FromLocation = CalculateArcPoint(Selected, 0.0);
         const FVector ToLocation = CalculateArcPoint(Selected, 1.0);
-        EndpointMesh->AddInstance(FTransform(FQuat::Identity, FromLocation, FVector(0.24)), true);
-        EndpointMesh->AddInstance(FTransform(FQuat::Identity, ToLocation, FVector(0.24)), true);
+        EndpointMesh->AddInstance(FTransform(FQuat::Identity, FromLocation, FVector(0.15)), true);
+        EndpointMesh->AddInstance(FTransform(FQuat::Identity, ToLocation, FVector(0.15)), true);
     }
     ApplySelectionDimming(!HighlightedMessageId.IsEmpty());
 }
@@ -296,8 +315,20 @@ void AGeoArcLayerActor::ApplySelectionDimming(bool bDim)
 
 void AGeoArcLayerActor::RebuildInstances()
 {
-    for (UInstancedStaticMeshComponent* Instances : PaletteMeshes) Instances->ClearInstances();
-    for (const FRenderedGeoArc& Arc : ActiveArcs) AddArcInstances(Arc);
+    // One bulk update per palette component instead of one render-state dirty
+    // per segment; this keeps full rebuilds affordable at firehose feed rates.
+    TArray<TArray<FTransform>> PerPalette;
+    PerPalette.SetNum(PaletteMeshes.Num());
+    for (const FRenderedGeoArc& Arc : ActiveArcs)
+    {
+        const int32 PaletteIndex = PaletteMeshes.IsValidIndex(Arc.PaletteIndex) ? Arc.PaletteIndex : PaletteMeshes.Num() - 1;
+        AppendArcTransforms(PerPalette[PaletteIndex], Arc.Message, ArcThickness);
+    }
+    for (int32 Index = 0; Index < PaletteMeshes.Num(); ++Index)
+    {
+        PaletteMeshes[Index]->ClearInstances();
+        PaletteMeshes[Index]->AddInstances(PerPalette[Index], false, true);
+    }
 }
 
 void AGeoArcLayerActor::OnLayerVisibilityChanged(const FString& LayerId, bool bVisible)
@@ -315,7 +346,7 @@ int32 AGeoArcLayerActor::ResolvePaletteIndex(const FGeoMessageEnvelope& Message)
 FLinearColor AGeoArcLayerActor::ResolvePaletteColor(int32 PaletteIndex) const
 {
     const uint8 Hue = static_cast<uint8>((PaletteIndex * 255) / PaletteSize);
-    return FLinearColor::MakeFromHSV8(Hue, 220, 255);
+    return FLinearColor::MakeFromHSV8(Hue, 185, 255);
 }
 
 FGeoLayerManifest AGeoArcLayerActor::CreateLayerManifest() const

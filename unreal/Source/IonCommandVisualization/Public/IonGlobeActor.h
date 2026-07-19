@@ -5,6 +5,7 @@
 #include "IonGlobeActor.generated.h"
 
 class UDirectionalLightComponent;
+class UMaterialInstanceDynamic;
 class UPointLightComponent;
 class USceneComponent;
 class UStaticMeshComponent;
@@ -29,4 +30,5 @@ private:
     UPROPERTY(VisibleAnywhere) TObjectPtr<UDirectionalLightComponent> SunLight;
     UPROPERTY(VisibleAnywhere) TObjectPtr<UDirectionalLightComponent> RimLight;
     UPROPERTY(VisibleAnywhere) TObjectPtr<UPointLightComponent> CoreGlow;
+    UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> EarthMID;
 };

@@ -28,6 +28,13 @@ go test ./...
 go run ./cmd/ion-collector -config ./configs/development.json
 ```
 
+For the real global PSKReporter feed (public MQTT broker, no credentials)
+use the live configuration instead — roughly 300–500 spots/second:
+
+```powershell
+go run ./cmd/ion-collector -config ./configs/live.json
+```
+
 Then open:
 
 - `http://127.0.0.1:7810/api/health`

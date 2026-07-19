@@ -20,6 +20,9 @@ AIonIonosphereActor::AIonIonosphereActor()
         if (ShellMaterial) Shell->SetMaterial(0, ShellMaterial);
         Shells.Add(Shell);
     }
+    // The conceptual shells start hidden so the showcase composition stays
+    // clean; the operator toggles them with the I key.
+    SetActorHiddenInGame(true);
 }
 
 void AIonIonosphereActor::Tick(float DeltaSeconds)

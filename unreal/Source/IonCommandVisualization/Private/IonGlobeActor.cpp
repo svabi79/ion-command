@@ -6,6 +6,7 @@
 #include "Components/StaticMeshComponent.h"
 #include "GeoMathLibrary.h"
 #include "GeoTimelineSubsystem.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
 #include "UObject/ConstructorHelpers.h"
 
@@ -35,7 +36,7 @@ AIonGlobeActor::AIonGlobeActor()
     Atmosphere = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Atmosphere"));
     Atmosphere->SetupAttachment(SceneRoot);
     Atmosphere->SetStaticMesh(SphereMesh.Object);
-    Atmosphere->SetRelativeScale3D(FVector(20.35));
+    Atmosphere->SetRelativeScale3D(FVector(20.7));
     Atmosphere->SetCollisionEnabled(ECollisionEnabled::NoCollision);
     Atmosphere->SetCastShadow(false);
     Atmosphere->SetVisibility(false);
@@ -86,5 +87,14 @@ void AIonGlobeActor::Tick(float DeltaSeconds)
     const FGeoPosition Subsolar = UGeoMathLibrary::SolarSubpoint(TimelineUtc);
     const FVector DirectionToSun = UGeoMathLibrary::LatitudeLongitudeToUnitSphere(Subsolar.Latitude, Subsolar.Longitude);
     SunLight->SetWorldRotation((-DirectionToSun).Rotation());
+    if (!EarthMID)
+    {
+        EarthMID = Earth->CreateAndSetMaterialInstanceDynamic(0);
+    }
+    if (EarthMID)
+    {
+        // The material masks the city-light emissive to the true night side.
+        EarthMID->SetVectorParameterValue(TEXT("SunDirection"), FLinearColor(DirectionToSun.X, DirectionToSun.Y, DirectionToSun.Z, 0.0f));
+    }
     if (Atmosphere->IsVisible()) Atmosphere->AddLocalRotation(FRotator(0.0, DeltaSeconds * 0.03, 0.0));
 }

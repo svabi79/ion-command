@@ -74,7 +74,7 @@ void AGeoPointLayerActor::Submit(const FGeoMessageEnvelope& Message)
     if (Instances->GetInstanceCount() >= MaxVisiblePoints) Instances->ClearInstances();
     const FGeoPosition& Position = Message.Geometry.Positions[0];
     const FVector Location = UGeoMathLibrary::LatitudeLongitudeToUnitSphere(Position.Latitude, Position.Longitude) * (GlobeRadius + 8.0);
-    Instances->AddInstance(FTransform(FQuat::Identity, Location, FVector(0.10)), true);
+    Instances->AddInstance(FTransform(FQuat::Identity, Location, FVector(0.14)), true);
 }
 void AGeoPointLayerActor::Reset() { EntityInstances->ClearInstances(); ObservationInstances->ClearInstances(); }
 void AGeoPointLayerActor::OnMessageAccepted(const FGeoMessageEnvelope& Message) { Submit(Message); }

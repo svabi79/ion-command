@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 type Branding struct {
@@ -33,8 +34,11 @@ type Source struct {
 	ID              string  `json:"id"`
 	Type            string  `json:"type"`
 	Enabled         bool    `json:"enabled"`
-	EventsPerSecond float64 `json:"eventsPerSecond"`
-	Seed            int64   `json:"seed"`
+	EventsPerSecond float64 `json:"eventsPerSecond,omitempty"`
+	Seed            int64   `json:"seed,omitempty"`
+	Broker          string  `json:"broker,omitempty"`
+	Topic           string  `json:"topic,omitempty"`
+	ClientID        string  `json:"clientId,omitempty"`
 }
 
 type Config struct {
@@ -88,7 +92,7 @@ func (c Config) Validate() error {
 		if source.ID == "" || source.Type == "" {
 			return fmt.Errorf("sources[%d] requires id and type", i)
 		}
-		if source.Enabled && source.EventsPerSecond <= 0 {
+		if source.Enabled && strings.HasPrefix(source.Type, "mock.") && source.EventsPerSecond <= 0 {
 			return fmt.Errorf("sources[%d].eventsPerSecond must be positive", i)
 		}
 	}

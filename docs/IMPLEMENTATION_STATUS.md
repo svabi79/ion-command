@@ -1,6 +1,35 @@
 # Implementation status
 
-Status date: **2026-07-19**.
+Status date: **2026-07-19** (second pass: live PSKReporter feed + visual
+overhaul).
+
+## Phase 2 progress (2026-07-19)
+
+- **Real data**: `pskreporter.mqtt` source plugin (public broker
+  `mqtt.pskreporter.info:1883`, topic `pskr/filter/v2/#`) with injected decoder
+  behind the prepared adapter boundary. Maidenhead 4/6/8-char conversion with
+  unit tests; spots without usable locators are skipped, malformed frames are
+  logged and dropped without killing the source. Live validation: ~480
+  spots/second sustained, 0 invalid, 0 drops, queue depth ≤1
+  (`collector/configs/live.json`).
+- **Visual overhaul** (verified through repeated live captures):
+  - Earth master material rebuilt: city lights masked to the true night side
+    via a SunDirection parameter fed by the globe actor each tick, soft
+    terminator, glossy oceans/matte land derived from the day albedo.
+  - Fixed-histogram exposure (AEM_Manual drowned the stylised scene), soft
+    wide bloom, gentle vignette and fringe on the camera.
+  - Arc geometry: max apex height cut from 650 to 165 units — tall arcs read
+    as orbit rings, low arcs read as propagation paths; 24 segments per arc;
+    thin beams (2 units) that glow through bloom.
+  - Fresnel-rim hologram shell master (atmosphere halo, ionosphere shells);
+    ionosphere starts hidden (I toggles) to keep the composition clean.
+  - Aurora rebuilt as 320 flat overlapping segments instead of 180 pearls.
+  - Firehose-rate rendering: eviction no longer rebuilds per submit; rebuilds
+    are coalesced to at most one per frame and use bulk `AddInstances` per
+    palette component. `MaxVisibleArcs` 2400.
+- Master materials are now rebuilt deterministically on every script run (the
+  script switches to a transient level first; editing a live material's
+  expressions asserts in UE 5.8).
 
 ## Outcome
 

@@ -40,13 +40,13 @@ public:
     bool FindClosestMessageToRay(const FVector& RayOrigin, const FVector& RayDirection, double RayLength, double MaxDistance, FGeoMessageEnvelope& OutMessage) const;
 
     UPROPERTY(EditAnywhere, Category="ION COMMAND|Layer") double GlobeRadius = 1000.0;
-    UPROPERTY(EditAnywhere, Category="ION COMMAND|Layer") int32 SegmentsPerArc = 12;
-    UPROPERTY(EditAnywhere, Category="ION COMMAND|Layer") int32 MaxVisibleArcs = 180;
-    UPROPERTY(EditAnywhere, Category="ION COMMAND|Layer") double LifetimeSeconds = 12.0;
-    // Cylinder scale factors; the base mesh is 100 units wide, so 0.05 renders
-    // a 5-unit beam that stays visible from the showcase camera distance.
-    UPROPERTY(EditAnywhere, Category="ION COMMAND|Layer") double ArcThickness = 0.05;
-    UPROPERTY(EditAnywhere, Category="ION COMMAND|Layer") double SelectedArcThickness = 0.10;
+    UPROPERTY(EditAnywhere, Category="ION COMMAND|Layer") int32 SegmentsPerArc = 24;
+    UPROPERTY(EditAnywhere, Category="ION COMMAND|Layer") int32 MaxVisibleArcs = 2400;
+    UPROPERTY(EditAnywhere, Category="ION COMMAND|Layer") double LifetimeSeconds = 18.0;
+    // Cylinder scale factors; the base mesh is 100 units wide. Thin beams plus
+    // bloom read as light, thick ones read as plastic tubes.
+    UPROPERTY(EditAnywhere, Category="ION COMMAND|Layer") double ArcThickness = 0.02;
+    UPROPERTY(EditAnywhere, Category="ION COMMAND|Layer") double SelectedArcThickness = 0.055;
 
 protected:
     virtual int32 ResolvePaletteIndex(const FGeoMessageEnvelope& Message) const;
@@ -58,6 +58,7 @@ private:
     void BuildEditorPreview();
     void AddArcInstances(const FRenderedGeoArc& Arc);
     void AddArcInstancesTo(UInstancedStaticMeshComponent* Instances, const FGeoMessageEnvelope& Message, double Thickness);
+    void AppendArcTransforms(TArray<FTransform>& Out, const FGeoMessageEnvelope& Message, double Thickness) const;
     FVector CalculateArcPoint(const FGeoMessageEnvelope& Message, double Alpha) const;
     void RebuildInstances();
     void RefreshSelectionHighlight();
@@ -73,5 +74,6 @@ private:
     FString HighlightedMessageId;
     TArray<float> PaletteBaseIntensities;
     bool bSelectionDimmed = false;
+    bool bNeedsRebuild = false;
     double LastExpiryCheck = 0.0;
 };

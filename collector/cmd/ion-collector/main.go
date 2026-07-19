@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -20,6 +21,7 @@ import (
 	"github.com/ion-command/ion-command/collector/internal/plugins/domains/spaceweather"
 	"github.com/ion-command/ion-command/collector/internal/plugins/domains/weather"
 	mocksource "github.com/ion-command/ion-command/collector/internal/plugins/sources/mock"
+	"github.com/ion-command/ion-command/collector/internal/plugins/sources/pskreporter"
 	"github.com/ion-command/ion-command/collector/internal/recording"
 	"github.com/ion-command/ion-command/collector/internal/stream"
 	"github.com/ion-command/ion-command/collector/internal/telemetry"
@@ -53,7 +55,16 @@ func run(configPath string, logger *slog.Logger) error {
 		if !sourceConfig.Enabled {
 			continue
 		}
-		source, err := mocksource.New(sourceConfig)
+		var source plugins.Source
+		var err error
+		switch {
+		case strings.HasPrefix(sourceConfig.Type, "mock."):
+			source, err = mocksource.New(sourceConfig)
+		case sourceConfig.Type == "pskreporter.mqtt":
+			source, err = pskreporter.NewMQTT(sourceConfig, logger)
+		default:
+			err = fmt.Errorf("unknown source type %q", sourceConfig.Type)
+		}
 		if err != nil {
 			return fmt.Errorf("create source %s: %w", sourceConfig.ID, err)
 		}
