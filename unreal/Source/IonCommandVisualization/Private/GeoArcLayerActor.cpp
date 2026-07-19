@@ -6,7 +6,6 @@
 #include "GeoLayerSubsystem.h"
 #include "GeoMathLibrary.h"
 #include "GeoSelectionSubsystem.h"
-#include "GeoTimelineSubsystem.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "UObject/ConstructorHelpers.h"
 
@@ -163,16 +162,17 @@ void AGeoArcLayerActor::Tick(float DeltaSeconds)
     const double Now = FPlatformTime::Seconds();
     if (Now - LastExpiryCheck < 3.0) return;
     LastExpiryCheck = Now;
-    const UGeoTimelineSubsystem* Timeline = GetGameInstance() ? GetGameInstance()->GetSubsystem<UGeoTimelineSubsystem>() : nullptr;
-    const FDateTime TimelineUtc = Timeline ? Timeline->GetTimelineUtc() : FDateTime::UtcNow();
-    const FDateTime Cutoff = TimelineUtc - FTimespan::FromSeconds(LifetimeSeconds);
+    // Visual lifetime runs on the render clock (arrival time), exactly like
+    // the GPU fade. Observed timestamps can be minutes late on live feeds and
+    // would remove arcs mid-fade. The half-second grace guarantees an arc is
+    // fully invisible before its instances are dropped.
+    const double RenderNow = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+    const double AgeLimit = LifetimeSeconds + 0.5;
     int32 ExpiredCount = 0;
-    for (const FRenderedGeoArc& Arc : ActiveArcs) if (Arc.AddedUtc < Cutoff) ++ExpiredCount;
-    // Expired arcs have already faded to zero on the GPU, so the costly CPU
-    // rebuild can wait until a meaningful share of the list is stale.
-    if (ExpiredCount > FMath::Max(64, ActiveArcs.Num() / 10))
+    for (const FRenderedGeoArc& Arc : ActiveArcs) if (RenderNow - Arc.SpawnTimeSeconds > AgeLimit) ++ExpiredCount;
+    if (ExpiredCount > FMath::Max(32, ActiveArcs.Num() / 20))
     {
-        ActiveArcs.RemoveAll([&Cutoff](const FRenderedGeoArc& Arc) { return Arc.AddedUtc < Cutoff; });
+        ActiveArcs.RemoveAll([RenderNow, AgeLimit](const FRenderedGeoArc& Arc) { return RenderNow - Arc.SpawnTimeSeconds > AgeLimit; });
         RebuildInstances();
     }
 }

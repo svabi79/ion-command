@@ -53,7 +53,10 @@ public:
 
     UPROPERTY(EditAnywhere, Category="ION COMMAND|Layer") double GlobeRadius = 1000.0;
     UPROPERTY(EditAnywhere, Category="ION COMMAND|Layer") int32 SegmentsPerArc = 16;
-    UPROPERTY(EditAnywhere, Category="ION COMMAND|Layer") int32 MaxVisibleArcs = 10000;
+    // Above the steady state of the live firehose (~480/s * 18 s), so the
+    // abrupt cap trim only fires on bursts; normal removal is the fully faded
+    // age-based expiry.
+    UPROPERTY(EditAnywhere, Category="ION COMMAND|Layer") int32 MaxVisibleArcs = 12000;
     UPROPERTY(EditAnywhere, Category="ION COMMAND|Layer") double LifetimeSeconds = 18.0;
     // Cylinder scale factors; the base mesh is 100 units wide. Thin beams plus
     // bloom read as light, thick ones read as plastic tubes.
