@@ -651,6 +651,7 @@ void AIonCockpitHudActor::DrawOverlayMenu(float Scale, float Alpha)
     }
     if (PointLayer)
     {
+        MenuRows.Add({TEXT("ALT EXAGGERATION 12X"), TEXT("altscale"), FString(), PointLayer->IsAltitudeExaggerationEnabled()});
         TArray<FString> Domains;
         PointLayer->GetPresentDomains(Domains);
         for (const FString& Domain : Domains)
@@ -717,6 +718,10 @@ void AIonCockpitHudActor::ApplyMenuToggle(const FMenuRow& Row)
     else if (Row.Kind == TEXT("ionosphere"))
     {
         for (TActorIterator<AIonIonosphereActor> It(GetWorld()); It; ++It) It->SetActorHiddenInGame(!It->IsHidden());
+    }
+    else if (Row.Kind == TEXT("altscale"))
+    {
+        for (TActorIterator<AGeoPointLayerActor> It(GetWorld()); It; ++It) It->SetAltitudeExaggerationEnabled(!It->IsAltitudeExaggerationEnabled());
     }
     else if (Row.Kind == TEXT("domain"))
     {

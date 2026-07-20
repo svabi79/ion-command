@@ -158,14 +158,16 @@ void AGeoPointLayerActor::Submit(const FGeoMessageEnvelope& Message)
     // surface events keep the small readability offset. Domains whose true
     // altitude is imperceptible at globe scale (aircraft: 10 km on a
     // 6371 km sphere) declare a visual exaggeration factor.
-    double AltitudeExaggeration = 1.0;
+    double DeclaredAltitudeScale = 1.0;
     const FString AltitudeScaleProperty = Message.Properties.FindRef(TEXT("visual.altitudeScale"));
     if (!AltitudeScaleProperty.IsEmpty())
     {
-        AltitudeExaggeration = FMath::Clamp(FCString::Atod(*AltitudeScaleProperty), 1.0, 100.0);
+        DeclaredAltitudeScale = FMath::Clamp(FCString::Atod(*AltitudeScaleProperty), 1.0, 100.0);
     }
-    const double AltitudeUnits = FMath::Max(Position.AltitudeMeters, 0.0) * AltitudeExaggeration / 6371000.0 * GlobeRadius;
-    const FVector Location = UGeoMathLibrary::LatitudeLongitudeToUnitSphere(Position.Latitude, Position.Longitude) * (GlobeRadius + 8.0 + AltitudeUnits);
+    const double ActiveScale = bAltitudeExaggeration ? DeclaredAltitudeScale : 1.0;
+    const double AltitudeUnits = FMath::Max(Position.AltitudeMeters, 0.0) * ActiveScale / 6371000.0 * GlobeRadius;
+    const FVector Radial = UGeoMathLibrary::LatitudeLongitudeToUnitSphere(Position.Latitude, Position.Longitude);
+    const FVector Location = Radial * (GlobeRadius + 8.0 + AltitudeUnits);
     // validUntil bounds the marker's visual lifetime when the domain set one.
     double ExpireAt = 0.0;
     if (Message.Time.bHasValidUntil)
@@ -205,6 +207,9 @@ void AGeoPointLayerActor::Submit(const FGeoMessageEnvelope& Message)
             bMovementDirty = true;
         }
         Point.Location = Location;
+        Point.RadialDirection = Radial;
+        Point.AltitudeMeters = Position.AltitudeMeters;
+        Point.DeclaredAltitudeScale = DeclaredAltitudeScale;
         Point.HeadingWorld = HeadingWorld;
         Point.SpeedUnitsPerSecond = SpeedUnitsPerSecond;
         if (ExpireAt > 0.0) Point.ExpireAtSeconds = ExpireAt;
@@ -255,6 +260,9 @@ void AGeoPointLayerActor::Submit(const FGeoMessageEnvelope& Message)
     Point.EntityKey = EntityKey;
     Point.Location = Location;
     Point.RenderedLocation = Location;
+    Point.RadialDirection = Radial;
+    Point.AltitudeMeters = Position.AltitudeMeters;
+    Point.DeclaredAltitudeScale = DeclaredAltitudeScale;
     Point.HeadingWorld = HeadingWorld;
     Point.SpeedUnitsPerSecond = SpeedUnitsPerSecond;
     Point.LastSeenSeconds = NowSeconds;
@@ -312,6 +320,21 @@ void AGeoPointLayerActor::GetPresentDomains(TArray<FString>& OutDomains) const
     for (const FString& Hidden : HiddenDomains) Domains.Add(Hidden);
     OutDomains = Domains.Array();
     OutDomains.Sort();
+}
+
+void AGeoPointLayerActor::SetAltitudeExaggerationEnabled(bool bEnabled)
+{
+    if (bAltitudeExaggeration == bEnabled) return;
+    bAltitudeExaggeration = bEnabled;
+    // Recompute every marker's radial lift from the stored true altitude.
+    for (FRenderedGeoPoint& Point : ActivePoints)
+    {
+        if (Point.RadialDirection.IsNearlyZero()) continue;
+        const double Scale = bAltitudeExaggeration ? Point.DeclaredAltitudeScale : 1.0;
+        const double AltitudeUnits = FMath::Max(Point.AltitudeMeters, 0.0) * Scale / 6371000.0 * GlobeRadius;
+        Point.Location = Point.RadialDirection * (GlobeRadius + 8.0 + AltitudeUnits);
+    }
+    bNeedsRebuild = true;
 }
 
 void AGeoPointLayerActor::SetDomainVisible(const FString& Domain, bool bVisible)

@@ -37,6 +37,12 @@ struct FRenderedGeoPoint
     // the marker between sightings. Zero heading = static marker.
     FVector HeadingWorld = FVector::ZeroVector;
     double SpeedUnitsPerSecond = 0.0;
+    // Altitude is kept re-derivable so the exaggeration toggle can recompute
+    // every marker: unit radial at the surface point, true altitude, and the
+    // domain-declared visual exaggeration factor.
+    FVector RadialDirection = FVector::ZeroVector;
+    double AltitudeMeters = 0.0;
+    double DeclaredAltitudeScale = 1.0;
     // Domain drives the overlay menu's per-category visibility; the display
     // strings feed the hover tooltip.
     FString Domain;
@@ -70,6 +76,11 @@ public:
     // Hover pick: nearest visible marker to the ray within MaxDistance world
     // units, or nullptr. CPU scan, call throttled.
     const FRenderedGeoPoint* FindNearestToRay(const FVector& RayOrigin, const FVector& RayDirection, double MaxDistance) const;
+
+    // Overlay-menu toggle: apply/ignore the domain-declared altitude
+    // exaggeration (visual.altitudeScale). Off renders true-scale altitude.
+    bool IsAltitudeExaggerationEnabled() const { return bAltitudeExaggeration; }
+    void SetAltitudeExaggerationEnabled(bool bEnabled);
 
     UPROPERTY(EditAnywhere, Category="ION COMMAND|Layer") double GlobeRadius = 1000.0;
     // Sized for the global aviation snapshot (~8k airframes) on top of the
@@ -108,6 +119,7 @@ private:
     TArray<FRenderedGeoPoint> ActivePoints;
     TMap<FString, int32> EntityToPoint;
     TSet<FString> HiddenDomains;
+    bool bAltitudeExaggeration = true;
     bool bNeedsRebuild = false;
     // Movement-only dirtiness coalesces into a slower rebuild cadence so a
     // few hundred aircraft updating every poll do not force a full rebuild
