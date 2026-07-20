@@ -149,7 +149,9 @@ func (s *Source) httpFetch(ctx context.Context) ([]byte, error) {
 		return nil, err
 	}
 	defer response.Body.Close()
-	if response.StatusCode == http.StatusTooManyRequests {
+	// adsb.lol answers throttled clients with 420 "Enhance Your Calm";
+	// treat it exactly like the standard 429.
+	if response.StatusCode == http.StatusTooManyRequests || response.StatusCode == 420 {
 		retryAfter := backoffInitial
 		if header := response.Header.Get("Retry-After"); header != "" {
 			if seconds, parseErr := strconv.Atoi(strings.TrimSpace(header)); parseErr == nil && seconds > 0 {
