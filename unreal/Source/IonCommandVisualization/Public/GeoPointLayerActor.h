@@ -49,6 +49,10 @@ struct FRenderedGeoPoint
     FString Title;
     FString Primary;
     FString Secondary;
+    // Sticky emergency state: once an aircraft squawks 7500/7600/7700 the red
+    // tint, enlarged scale, and alarm title survive later non-emergency
+    // sightings from another source until the marker expires.
+    bool bEmergency = false;
 };
 
 UCLASS()
@@ -107,6 +111,9 @@ private:
     // One instance's worth of custom data for the pictogram material:
     // icon index, RGB tint, world origin (billboard pivot).
     static void AppendCustomData(TArray<float>& Out, const FRenderedGeoPoint& Point);
+    // Single source of truth for marker expiry, shared by the render path,
+    // the batched cleanup sweep, and the hover pick so they never disagree.
+    bool IsExpired(const FRenderedGeoPoint& Point, double NowSeconds) const;
     UPROPERTY(VisibleAnywhere) TObjectPtr<USceneComponent> SceneRoot;
     // Single camera-facing quad pool; entity/observation split lives in the
     // bookkeeping (lifetimes), not in separate components anymore.

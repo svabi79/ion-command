@@ -71,6 +71,9 @@ private:
     void DrawPolarPanel(float Scale, float Alpha);
     void DrawProviderPanels(float Scale, float Alpha, float PanelY);
     void DrawEndpointLabels(float Scale, float Alpha);
+    // Always-on-top "you are here" reticle for the configured own station, so
+    // dense traffic can never bury it the way world-space markers do.
+    void DrawOwnStationReticle(float Scale, float Alpha);
     void DrawOverlayMenu(float Scale, float Alpha);
     void DrawHoverTooltip(float Scale, float Alpha);
     void DrawModeHint(float Scale, float Alpha);
@@ -144,5 +147,10 @@ private:
     FString HoverSecondary;
     FString HoverDomain;
     double LastHoverPickSeconds = 0.0;
+    // Screen position the cached pick was taken at, so the tooltip anchors to
+    // the marker and invalidates the moment the cursor leaves it, instead of
+    // trailing empty sky for up to a throttle interval (audit finding #11).
+    float LastHoverPickX = 0.0f;
+    float LastHoverPickY = 0.0f;
     bool bHoverValid = false;
 };

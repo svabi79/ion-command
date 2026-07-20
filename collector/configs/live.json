@@ -9,7 +9,7 @@
   },
   "pipeline": {
     "queueCapacity": 32768,
-    "clientQueueCapacity": 32768,
+    "clientQueueCapacity": 49152,
     "workerCount": 4,
     "retainLatest": [
       "spaceweather.state",

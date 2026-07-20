@@ -15,6 +15,7 @@
 #include "IonActivityHeatmapActor.h"
 #include "IonIonosphereActor.h"
 #include "Misc/CommandLine.h"
+#include "Misc/ConfigCacheIni.h"
 #include "Misc/Parse.h"
 
 namespace
@@ -304,7 +305,10 @@ void AIonCockpitHudActor::RefreshAggregates(double NowSeconds)
 void AIonCockpitHudActor::DrawHUD()
 {
     Super::DrawHUD();
-    if (!Canvas || Mode == EIonCockpitMode::Hidden) return;
+    // Clear the menu hit-rects on every path that skips drawing the menu, so
+    // a click never lands on a stale invisible row and silently toggles a
+    // layer (audit finding #5).
+    if (!Canvas || Mode == EIonCockpitMode::Hidden) { MenuRows.Reset(); return; }
     const double NowSeconds = FPlatformTime::Seconds();
     AdvanceRateBuckets(static_cast<int64>(NowSeconds));
     if (NowSeconds - LastAggregateSeconds > 0.5)
@@ -316,7 +320,7 @@ void AIonCockpitHudActor::DrawHUD()
     // Match the boot camera fade so the cockpit materialises with the scene.
     const double WorldSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : 10.0;
     const float Alpha = FMath::Clamp((static_cast<float>(WorldSeconds) - 2.5f) / 2.5f, 0.0f, 1.0f);
-    if (Alpha <= 0.0f) return;
+    if (Alpha <= 0.0f) { MenuRows.Reset(); return; }
 
     DrawStatusBar(Scale, Alpha);
     if (Mode == EIonCockpitMode::Full)
@@ -328,6 +332,7 @@ void AIonCockpitHudActor::DrawHUD()
         DrawProviderPanels(Scale, Alpha, PolarPanelBottomY + 16.0f * Scale);
         DrawEndpointLabels(Scale, Alpha);
     }
+    DrawOwnStationReticle(Scale, Alpha);
     if (bOverlayMenuOpen) DrawOverlayMenu(Scale, Alpha);
     DrawHoverTooltip(Scale, Alpha);
     DrawModeHint(Scale, Alpha);
@@ -627,6 +632,56 @@ void AIonCockpitHudActor::DrawEndpointLabels(float Scale, float Alpha)
     }
 }
 
+void AIonCockpitHudActor::DrawOwnStationReticle(float Scale, float Alpha)
+{
+    APlayerController* Player = PlayerOwner.Get();
+    if (!Player || !Player->PlayerCameraManager || !Canvas) return;
+
+    // The station is defined the same way the world-space own-station actor
+    // reads it: [IonCommand.Station] in the game ini. Drawing it here in HUD
+    // space guarantees "you are here" is legible no matter how thick the
+    // aircraft/marker traffic is over the location.
+    FString Callsign = TEXT("N0CALL");
+    FString Locator = TEXT("JN00AA");
+    GConfig->GetString(TEXT("IonCommand.Station"), TEXT("Callsign"), Callsign, GGameIni);
+    GConfig->GetString(TEXT("IonCommand.Station"), TEXT("Locator"), Locator, GGameIni);
+    if (Callsign == TEXT("N0CALL")) return;
+
+    FGeoPosition Position;
+    if (!UGeoMathLibrary::MaidenheadToLatLon(Locator, Position)) return;
+    const FVector Unit = UGeoMathLibrary::LatitudeLongitudeToUnitSphere(Position.Latitude, Position.Longitude);
+    const FVector WorldPosition = Unit * (GlobeRadiusUnits + 12.0);
+    const FVector CameraLocation = Player->PlayerCameraManager->GetCameraLocation();
+    // Cull when the station faces away from the camera (behind the globe).
+    if (FVector::DotProduct(Unit, (CameraLocation - WorldPosition).GetSafeNormal()) < 0.02) return;
+    const FVector Screen = Canvas->Project(WorldPosition);
+    if (Screen.Z <= 0.0f) return;
+
+    const double WorldSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+    const float Pulse = 0.5f + 0.5f * FMath::Sin(static_cast<float>(WorldSeconds) * 2.2f);
+    const float Radius = (14.0f + 4.0f * Pulse) * Scale;
+    const FLinearColor Ring = WithAlpha(CockpitGreen, (0.55f + 0.35f * Pulse) * Alpha);
+
+    // Reticle ring from short chords, plus tick marks at the cardinals.
+    constexpr int32 Segments = 28;
+    FVector2D Previous;
+    for (int32 Index = 0; Index <= Segments; ++Index)
+    {
+        const float Angle = 2.0f * PI * Index / Segments;
+        const FVector2D Point(Screen.X + Radius * FMath::Cos(Angle), Screen.Y + Radius * FMath::Sin(Angle));
+        if (Index > 0) DrawLineSegment(Previous, Point, Ring, FMath::Max(1.0f, 1.6f * Scale));
+        Previous = Point;
+    }
+    for (int32 Cardinal = 0; Cardinal < 4; ++Cardinal)
+    {
+        const float Angle = 0.5f * PI * Cardinal;
+        const FVector2D Inner(Screen.X + Radius * 0.55f * FMath::Cos(Angle), Screen.Y + Radius * 0.55f * FMath::Sin(Angle));
+        const FVector2D Outer(Screen.X + Radius * 1.35f * FMath::Cos(Angle), Screen.Y + Radius * 1.35f * FMath::Sin(Angle));
+        DrawLineSegment(Inner, Outer, Ring, FMath::Max(1.0f, 1.6f * Scale));
+    }
+    DrawTextAt(Callsign, Screen.X + Radius + 6.0f * Scale, Screen.Y - 8.0f * Scale, WithAlpha(CockpitGreen, Alpha), 1.15f * Scale);
+}
+
 void AIonCockpitHudActor::DrawOverlayMenu(float Scale, float Alpha)
 {
     // Rebuild the row list from the actual scene: fixed render layers first,
@@ -746,6 +801,12 @@ void AIonCockpitHudActor::DrawHoverTooltip(float Scale, float Alpha)
     if (!bHaveMouse) { bHoverValid = false; return; }
 
     const double NowSeconds = FPlatformTime::Seconds();
+    // Invalidate immediately once the cursor leaves the picked marker instead
+    // of holding a stale tooltip until the next throttled pick (finding #11).
+    if (bHoverValid && FVector2D(MouseX - LastHoverPickX, MouseY - LastHoverPickY).SizeSquared() > FMath::Square(24.0f * Scale))
+    {
+        bHoverValid = false;
+    }
     if (NowSeconds - LastHoverPickSeconds > 0.15)
     {
         LastHoverPickSeconds = NowSeconds;
@@ -761,6 +822,8 @@ void AIonCockpitHudActor::DrawHoverTooltip(float Scale, float Alpha)
                     HoverPrimary = Point->Primary;
                     HoverSecondary = Point->Secondary;
                     HoverDomain = Point->Domain.ToUpper();
+                    LastHoverPickX = MouseX;
+                    LastHoverPickY = MouseY;
                     bHoverValid = true;
                 }
                 break;
@@ -786,8 +849,10 @@ void AIonCockpitHudActor::DrawHoverTooltip(float Scale, float Alpha)
     const float LineHeight = 19.0f * Scale;
     const float BoxWidth = Widest + 24.0f * Scale;
     const float BoxHeight = Lines.Num() * LineHeight + 14.0f * Scale;
-    float BoxX = MouseX + 18.0f * Scale;
-    float BoxY = MouseY - BoxHeight - 10.0f * Scale;
+    // Anchor to where the marker was picked, not the live cursor, so the box
+    // and its content always describe the same point.
+    float BoxX = LastHoverPickX + 18.0f * Scale;
+    float BoxY = LastHoverPickY - BoxHeight - 10.0f * Scale;
     BoxX = FMath::Clamp(BoxX, 0.0f, Canvas->SizeX - BoxWidth);
     BoxY = FMath::Clamp(BoxY, 0.0f, Canvas->SizeY - BoxHeight);
     DrawRect(BoxX, BoxY, BoxWidth, BoxHeight, WithAlpha(PanelFill, 0.85f * Alpha));

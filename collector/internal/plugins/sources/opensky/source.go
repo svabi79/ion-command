@@ -144,6 +144,12 @@ func rawString(raw json.RawMessage) string {
 }
 
 func rawFloat(raw json.RawMessage) (float64, bool) {
+	// A JSON null unmarshals into a float64 as a no-op (no error, value stays
+	// 0), which would masquerade as a real zero. Treat null/empty as missing
+	// so altitude/time fallbacks actually trigger (audit finding #12).
+	if len(raw) == 0 || string(raw) == "null" {
+		return 0, false
+	}
 	var value float64
 	if json.Unmarshal(raw, &value) == nil {
 		return value, true
@@ -168,6 +174,11 @@ func (s *Source) sample(ctx context.Context) ([]plugins.RawRecord, error) {
 	}
 	now := time.Now().UTC()
 	snapshot := response.Time
+	// A missing snapshot time would make snapshot-positionTime hugely negative
+	// and pass every stale vector through the age gate (finding #16).
+	if snapshot == 0 {
+		snapshot = now.Unix()
+	}
 	// Markers must outlive the slow poll cycle plus request jitter.
 	validSeconds := int(s.interval/time.Second) + 180
 	records := make([]plugins.RawRecord, 0, len(response.States))
@@ -189,7 +200,13 @@ func (s *Source) sample(ctx context.Context) ([]plugins.RawRecord, error) {
 		if !timeOK || snapshot-int64(positionTime) > int64(positionMaxAge/time.Second) {
 			continue
 		}
-		altitudeM, _ := rawFloat(state[7])
+		// Barometric altitude, falling back to geometric (state[13]) when the
+		// aircraft reports no baro - otherwise an airborne aircraft with null
+		// baro pinned to FL000 at terrain (finding #12).
+		altitudeM, altOK := rawFloat(state[7])
+		if !altOK {
+			altitudeM, _ = rawFloat(state[13])
+		}
 		velocityMps, _ := rawFloat(state[9])
 		track, _ := rawFloat(state[10])
 		verticalMps, _ := rawFloat(state[11])

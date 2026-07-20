@@ -25,11 +25,11 @@ import (
 	"github.com/ion-command/ion-command/collector/internal/plugins/domains/spaceweather"
 	"github.com/ion-command/ion-command/collector/internal/plugins/domains/weather"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/adsb"
-	"github.com/ion-command/ion-command/collector/internal/plugins/sources/opensky"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/blitzortung"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/celestrak"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/kc2g"
 	mocksource "github.com/ion-command/ion-command/collector/internal/plugins/sources/mock"
+	"github.com/ion-command/ion-command/collector/internal/plugins/sources/opensky"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/pskreporter"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/rbn"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/swpc"
@@ -117,6 +117,9 @@ func run(configPath string, logger *slog.Logger) error {
 	server := api.New(cfg, pipe, hub, stats, logger).HTTPServer()
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
+	// Reclaim expired retained entries even when neither Publish nor a client
+	// Register happens to trigger the lazy purge paths.
+	hub.StartJanitor(ctx, 30*time.Second)
 	pipelineErrors := make(chan error, 1)
 	go func() { pipelineErrors <- pipe.Run(ctx) }()
 	serverErrors := make(chan error, 1)

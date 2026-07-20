@@ -154,7 +154,11 @@ FGeoPosition UGeoMathLibrary::SolarSubpoint(const FDateTime& Utc)
     const double Obliquity = FMath::DegreesToRadians(23.439 - 0.00000036 * Days);
     const double RightAscension = FMath::Atan2(FMath::Cos(Obliquity) * FMath::Sin(EclipticLongitude), FMath::Cos(EclipticLongitude));
     const double Declination = FMath::Asin(FMath::Sin(Obliquity) * FMath::Sin(EclipticLongitude));
-    const double GreenwichSidereal = NormalizeDegrees(280.1600 + 360.9856235 * Days);
+    // IAU-1982 GMST (degrees), identical to the star-sphere rotation in
+    // IonGlobeActor so sun lighting and the celestial background agree. The
+    // old 280.1600 constant shifted the subsolar point ~0.3 deg from the
+    // stars' own RA/Dec (audit finding #8).
+    const double GreenwichSidereal = NormalizeDegrees(280.46061837 + 360.98564736629 * Days);
     FGeoPosition Result;
     Result.Latitude = FMath::RadiansToDegrees(Declination);
     Result.Longitude = NormalizeDegrees(FMath::RadiansToDegrees(RightAscension) - GreenwichSidereal);

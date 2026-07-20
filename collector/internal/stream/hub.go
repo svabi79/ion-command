@@ -1,6 +1,7 @@
 package stream
 
 import (
+	"context"
 	"sync"
 	"time"
 
@@ -37,6 +38,7 @@ func NewHub(clientQueueCapacity int, stats *telemetry.Stats) *Hub {
 func (h *Hub) Register() *Client {
 	client := &Client{Messages: make(chan []byte, h.clientQueueCapacity)}
 	now := time.Now().UTC()
+	var dropped uint64
 	h.mu.Lock()
 	for key, message := range h.retained {
 		if !message.expiresAt.IsZero() && now.After(message.expiresAt) {
@@ -46,12 +48,49 @@ func (h *Hub) Register() *Client {
 		select {
 		case client.Messages <- append([]byte(nil), message.data...):
 		default:
+			// The snapshot did not fit the client's queue - count it like a
+			// live drop instead of silently truncating the replay so the
+			// operator sees the queue is undersized (audit finding #10).
+			dropped++
 		}
 	}
 	h.clients[client] = struct{}{}
 	h.mu.Unlock()
+	if dropped > 0 {
+		h.stats.AddDroppedClients(dropped)
+	}
 	h.stats.ClientConnected()
 	return client
+}
+
+// PurgeExpired reclaims retained entries past their validity horizon. Called
+// on a timer so dead entities are freed even when no new Publish or client
+// Register happens to trigger the lazy paths (audit finding #7).
+func (h *Hub) PurgeExpired() {
+	now := time.Now().UTC()
+	h.mu.Lock()
+	for key, existing := range h.retained {
+		if !existing.expiresAt.IsZero() && now.After(existing.expiresAt) {
+			delete(h.retained, key)
+		}
+	}
+	h.mu.Unlock()
+}
+
+// StartJanitor runs PurgeExpired on an interval until ctx is cancelled.
+func (h *Hub) StartJanitor(ctx context.Context, interval time.Duration) {
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				h.PurgeExpired()
+			}
+		}
+	}()
 }
 
 func (h *Hub) Unregister(client *Client) {
@@ -70,14 +109,8 @@ func (h *Hub) Unregister(client *Client) {
 func (h *Hub) Publish(message []byte, retainKey string, expiresAt time.Time) {
 	if retainKey != "" {
 		h.mu.Lock()
-		if len(h.retained) >= maxRetainedMessages {
-			// Purge expired entries before refusing new keys.
-			now := time.Now().UTC()
-			for key, existing := range h.retained {
-				if !existing.expiresAt.IsZero() && now.After(existing.expiresAt) {
-					delete(h.retained, key)
-				}
-			}
+		if _, exists := h.retained[retainKey]; !exists && len(h.retained) >= maxRetainedMessages {
+			h.makeRetainSpaceLocked()
 		}
 		if _, exists := h.retained[retainKey]; exists || len(h.retained) < maxRetainedMessages {
 			h.retained[retainKey] = retainedMessage{data: append([]byte(nil), message...), expiresAt: expiresAt}
@@ -97,5 +130,35 @@ func (h *Hub) Publish(message []byte, retainKey string, expiresAt time.Time) {
 	}
 	if dropped > 0 {
 		h.stats.AddDroppedClients(dropped)
+	}
+}
+
+// makeRetainSpaceLocked frees a slot when the retain map is full: first drop
+// every expired entry, and if that is not enough, evict the entry expiring
+// soonest so a fresh key is never silently refused (audit finding #3).
+// Zero-expiry entries (the handful of state singletons) are kept last.
+func (h *Hub) makeRetainSpaceLocked() {
+	now := time.Now().UTC()
+	for key, existing := range h.retained {
+		if !existing.expiresAt.IsZero() && now.After(existing.expiresAt) {
+			delete(h.retained, key)
+		}
+	}
+	if len(h.retained) < maxRetainedMessages {
+		return
+	}
+	var soonestKey string
+	var soonest time.Time
+	found := false
+	for key, existing := range h.retained {
+		if existing.expiresAt.IsZero() {
+			continue
+		}
+		if !found || existing.expiresAt.Before(soonest) {
+			soonest, soonestKey, found = existing.expiresAt, key, true
+		}
+	}
+	if found {
+		delete(h.retained, soonestKey)
 	}
 }

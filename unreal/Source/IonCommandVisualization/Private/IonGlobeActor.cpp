@@ -199,7 +199,10 @@ void AIonGlobeActor::Tick(float DeltaSeconds)
     // Sidereal sky: with the star map's U-flip every star texel sits at its
     // RA/Dec direction; yaw = GMST turns the celestial sphere so the star
     // with hour angle zero at Greenwich actually stands over Greenwich.
-    const double DaysSinceJ2000 = (TimelineUtc - FDateTime(2000, 1, 1, 11, 58, 55, 816)).GetTotalDays();
+    // Epoch is J2000.0 = 2000-01-01 12:00:00 UTC. (The TT instant
+    // 11:58:55.816 over-rotated the whole sky by a constant 0.27 deg -
+    // audit finding #19.)
+    const double DaysSinceJ2000 = (TimelineUtc - FDateTime(2000, 1, 1, 12, 0, 0)).GetTotalDays();
     const double GmstDegrees = FMath::Fmod(280.46061837 + 360.98564736629 * DaysSinceJ2000, 360.0);
     Starfield->SetRelativeRotation(FRotator(0.0, GmstDegrees, 0.0));
     if (!EarthMID)

@@ -54,14 +54,25 @@ namespace
 
     constexpr int32 MarkerCustomFloats = 10;
 
-    // World-space compass heading at a globe position: sampled numerically
-    // from the pinned geo math so it can never disagree with the sphere frame.
+    // World-space compass heading at a globe position, from the ANALYTIC
+    // tangent frame of the pinned sphere convention
+    // pos = (cosLat*sinLon, cosLat*cosLon, sinLat):
+    //   East  = d(pos)/d(lon) normalised = (cosLon, -sinLon, 0)
+    //   North = d(pos)/d(lat)            = (-sinLat*sinLon, -sinLat*cosLon, cosLat)
+    // Both are exact unit vectors at every latitude, so heading stays valid
+    // to the poles. The previous finite-difference East collapsed to zero
+    // (SafeNormal tolerance) beyond ~86.7 deg and froze polar movers
+    // (audit finding #9).
     FVector CompassHeadingWorld(double Latitude, double Longitude, double HeadingDegrees)
     {
-        const double SafeLatitude = FMath::Clamp(Latitude, -89.5, 89.5);
-        const FVector Here = UGeoMathLibrary::LatitudeLongitudeToUnitSphere(SafeLatitude, Longitude);
-        const FVector North = (UGeoMathLibrary::LatitudeLongitudeToUnitSphere(SafeLatitude + 0.1, Longitude) - Here).GetSafeNormal();
-        const FVector East = (UGeoMathLibrary::LatitudeLongitudeToUnitSphere(SafeLatitude, Longitude + 0.1) - Here).GetSafeNormal();
+        const double LatRad = FMath::DegreesToRadians(Latitude);
+        const double LonRad = FMath::DegreesToRadians(Longitude);
+        const double SinLat = FMath::Sin(LatRad);
+        const double CosLat = FMath::Cos(LatRad);
+        const double SinLon = FMath::Sin(LonRad);
+        const double CosLon = FMath::Cos(LonRad);
+        const FVector East(CosLon, -SinLon, 0.0);
+        const FVector North(-SinLat * SinLon, -SinLat * CosLon, CosLat);
         const double Radians = FMath::DegreesToRadians(HeadingDegrees);
         return (North * FMath::Cos(Radians) + East * FMath::Sin(Radians)).GetSafeNormal();
     }
@@ -77,6 +88,12 @@ AGeoPointLayerActor::AGeoPointLayerActor()
     MarkerInstances->SetupAttachment(SceneRoot); MarkerInstances->SetStaticMesh(QuadMesh.Object); MarkerInstances->SetCollisionEnabled(ECollisionEnabled::NoCollision); MarkerInstances->SetCastShadow(false);
     MarkerInstances->SetNumCustomDataFloats(MarkerCustomFloats);
     if (UMaterialInterface* IconMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/ION/Materials/M_MarkerIcon.M_MarkerIcon"))) MarkerInstances->SetMaterial(0, IconMaterial);
+}
+
+bool AGeoPointLayerActor::IsExpired(const FRenderedGeoPoint& Point, double NowSeconds) const
+{
+    if (Point.ExpireAtSeconds > 0.0) return NowSeconds > Point.ExpireAtSeconds;
+    return NowSeconds - Point.LastSeenSeconds > (Point.bObservation ? ObservationLifetimeSeconds : MarkerLifetimeSeconds);
 }
 
 void AGeoPointLayerActor::AppendCustomData(TArray<float>& Out, const FRenderedGeoPoint& Point)
@@ -180,7 +197,7 @@ void AGeoPointLayerActor::Submit(const FGeoMessageEnvelope& Message)
     {
         PointScale = FMath::Clamp(FCString::Atof(*ScaleProperty), 0.3f, 5.0f);
     }
-    const bool bMoves = Position.AltitudeMeters > 1000.0;
+    const bool bMessageEmergency = !Message.Properties.FindRef(TEXT("visual.emergency")).IsEmpty();
     // Kinematics: compass heading and ground speed, converted into a world
     // tangent vector and globe units per second for glyph orientation and
     // dead reckoning.
@@ -200,9 +217,11 @@ void AGeoPointLayerActor::Submit(const FGeoMessageEnvelope& Message)
     {
         FRenderedGeoPoint& Point = ActivePoints[*ExistingIndex];
         Point.LastSeenSeconds = NowSeconds;
-        // Moving markers (aircraft, satellites) need their instance transform
-        // updated once the RENDERED position lags too far behind.
-        if (bMoves && !Point.RenderedLocation.Equals(Location, MovementTolerance))
+        // Any marker whose rendered position has drifted past the tolerance
+        // needs a rebuild - the altitude proxy that used to gate this froze
+        // low/ground movers whose feed omitted speed (audit finding #6). The
+        // tolerance alone already suppresses stationary jitter.
+        if (!Point.RenderedLocation.Equals(Location, MovementTolerance))
         {
             bMovementDirty = true;
         }
@@ -238,8 +257,22 @@ void AGeoPointLayerActor::Submit(const FGeoMessageEnvelope& Message)
                 bNeedsRebuild = true;
             }
         }
+        // Emergency is sticky: a later non-emergency sighting (typically
+        // OpenSky's null squawk) must not clear the alarm the normal tint
+        // block just tried to downgrade (audit finding #2).
+        if (bMessageEmergency) Point.bEmergency = true;
+        if (Point.bEmergency)
+        {
+            Point.Color = FLinearColor(1.0f, 0.15f, 0.1f);
+            Point.Scale = FMath::Max(Point.Scale, 2.0f);
+            bNeedsRebuild = true;
+        }
         // Tooltip data follows the latest sighting (a climbing aircraft's
-        // flight level, a station's newest report).
+        // flight level, a station's newest report). Title too - so a plane
+        // that starts squawking mid-flight gets the alarm - but an emergency
+        // title is never downgraded by a later non-emergency message.
+        const FString NewTitle = Message.Properties.FindRef(TEXT("display.title"));
+        if (!NewTitle.IsEmpty() && (bMessageEmergency || !Point.bEmergency)) Point.Title = NewTitle;
         const FString NewPrimary = Message.Properties.FindRef(TEXT("display.primary"));
         if (!NewPrimary.IsEmpty()) Point.Primary = NewPrimary;
         const FString NewSecondary = Message.Properties.FindRef(TEXT("display.secondary"));
@@ -265,9 +298,14 @@ void AGeoPointLayerActor::Submit(const FGeoMessageEnvelope& Message)
     Point.DeclaredAltitudeScale = DeclaredAltitudeScale;
     Point.HeadingWorld = HeadingWorld;
     Point.SpeedUnitsPerSecond = SpeedUnitsPerSecond;
+    // A lone kinematic marker added into an otherwise-quiet, static-camera
+    // scene must start the coast cadence itself; otherwise the flag is only
+    // ever latched inside RebuildInstances and it never begins (finding #14).
+    if (SpeedUnitsPerSecond > 0.0) bHasKinematicPoints = true;
     Point.LastSeenSeconds = NowSeconds;
     Point.ExpireAtSeconds = ExpireAt;
     Point.Scale = PointScale;
+    Point.bEmergency = bMessageEmergency;
     Point.bObservation = Message.MessageType != EGeoMessageType::Entity;
     Point.Domain = Message.Domain;
     // Pictogram: the domain's declared glyph, a replay-era fallback by
@@ -351,24 +389,27 @@ const FRenderedGeoPoint* AGeoPointLayerActor::FindNearestToRay(const FVector& Ra
     if (IsHidden()) return nullptr;
     const double NowSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
     const FRenderedGeoPoint* Best = nullptr;
-    double BestDistance = MaxDistance;
+    // MinLateral only ever decreases so the near-tie window is measured from
+    // the genuinely closest hit; the old ratcheting BestDistance could raise
+    // the reference and let a laterally-farther marker win (finding #17).
+    double MinLateral = MaxDistance;
     double BestAlong = TNumericLimits<double>::Max();
     for (const FRenderedGeoPoint& Point : ActivePoints)
     {
         if (!IsDomainVisible(Point.Domain)) continue;
         // Skip expired markers awaiting the batched cleanup sweep.
-        if (Point.ExpireAtSeconds > 0.0 && NowSeconds > Point.ExpireAtSeconds) continue;
-        if (Point.ExpireAtSeconds <= 0.0 && NowSeconds - Point.LastSeenSeconds > (Point.bObservation ? ObservationLifetimeSeconds : MarkerLifetimeSeconds)) continue;
+        if (IsExpired(Point, NowSeconds)) continue;
         const FVector ToPoint = Point.RenderedLocation - RayOrigin;
         const double Along = FVector::DotProduct(ToPoint, RayDirection);
         if (Along <= 0.0) continue;
         const double Distance = FVector::Dist(RayOrigin + RayDirection * Along, Point.RenderedLocation);
-        // Prefer the closest lateral hit; among near-ties take the marker
-        // nearer the camera (the one visually in front).
-        if (Distance < BestDistance || (Distance < BestDistance + 2.0 && Along < BestAlong))
+        if (Distance > MinLateral + 2.0) continue;
+        if (Distance < MinLateral) MinLateral = Distance;
+        // Among markers within the closest hit's lateral window, take the one
+        // nearest the camera (visually in front).
+        if (Best == nullptr || Along < BestAlong)
         {
             Best = &Point;
-            BestDistance = Distance;
             BestAlong = Along;
         }
     }
@@ -389,11 +430,7 @@ void AGeoPointLayerActor::Tick(float DeltaSeconds)
     if (NowSeconds - LastExpiryCheck > 5.0)
     {
         LastExpiryCheck = NowSeconds;
-        auto Expired = [this, NowSeconds](const FRenderedGeoPoint& Point)
-        {
-            if (Point.ExpireAtSeconds > 0.0) return NowSeconds > Point.ExpireAtSeconds;
-            return NowSeconds - Point.LastSeenSeconds > (Point.bObservation ? ObservationLifetimeSeconds : MarkerLifetimeSeconds);
-        };
+        auto Expired = [this, NowSeconds](const FRenderedGeoPoint& Point) { return IsExpired(Point, NowSeconds); };
         int32 ExpiredCount = 0;
         for (const FRenderedGeoPoint& Point : ActivePoints) if (Expired(Point)) ++ExpiredCount;
         if (ExpiredCount > FMath::Max(8, ActivePoints.Num() / 20))
@@ -436,6 +473,10 @@ void AGeoPointLayerActor::RebuildInstances()
             Point.RenderedLocation += Point.HeadingWorld * (Point.SpeedUnitsPerSecond * CoastSeconds);
         }
         if (!IsDomainVisible(Point.Domain)) continue;
+        // Do not draw markers already past their lifetime but still waiting
+        // for the batched sweep: they rendered as glyph-less ghosts that the
+        // hover pick nonetheless reported (audit finding #4).
+        if (IsExpired(Point, NowSeconds)) continue;
         if (Point.SpeedUnitsPerSecond > 0.0) bHasKinematicPoints = true;
         const FVector Scale(MarkerScale * CurrentZoomFactor * Point.Scale);
         Transforms.Emplace(FQuat::Identity, Point.RenderedLocation, Scale);

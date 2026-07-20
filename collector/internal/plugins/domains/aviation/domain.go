@@ -116,6 +116,10 @@ func (d *Domain) Normalize(_ context.Context, record plugins.RawRecord) ([]event
 		event.Properties["display.title"] = title + "  //  " + alarm
 		event.Properties["visual.tint"] = "1.0,0.15,0.1"
 		event.Properties["visual.markerScale"] = 2.0
+		// Explicit flag so the renderer keeps the alarm sticky when a later
+		// source (e.g. OpenSky with a null squawk) re-reports the same hex
+		// without emergency context.
+		event.Properties["visual.emergency"] = alarm
 	}
 	// Generic kinematics: renderers orient the glyph along the compass
 	// heading and dead-reckon the marker between polls.
