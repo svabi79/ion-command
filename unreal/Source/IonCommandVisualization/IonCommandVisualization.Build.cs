@@ -6,7 +6,7 @@ public class IonCommandVisualization : ModuleRules
     {
         PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
         PublicDependencyModuleNames.AddRange(new[] { "Core", "CoreUObject", "Engine", "IonCommandCore", "IonCommandData" });
-        PrivateDependencyModuleNames.AddRange(new[] { "Niagara", "RenderCore", "RHI" });
+        PrivateDependencyModuleNames.AddRange(new[] { "Niagara", "RenderCore", "RHI", "HTTP", "ImageWrapper" });
     }
 }
 

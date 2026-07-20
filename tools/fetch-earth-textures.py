@@ -42,11 +42,19 @@ def convert(source: pathlib.Path, output_name: str, target=TARGET) -> None:
     print(f"wrote {OUTPUT_DIR / output_name}")
 
 
+# NASA SVS Deep Star Map 2020 (public domain, Hipparcos/Tycho based celestial
+# sphere). EXR on purpose: Unreal imports it natively as an HDR texture, no
+# local conversion needed.
+STARMAP_URL = "https://svs.gsfc.nasa.gov/vis/a000000/a004800/a004851/starmap_2020_4k.exr"
+
+
 def main() -> None:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     convert(fetch(DAY_URL, "download-bluemarble-5400.jpg"), "bluemarble-4096.png")
     convert(fetch(NIGHT_URL, "download-blackmarble-13500.jpg"), "earthatnight-4096.png")
     convert(fetch(CLOUD_URL, "download-clouds-2048.jpg"), "clouds-2048.png", CLOUD_TARGET)
+    starmap = fetch(STARMAP_URL, "starmap_2020_4k.exr")
+    print(f"star map ready: {starmap} ({starmap.stat().st_size // (1 << 20)} MB)")
 
 
 if __name__ == "__main__":

@@ -281,8 +281,12 @@ def build_cloud_master(cloud_texture) -> unreal.Material:
     material.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_DEFAULT_LIT)
     material.set_editor_property("two_sided", False)
 
-    sample = expression(material, unreal.MaterialExpressionTextureSample, -700, -60)
+    # Texture PARAMETER: the globe actor swaps in the live EUMETSAT world IR
+    # composite at runtime; the packaged static texture is the offline default.
+    sample = expression(material, unreal.MaterialExpressionTextureSampleParameter2D, -700, -60)
+    sample.set_editor_property("parameter_name", "CloudMap")
     sample.set_editor_property("texture", cloud_texture)
+    sample.set_editor_property("sampler_type", unreal.MaterialSamplerType.SAMPLERTYPE_LINEAR_COLOR)
     base = expression(material, unreal.MaterialExpressionConstant3Vector, -700, -220)
     base.set_editor_property("constant", unreal.LinearColor(0.92, 0.94, 0.98, 1.0))
     density = scalar(material, "Density", 0.55, -700, 140)
@@ -745,10 +749,19 @@ def main() -> None:
     day = import_texture(SOURCE_DIR / "NASA" / "bluemarble-4096.png", "T_EarthDay")
     night = import_texture(SOURCE_DIR / "NASA" / "earthatnight-4096.png", "T_EarthNight")
     clouds = import_texture(SOURCE_DIR / "NASA" / "clouds-2048.png", "T_CloudFraction")
+    # Linear read: the runtime replacement (EUMETSAT IR remap) is linear gray,
+    # and the sampler types of default and override must match.
+    clouds.set_editor_property("srgb", False)
+    save_asset(f"{TEXTURE_DIR}/T_CloudFraction")
     build_cloud_master(clouds)
     build_selected_path_master()
     build_scatter_atmosphere_master()
-    stars = import_texture(SOURCE_DIR / "Generated" / "starfield.png", "T_Starfield")
+    # Real sky photo map (NASA SVS Deep Star Map 2020, public domain) when
+    # fetched; the procedurally generated field stays as offline fallback.
+    starmap_source = SOURCE_DIR / "NASA" / "starmap_2020_4k.exr"
+    if not starmap_source.exists():
+        starmap_source = SOURCE_DIR / "Generated" / "starfield.png"
+    stars = import_texture(starmap_source, "T_Starfield")
     icons = import_texture(SOURCE_DIR / "Generated" / "marker_icons.png", "T_MarkerIcons")
     # White-on-black mask: linear values keep thin strokes from washing out.
     icons.set_editor_property("srgb", False)

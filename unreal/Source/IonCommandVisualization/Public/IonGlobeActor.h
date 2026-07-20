@@ -9,6 +9,7 @@ class UMaterialInstanceDynamic;
 class UPointLightComponent;
 class USceneComponent;
 class UStaticMeshComponent;
+class UTexture2D;
 
 UCLASS()
 class IONCOMMANDVISUALIZATION_API AIonGlobeActor final : public AActor
@@ -17,6 +18,7 @@ class IONCOMMANDVISUALIZATION_API AIonGlobeActor final : public AActor
 
 public:
     AIonGlobeActor();
+    virtual void BeginPlay() override;
     virtual void Tick(float DeltaSeconds) override;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="ION COMMAND|Globe")
@@ -33,4 +35,11 @@ private:
     UPROPERTY(VisibleAnywhere) TObjectPtr<UPointLightComponent> CoreGlow;
     UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> EarthMID;
     UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> AtmosphereMID;
+    // Live cloud overlay: the packaged static texture is replaced at runtime
+    // by the current EUMETSAT world IR composite (hourly refresh).
+    UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> CloudsMID;
+    UPROPERTY(Transient) TObjectPtr<UTexture2D> LiveCloudTexture;
+    FTimerHandle CloudRefreshTimer;
+    void RequestLiveClouds();
+    void ApplyLiveClouds(const TArray<uint8>& PngBytes);
 };
