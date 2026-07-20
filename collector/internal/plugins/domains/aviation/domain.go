@@ -42,9 +42,9 @@ func (d *Domain) Normalize(_ context.Context, record plugins.RawRecord) ([]event
 	event := events.NewEnvelope(record.OriginalID, "aviation", "aviation.aircraft", events.MessageObservation, events.SourceRef{PluginID: record.SourcePluginID, InstanceID: record.SourceInstanceID, OriginalID: record.OriginalID}, record.ObservedUTC)
 	event.EntityID = "aviation:aircraft:" + strings.ToLower(raw.Hex)
 	event.Geometry = events.Point(raw.Lon, raw.Lat, raw.AltFt*0.3048)
-	// Aircraft leave the picture within a minute if their aggregator entry
-	// goes stale.
-	validUntil := record.ObservedUTC.Add(time.Minute)
+	// Aircraft survive a few slow or rate-limited polls (sources back off up
+	// to minutes under aggregator throttling) instead of blinking out.
+	validUntil := record.ObservedUTC.Add(3 * time.Minute)
 	event.Time.ValidUntilUTC = &validUntil
 	title := strings.TrimSpace(raw.Callsign)
 	if title == "" {

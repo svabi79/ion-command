@@ -68,7 +68,8 @@
       "enabled": true,
       "latitude": 47.3,
       "longitude": 8.5,
-      "radiusNm": 200
+      "radiusNm": 200,
+      "pollSeconds": 30
     },
     {
       "id": "adsb-london",
@@ -77,7 +78,7 @@
       "latitude": 51.5,
       "longitude": -0.5,
       "radiusNm": 250,
-      "pollSeconds": 30
+      "pollSeconds": 60
     },
     {
       "id": "adsb-madrid",
@@ -86,7 +87,7 @@
       "latitude": 40.4,
       "longitude": -3.7,
       "radiusNm": 250,
-      "pollSeconds": 30
+      "pollSeconds": 60
     },
     {
       "id": "adsb-rome",
@@ -95,7 +96,7 @@
       "latitude": 41.9,
       "longitude": 12.5,
       "radiusNm": 250,
-      "pollSeconds": 30
+      "pollSeconds": 60
     },
     {
       "id": "adsb-berlin",
@@ -104,7 +105,7 @@
       "latitude": 52.5,
       "longitude": 13.4,
       "radiusNm": 250,
-      "pollSeconds": 30
+      "pollSeconds": 60
     },
     {
       "id": "rbn-primary",
