@@ -693,6 +693,9 @@ void AIonCockpitHudActor::DrawOverlayMenu(float Scale, float Alpha)
     if (const AGeoArcLayerActor* Layer = ArcLayer.Get())
     {
         MenuRows.Add({TEXT("PATHS"), TEXT("paths"), FString(), !Layer->IsHidden()});
+        // Same filter as the M key: show only paths where the own station is
+        // the transmitter or receiver. Checked = filter active.
+        MenuRows.Add({TEXT("MY RX/TX ONLY"), TEXT("mystation"), FString(), Layer->HasEntityFilter()});
     }
     for (TActorIterator<AIonActivityHeatmapActor> It(GetWorld()); It; ++It)
     {
@@ -781,6 +784,18 @@ void AIonCockpitHudActor::ApplyMenuToggle(const FMenuRow& Row)
     else if (Row.Kind == TEXT("domain"))
     {
         for (TActorIterator<AGeoPointLayerActor> It(GetWorld()); It; ++It) It->SetDomainVisible(Row.Domain, !It->IsDomainVisible(Row.Domain));
+    }
+    else if (Row.Kind == TEXT("mystation"))
+    {
+        // Build the own-station entity ids the same way the world station and
+        // reticle do, so no cross-module dependency is needed here.
+        FString Callsign = TEXT("N0CALL");
+        GConfig->GetString(TEXT("IonCommand.Station"), TEXT("Callsign"), Callsign, GGameIni);
+        const TArray<FString> OwnIds = {TEXT("hamradio:station:") + Callsign, TEXT("hamradio:receiver:") + Callsign};
+        for (TActorIterator<AGeoArcLayerActor> It(GetWorld()); It; ++It)
+        {
+            It->SetEntityFilter(It->HasEntityFilter() ? TArray<FString>() : OwnIds);
+        }
     }
 }
 

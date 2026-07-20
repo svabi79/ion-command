@@ -9,6 +9,8 @@
 #include "GeoStreamSubsystem.h"
 #include "GeoTimelineSubsystem.h"
 #include "Materials/MaterialInstanceDynamic.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
 #include "Misc/ConfigCacheIni.h"
 #include "UObject/ConstructorHelpers.h"
 
@@ -39,6 +41,16 @@ AIonCommandDeckActor::AIonCommandDeckActor()
 void AIonCommandDeckActor::BeginPlay()
 {
     Super::BeginPlay();
+    // The diegetic console (floating title + three blue data panels) just
+    // duplicates the HUD status bar, so it stays hidden for a clean wall view.
+    // -IonShowDeck restores it. This actor is placed in the level, so the
+    // gate has to live here, not only at the game-mode spawn site.
+    if (!FParse::Param(FCommandLine::Get(), TEXT("IonShowDeck")))
+    {
+        SetActorHiddenInGame(true);
+        SetActorTickEnabled(false);
+        return;
+    }
     FString ProductName = TEXT("ION COMMAND");
     FString Subtitle = TEXT("Global Geospatial Operations");
     GConfig->GetString(TEXT("/Script/EngineSettings.GeneralProjectSettings"), TEXT("ProjectName"), ProductName, GGameIni);
