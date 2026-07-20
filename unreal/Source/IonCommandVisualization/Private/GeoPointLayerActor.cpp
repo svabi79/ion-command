@@ -152,11 +152,11 @@ void AGeoPointLayerActor::Submit(const FGeoMessageEnvelope& Message)
     {
         FRenderedGeoPoint& Point = ActivePoints[*ExistingIndex];
         Point.LastSeenSeconds = NowSeconds;
-        // Moving markers (satellites) need their instance transform updated,
-        // not just the bookkeeping refresh static stations get.
-        if (bMoves && !Point.Location.Equals(Location, 1.0))
+        // Moving markers (aircraft, satellites) need their instance transform
+        // updated once the RENDERED position lags too far behind.
+        if (bMoves && !Point.RenderedLocation.Equals(Location, MovementTolerance))
         {
-            bNeedsRebuild = true;
+            bMovementDirty = true;
         }
         Point.Location = Location;
         if (ExpireAt > 0.0) Point.ExpireAtSeconds = ExpireAt;
@@ -182,6 +182,7 @@ void AGeoPointLayerActor::Submit(const FGeoMessageEnvelope& Message)
     FRenderedGeoPoint& Point = ActivePoints.AddDefaulted_GetRef();
     Point.EntityKey = EntityKey;
     Point.Location = Location;
+    Point.RenderedLocation = Location;
     Point.LastSeenSeconds = NowSeconds;
     Point.ExpireAtSeconds = ExpireAt;
     Point.Scale = PointScale;
@@ -262,12 +263,12 @@ const FRenderedGeoPoint* AGeoPointLayerActor::FindNearestToRay(const FVector& Ra
 void AGeoPointLayerActor::Tick(float DeltaSeconds)
 {
     Super::Tick(DeltaSeconds);
-    if (bNeedsRebuild)
+    const double NowSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+    if (bNeedsRebuild || (bMovementDirty && NowSeconds - LastMovementRebuild >= MovementRebuildSeconds))
     {
         bNeedsRebuild = false;
         RebuildInstances();
     }
-    const double NowSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
     if (NowSeconds - LastExpiryCheck > 5.0)
     {
         LastExpiryCheck = NowSeconds;
@@ -303,13 +304,16 @@ void AGeoPointLayerActor::RebuildInstances()
     TArray<const FRenderedGeoPoint*> Rendered;
     Transforms.Reserve(ActivePoints.Num());
     Rendered.Reserve(ActivePoints.Num());
-    for (const FRenderedGeoPoint& Point : ActivePoints)
+    for (FRenderedGeoPoint& Point : ActivePoints)
     {
+        Point.RenderedLocation = Point.Location;
         if (!IsDomainVisible(Point.Domain)) continue;
         const FVector Scale(MarkerScale * CurrentZoomFactor * Point.Scale);
         Transforms.Emplace(FQuat::Identity, Point.Location, Scale);
         Rendered.Add(&Point);
     }
+    bMovementDirty = false;
+    LastMovementRebuild = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
     MarkerInstances->ClearInstances();
     MarkerInstances->AddInstances(Transforms, false);
     for (int32 Index = 0; Index < Rendered.Num(); ++Index)

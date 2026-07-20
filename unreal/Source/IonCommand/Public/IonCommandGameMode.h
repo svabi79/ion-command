@@ -26,6 +26,7 @@ private:
     FString AutomationScreenshotFile;
     bool bExitAfterScreenshot = false;
     FTimerHandle AutomationScreenshotTimer;
+    FTimerHandle AutomationEarlyScreenshotTimer;
     FTimerHandle AutomationExitTimer;
     FTimerHandle AutomationSelectTimer;
 };

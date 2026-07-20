@@ -14,6 +14,13 @@ struct FRenderedGeoPoint
 {
     FString EntityKey;
     FVector Location = FVector::ZeroVector;
+    // Position the render instance actually shows. Movement must be measured
+    // against THIS, not Location: Location follows every sighting, so a
+    // per-poll delta below the rebuild tolerance would otherwise creep along
+    // with the bookkeeping and the instance would never move (aircraft froze
+    // for up to an hour while satellites, whose per-update delta exceeds the
+    // old threshold, kept moving).
+    FVector RenderedLocation = FVector::ZeroVector;
     double LastSeenSeconds = 0.0;
     // Render-clock deadline derived from the envelope's validUntil; zero
     // falls back to the class lifetime defaults.
@@ -68,6 +75,11 @@ public:
     // observations (lightning strikes) fade much sooner than entities.
     UPROPERTY(EditAnywhere, Category="ION COMMAND|Layer") double MarkerLifetimeSeconds = 300.0;
     UPROPERTY(EditAnywhere, Category="ION COMMAND|Layer") double ObservationLifetimeSeconds = 30.0;
+    // Moving markers trigger a coalesced rebuild once their rendered position
+    // lags by this many world units (0.25 = ~1.6 km ground distance), at most
+    // every MovementRebuildSeconds.
+    UPROPERTY(EditAnywhere, Category="ION COMMAND|Layer") double MovementTolerance = 0.25;
+    UPROPERTY(EditAnywhere, Category="ION COMMAND|Layer") double MovementRebuildSeconds = 2.0;
 
 private:
     void OnMessageAccepted(const FGeoMessageEnvelope& Message);
@@ -90,5 +102,10 @@ private:
     TMap<FString, int32> EntityToPoint;
     TSet<FString> HiddenDomains;
     bool bNeedsRebuild = false;
+    // Movement-only dirtiness coalesces into a slower rebuild cadence so a
+    // few hundred aircraft updating every poll do not force a full rebuild
+    // four times a second.
+    bool bMovementDirty = false;
+    double LastMovementRebuild = 0.0;
     double LastExpiryCheck = 0.0;
 };

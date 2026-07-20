@@ -119,6 +119,18 @@ void AIonCommandGameMode::ScheduleAutomationScreenshot()
         AutomationScreenshotFile = FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("Screenshots/Reference/ION_COMMAND_Live.png"));
     }
     bExitAfterScreenshot = FParse::Param(FCommandLine::Get(), TEXT("IonExitAfterScreenshot"));
+    // -IonScreenshotEarlyAfter=<s> adds a first capture in the SAME session
+    // (suffix _early), for A/B proofs like "did this marker move".
+    double EarlySeconds = 0.0;
+    if (FParse::Value(FCommandLine::Get(), TEXT("IonScreenshotEarlyAfter="), EarlySeconds) && EarlySeconds > 0.0 && EarlySeconds < DelaySeconds)
+    {
+        GetWorldTimerManager().SetTimer(AutomationEarlyScreenshotTimer, FTimerDelegate::CreateWeakLambda(this, [this]
+        {
+            const FString EarlyFile = FPaths::GetBaseFilename(AutomationScreenshotFile, false) + TEXT("_early.png");
+            FScreenshotRequest::RequestScreenshot(EarlyFile, true, false);
+            UE_LOG(LogTemp, Display, TEXT("ION COMMAND early automation screenshot requested: %s"), *EarlyFile);
+        }), static_cast<float>(EarlySeconds), false);
+    }
     GetWorldTimerManager().SetTimer(AutomationScreenshotTimer, this, &AIonCommandGameMode::TakeAutomationScreenshot, static_cast<float>(DelaySeconds), false);
     UE_LOG(LogTemp, Display, TEXT("ION COMMAND automation screenshot scheduled in %.1f s -> %s"), DelaySeconds, *AutomationScreenshotFile);
 }
