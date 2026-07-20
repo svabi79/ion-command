@@ -44,7 +44,13 @@ void AIonCommandGameMode::BeginPlay()
     TActorIterator<AIonIonosphereActor> Ionosphere(World); if (!Ionosphere) World->SpawnActor<AIonIonosphereActor>(FVector::ZeroVector, FRotator::ZeroRotator);
     TActorIterator<AIonAuroraActor> Aurora(World); if (!Aurora) World->SpawnActor<AIonAuroraActor>(FVector::ZeroVector, FRotator::ZeroRotator);
     TActorIterator<AIonActivityHeatmapActor> Heatmap(World); if (!Heatmap) World->SpawnActor<AIonActivityHeatmapActor>(FVector::ZeroVector, FRotator::ZeroRotator);
-    TActorIterator<AIonCommandDeckActor> Deck(World); if (!Deck) World->SpawnActor<AIonCommandDeckActor>(FVector(-1300, 0, 0), FRotator::ZeroRotator);
+    // The diegetic deck (floating title + three data console panels) just
+    // duplicates the HUD status bar, so the wall view stays clean by default;
+    // -IonShowDeck brings the old console chrome back.
+    if (FParse::Param(FCommandLine::Get(), TEXT("IonShowDeck")))
+    {
+        TActorIterator<AIonCommandDeckActor> Deck(World); if (!Deck) World->SpawnActor<AIonCommandDeckActor>(FVector(-1300, 0, 0), FRotator::ZeroRotator);
+    }
     TActorIterator<AHamRadioOwnStationActor> OwnStation(World); if (!OwnStation) World->SpawnActor<AHamRadioOwnStationActor>(FVector::ZeroVector, FRotator::ZeroRotator);
     // Boot staging: fade in from black over the first seconds. Purely visual
     // and never blocks input, so any interaction effectively skips it.
