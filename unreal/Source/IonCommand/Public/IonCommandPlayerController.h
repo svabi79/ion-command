@@ -14,8 +14,14 @@ public:
 
 protected:
     virtual void SetupInputComponent() override;
+    // Routes typed characters to the settings panel while a text field is
+    // focused, and consumes them so they do not also trigger band/layer keys.
+    virtual bool InputKey(const FInputKeyEventArgs& Params) override;
 
 private:
+    // True while the cockpit settings panel is capturing text; hotkey actions
+    // no-op so typing a callsign cannot flip layers or bands.
+    bool IsTypingText() const;
     void SelectUnderCursor();
     void ClearSelection();
     void ToggleIonosphere();

@@ -43,6 +43,7 @@ struct FRenderedGeoPoint
     FVector RadialDirection = FVector::ZeroVector;
     double AltitudeMeters = 0.0;
     double DeclaredAltitudeScale = 1.0;
+    bool bOnGround = false;
     // Domain drives the overlay menu's per-category visibility; the display
     // strings feed the hover tooltip.
     FString Domain;
@@ -86,6 +87,16 @@ public:
     bool IsAltitudeExaggerationEnabled() const { return bAltitudeExaggeration; }
     void SetAltitudeExaggerationEnabled(bool bEnabled);
 
+    // Aviation declutter (settings panel): hide aircraft below a minimum true
+    // altitude, and/or hide on-ground aircraft. Other domains are unaffected.
+    double GetMinAircraftAltitudeMeters() const { return MinAircraftAltitudeMeters; }
+    void SetMinAircraftAltitudeMeters(double Meters);
+    bool GetShowGroundAircraft() const { return bShowGroundAircraft; }
+    void SetShowGroundAircraft(bool bShow);
+    // Client marker lifetime (settings panel).
+    void SetMarkerLifetimeSeconds(double Seconds);
+    double GetMarkerLifetimeSeconds() const { return MarkerLifetimeSeconds; }
+
     UPROPERTY(EditAnywhere, Category="ION COMMAND|Layer") double GlobeRadius = 1000.0;
     // Sized for the global aviation snapshot (~8k airframes) on top of the
     // ham station, lightning, and satellite populations.
@@ -127,6 +138,10 @@ private:
     TMap<FString, int32> EntityToPoint;
     TSet<FString> HiddenDomains;
     bool bAltitudeExaggeration = true;
+    // Aviation declutter filter (settings-panel controlled).
+    double MinAircraftAltitudeMeters = 0.0;
+    bool bShowGroundAircraft = true;
+    bool IsAircraftFiltered(const FRenderedGeoPoint& Point) const;
     bool bNeedsRebuild = false;
     // Movement-only dirtiness coalesces into a slower rebuild cadence so a
     // few hundred aircraft updating every poll do not force a full rebuild

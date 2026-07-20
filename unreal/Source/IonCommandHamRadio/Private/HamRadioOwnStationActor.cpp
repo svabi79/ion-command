@@ -57,8 +57,9 @@ FString AHamRadioOwnStationActor::ConfiguredLocator()
 void AHamRadioOwnStationActor::BeginPlay()
 {
     Super::BeginPlay();
+    AppliedLocator = ConfiguredLocator();
     FGeoPosition Position;
-    if (UGeoMathLibrary::MaidenheadToLatLon(ConfiguredLocator(), Position))
+    if (UGeoMathLibrary::MaidenheadToLatLon(AppliedLocator, Position))
     {
         const FVector Location = UGeoMathLibrary::LatitudeLongitudeToUnitSphere(Position.Latitude, Position.Longitude) * (GlobeRadius + 12.0);
         SetActorLocation(Location);
@@ -69,6 +70,19 @@ void AHamRadioOwnStationActor::Tick(float DeltaSeconds)
 {
     Super::Tick(DeltaSeconds);
     PulsePhase += DeltaSeconds;
+    // Re-read the locator so a grid change in the settings panel repositions
+    // the world halo live, in step with the HUD reticle (which reads the ini
+    // every frame). Cheap config lookup; only moves when it actually changes.
+    const FString CurrentLocator = ConfiguredLocator();
+    if (CurrentLocator != AppliedLocator)
+    {
+        FGeoPosition Position;
+        if (UGeoMathLibrary::MaidenheadToLatLon(CurrentLocator, Position))
+        {
+            SetActorLocation(UGeoMathLibrary::LatitudeLongitudeToUnitSphere(Position.Latitude, Position.Longitude) * (GlobeRadius + 12.0));
+            AppliedLocator = CurrentLocator;
+        }
+    }
     // Roughly constant screen size, like the point markers: the old fixed
     // 24/45-70 unit spheres ballooned into a small sun when zoomed in.
     double ZoomFactor = 1.0;

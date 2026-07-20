@@ -8,6 +8,8 @@
 #include "IonCockpitHudActor.generated.h"
 
 class UGeoDataSubsystem;
+class AGeoArcLayerActor;
+class AGeoPointLayerActor;
 
 // One aggregated display region (generic display.*Region property value).
 struct FIonRegionStat
@@ -56,6 +58,14 @@ public:
     // selection).
     void ToggleOverlayMenu() { bOverlayMenuOpen = !bOverlayMenuOpen; }
     bool HandleClick(const FVector2D& ScreenPosition);
+
+    // Settings panel (opened from the overlay menu's SETTINGS row). While a
+    // text field is focused the player controller routes typed characters
+    // here; Control: 0 = backspace, 1 = commit, 2 = cancel.
+    void OpenSettings();
+    bool IsCapturingText() const { return bSettingsOpen && EditingRow >= 0; }
+    void SettingsTextChar(TCHAR Character);
+    void SettingsTextControl(int32 Control);
 
 private:
     void OnMessageAccepted(const FGeoMessageEnvelope& Message);
@@ -140,6 +150,29 @@ private:
     TArray<FMenuRow> MenuRows;
     bool bOverlayMenuOpen = false;
     void ApplyMenuToggle(const FMenuRow& Row);
+
+    // Settings panel state.
+    struct FSettingsRow
+    {
+        FString Label;
+        FString Key;   // callsign, grid, lifetime, minfl, ground, close
+        FString Value; // display string
+        bool bText = false;
+        FVector2D Min = FVector2D::ZeroVector;
+        FVector2D Max = FVector2D::ZeroVector;
+    };
+    TArray<FSettingsRow> SettingsRows;
+    bool bSettingsOpen = false;
+    bool bSettingsLoaded = false;
+    int32 EditingRow = -1; // index of the text row being edited, -1 = none
+    FString EditBuffer;
+    void DrawSettings(float Scale, float Alpha);
+    bool HandleSettingsClick(const FVector2D& ScreenPosition);
+    void CycleSetting(const FString& Key);
+    void CommitTextField(const FString& Key, const FString& Value);
+    void LoadAndApplySettings();
+    void PersistSetting(const TCHAR* Section, const TCHAR* Field, const FString& Value);
+    AGeoPointLayerActor* FindPointLayer() const;
 
     // Hover tooltip cache (picked on a short throttle, drawn every frame).
     FString HoverTitle;

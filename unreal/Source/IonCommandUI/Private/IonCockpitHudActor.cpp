@@ -155,6 +155,8 @@ void AIonCockpitHudActor::BeginPlay()
     Super::BeginPlay();
     // -IonOverlayMenu opens the menu at startup for unattended captures.
     bOverlayMenuOpen = FParse::Param(FCommandLine::Get(), TEXT("IonOverlayMenu"));
+    // -IonSettings opens the settings panel at startup (captures / quick edit).
+    bSettingsOpen = FParse::Param(FCommandLine::Get(), TEXT("IonSettings"));
     if (UGameInstance* GameInstance = GetGameInstance())
     {
         if (UGeoDataSubsystem* Data = GameInstance->GetSubsystem<UGeoDataSubsystem>())
@@ -332,9 +334,16 @@ void AIonCockpitHudActor::DrawHUD()
         DrawProviderPanels(Scale, Alpha, PolarPanelBottomY + 16.0f * Scale);
         DrawEndpointLabels(Scale, Alpha);
     }
+    // Apply persisted display settings once the point layer exists.
+    if (!bSettingsLoaded && FindPointLayer())
+    {
+        bSettingsLoaded = true;
+        LoadAndApplySettings();
+    }
     DrawOwnStationReticle(Scale, Alpha);
-    if (bOverlayMenuOpen) DrawOverlayMenu(Scale, Alpha);
-    DrawHoverTooltip(Scale, Alpha);
+    if (bSettingsOpen) DrawSettings(Scale, Alpha);
+    else if (bOverlayMenuOpen) DrawOverlayMenu(Scale, Alpha);
+    if (!bSettingsOpen) DrawHoverTooltip(Scale, Alpha);
     DrawModeHint(Scale, Alpha);
 }
 
@@ -688,6 +697,7 @@ void AIonCockpitHudActor::DrawOverlayMenu(float Scale, float Alpha)
     // then every domain the point layer currently holds. New domains appear
     // automatically.
     MenuRows.Reset();
+    MenuRows.Add({TEXT("SETTINGS >"), TEXT("settings"), FString(), false});
     AGeoPointLayerActor* PointLayer = nullptr;
     for (TActorIterator<AGeoPointLayerActor> It(GetWorld()); It; ++It) { PointLayer = *It; break; }
     if (const AGeoArcLayerActor* Layer = ArcLayer.Get())
@@ -751,6 +761,7 @@ void AIonCockpitHudActor::DrawOverlayMenu(float Scale, float Alpha)
 
 bool AIonCockpitHudActor::HandleClick(const FVector2D& ScreenPosition)
 {
+    if (bSettingsOpen) return HandleSettingsClick(ScreenPosition);
     if (!bOverlayMenuOpen) return false;
     for (const FMenuRow& Row : MenuRows)
     {
@@ -765,7 +776,11 @@ bool AIonCockpitHudActor::HandleClick(const FVector2D& ScreenPosition)
 
 void AIonCockpitHudActor::ApplyMenuToggle(const FMenuRow& Row)
 {
-    if (Row.Kind == TEXT("paths"))
+    if (Row.Kind == TEXT("settings"))
+    {
+        OpenSettings();
+    }
+    else if (Row.Kind == TEXT("paths"))
     {
         for (TActorIterator<AGeoArcLayerActor> It(GetWorld()); It; ++It) It->SetActorHiddenInGame(!It->IsHidden());
     }
@@ -797,6 +812,203 @@ void AIonCockpitHudActor::ApplyMenuToggle(const FMenuRow& Row)
             It->SetEntityFilter(It->HasEntityFilter() ? TArray<FString>() : OwnIds);
         }
     }
+}
+
+AGeoPointLayerActor* AIonCockpitHudActor::FindPointLayer() const
+{
+    for (TActorIterator<AGeoPointLayerActor> It(GetWorld()); It; ++It) return *It;
+    return nullptr;
+}
+
+void AIonCockpitHudActor::OpenSettings()
+{
+    bSettingsOpen = true;
+    bOverlayMenuOpen = false;
+    EditingRow = -1;
+}
+
+void AIonCockpitHudActor::PersistSetting(const TCHAR* Section, const TCHAR* Field, const FString& Value)
+{
+    GConfig->SetString(Section, Field, *Value, GGameIni);
+    GConfig->Flush(false, GGameIni);
+}
+
+void AIonCockpitHudActor::LoadAndApplySettings()
+{
+    AGeoPointLayerActor* PointLayer = FindPointLayer();
+    if (!PointLayer) return;
+    double Lifetime = 0.0;
+    if (GConfig->GetDouble(TEXT("IonCommand.Display"), TEXT("MarkerLifetime"), Lifetime, GGameIni) && Lifetime > 0.0)
+    {
+        PointLayer->SetMarkerLifetimeSeconds(Lifetime);
+    }
+    double MinFeet = 0.0;
+    if (GConfig->GetDouble(TEXT("IonCommand.Display"), TEXT("MinFlightLevelFt"), MinFeet, GGameIni))
+    {
+        PointLayer->SetMinAircraftAltitudeMeters(MinFeet * 0.3048);
+    }
+    bool bShowGround = true;
+    if (GConfig->GetBool(TEXT("IonCommand.Display"), TEXT("ShowGround"), bShowGround, GGameIni))
+    {
+        PointLayer->SetShowGroundAircraft(bShowGround);
+    }
+}
+
+void AIonCockpitHudActor::CycleSetting(const FString& Key)
+{
+    AGeoPointLayerActor* PointLayer = FindPointLayer();
+    if (!PointLayer) return;
+    if (Key == TEXT("lifetime"))
+    {
+        static const double Options[] = {60.0, 120.0, 300.0, 600.0, 1200.0};
+        const double Current = PointLayer->GetMarkerLifetimeSeconds();
+        int32 Index = 0;
+        for (int32 i = 0; i < 5; ++i) if (FMath::IsNearlyEqual(Options[i], Current, 1.0)) { Index = i; break; }
+        const double Next = Options[(Index + 1) % 5];
+        PointLayer->SetMarkerLifetimeSeconds(Next);
+        PersistSetting(TEXT("IonCommand.Display"), TEXT("MarkerLifetime"), FString::SanitizeFloat(Next));
+    }
+    else if (Key == TEXT("minfl"))
+    {
+        static const double FeetOptions[] = {0.0, 5000.0, 10000.0, 20000.0, 30000.0};
+        const double CurrentFt = PointLayer->GetMinAircraftAltitudeMeters() / 0.3048;
+        int32 Index = 0;
+        for (int32 i = 0; i < 5; ++i) if (FMath::IsNearlyEqual(FeetOptions[i], CurrentFt, 50.0)) { Index = i; break; }
+        const double NextFt = FeetOptions[(Index + 1) % 5];
+        PointLayer->SetMinAircraftAltitudeMeters(NextFt * 0.3048);
+        PersistSetting(TEXT("IonCommand.Display"), TEXT("MinFlightLevelFt"), FString::SanitizeFloat(NextFt));
+    }
+    else if (Key == TEXT("ground"))
+    {
+        const bool Next = !PointLayer->GetShowGroundAircraft();
+        PointLayer->SetShowGroundAircraft(Next);
+        PersistSetting(TEXT("IonCommand.Display"), TEXT("ShowGround"), Next ? TEXT("True") : TEXT("False"));
+    }
+}
+
+void AIonCockpitHudActor::CommitTextField(const FString& Key, const FString& Value)
+{
+    const FString Clean = Value.TrimStartAndEnd().ToUpper();
+    if (Clean.IsEmpty()) return;
+    if (Key == TEXT("callsign"))
+    {
+        PersistSetting(TEXT("IonCommand.Station"), TEXT("Callsign"), Clean);
+    }
+    else if (Key == TEXT("grid"))
+    {
+        PersistSetting(TEXT("IonCommand.Station"), TEXT("Locator"), Clean);
+    }
+    // The reticle and the own-station actor re-read the ini every frame, so
+    // callsign/grid changes apply live; the values also persist for restart.
+}
+
+void AIonCockpitHudActor::SettingsTextChar(TCHAR Character)
+{
+    if (EditingRow < 0) return;
+    // Callsign/grid: uppercase letters, digits, and the slash used in
+    // portable callsigns / some locators.
+    const TCHAR Up = FChar::ToUpper(Character);
+    if ((Up >= 'A' && Up <= 'Z') || (Up >= '0' && Up <= '9') || Up == '/')
+    {
+        if (EditBuffer.Len() < 10) EditBuffer.AppendChar(Up);
+    }
+}
+
+void AIonCockpitHudActor::SettingsTextControl(int32 Control)
+{
+    if (EditingRow < 0 || !SettingsRows.IsValidIndex(EditingRow)) { EditingRow = -1; return; }
+    if (Control == 0) // backspace
+    {
+        if (EditBuffer.Len() > 0) EditBuffer.LeftChopInline(1);
+    }
+    else if (Control == 1) // commit
+    {
+        CommitTextField(SettingsRows[EditingRow].Key, EditBuffer);
+        EditingRow = -1;
+    }
+    else // cancel
+    {
+        EditingRow = -1;
+    }
+}
+
+bool AIonCockpitHudActor::HandleSettingsClick(const FVector2D& ScreenPosition)
+{
+    for (int32 Index = 0; Index < SettingsRows.Num(); ++Index)
+    {
+        const FSettingsRow& Row = SettingsRows[Index];
+        if (ScreenPosition.X < Row.Min.X || ScreenPosition.X > Row.Max.X || ScreenPosition.Y < Row.Min.Y || ScreenPosition.Y > Row.Max.Y) continue;
+        if (Row.Key == TEXT("close")) { EditingRow = -1; bSettingsOpen = false; }
+        else if (Row.bText) { EditingRow = Index; EditBuffer = Row.Value; }
+        else { EditingRow = -1; CycleSetting(Row.Key); }
+        return true;
+    }
+    // Click outside any row closes the panel.
+    EditingRow = -1;
+    bSettingsOpen = false;
+    return true;
+}
+
+void AIonCockpitHudActor::DrawSettings(float Scale, float Alpha)
+{
+    AGeoPointLayerActor* PointLayer = FindPointLayer();
+    FString Callsign = TEXT("N0CALL"), Locator = TEXT("JN00AA");
+    GConfig->GetString(TEXT("IonCommand.Station"), TEXT("Callsign"), Callsign, GGameIni);
+    GConfig->GetString(TEXT("IonCommand.Station"), TEXT("Locator"), Locator, GGameIni);
+    const double LifetimeS = PointLayer ? PointLayer->GetMarkerLifetimeSeconds() : 300.0;
+    const double MinFt = PointLayer ? PointLayer->GetMinAircraftAltitudeMeters() / 0.3048 : 0.0;
+    const bool bGround = PointLayer ? PointLayer->GetShowGroundAircraft() : true;
+
+    SettingsRows.Reset();
+    SettingsRows.Add({TEXT("CALLSIGN"), TEXT("callsign"), Callsign, true});
+    SettingsRows.Add({TEXT("GRID LOCATOR"), TEXT("grid"), Locator, true});
+    SettingsRows.Add({TEXT("MARKER LIFETIME"), TEXT("lifetime"), FString::Printf(TEXT("%.0f s"), LifetimeS), false});
+    SettingsRows.Add({TEXT("MIN FLIGHT LEVEL"), TEXT("minfl"), MinFt <= 0.0 ? FString(TEXT("OFF")) : FString::Printf(TEXT("FL%03.0f"), MinFt / 100.0), false});
+    SettingsRows.Add({TEXT("SHOW GROUND A/C"), TEXT("ground"), bGround ? FString(TEXT("ON")) : FString(TEXT("OFF")), false});
+    SettingsRows.Add({TEXT("CLOSE"), TEXT("close"), FString(), false});
+
+    const float RowHeight = 30.0f * Scale;
+    const float PanelWidth = 340.0f * Scale;
+    const float HeaderHeight = 38.0f * Scale;
+    const float PanelHeight = HeaderHeight + SettingsRows.Num() * RowHeight + 14.0f * Scale;
+    const float PanelX = (Canvas->SizeX - PanelWidth) * 0.5f;
+    const float PanelY = (Canvas->SizeY - PanelHeight) * 0.5f;
+    // Opaque backdrop so the config text stays legible over dense traffic.
+    DrawRect(PanelX, PanelY, PanelWidth, PanelHeight, WithAlpha(FLinearColor(0.02f, 0.05f, 0.09f), 0.94f * Alpha));
+    DrawPanelFrame(PanelX, PanelY, PanelWidth, PanelHeight, TEXT("SETTINGS"), Scale, Alpha);
+
+    FVector2D Mouse(-1, -1);
+    if (const APlayerController* Player = PlayerOwner.Get())
+    {
+        float Mx = 0, My = 0;
+        if (Player->GetMousePosition(Mx, My)) Mouse = FVector2D(Mx, My);
+    }
+    float RowY = PanelY + HeaderHeight;
+    for (int32 Index = 0; Index < SettingsRows.Num(); ++Index)
+    {
+        FSettingsRow& Row = SettingsRows[Index];
+        Row.Min = FVector2D(PanelX, RowY);
+        Row.Max = FVector2D(PanelX + PanelWidth, RowY + RowHeight);
+        const bool bHovered = Mouse.X >= Row.Min.X && Mouse.X <= Row.Max.X && Mouse.Y >= Row.Min.Y && Mouse.Y <= Row.Max.Y;
+        if (bHovered) DrawRect(Row.Min.X + 2.0f * Scale, Row.Min.Y + 1.0f * Scale, PanelWidth - 4.0f * Scale, RowHeight - 2.0f * Scale, WithAlpha(CockpitCyan, 0.12f * Alpha));
+        if (Row.Key == TEXT("close"))
+        {
+            DrawTextAt(TEXT("[ CLOSE ]"), PanelX + PanelWidth * 0.5f, RowY + 6.0f * Scale, WithAlpha(CockpitGreen, Alpha), 1.2f * Scale, true);
+        }
+        else
+        {
+            DrawTextAt(Row.Label, PanelX + 14.0f * Scale, RowY + 6.0f * Scale, WithAlpha(CockpitWhite, Alpha), 1.15f * Scale);
+            FString Shown = Row.Value;
+            FLinearColor ValueColor = CockpitCyan;
+            if (Row.bText && EditingRow == Index) { Shown = EditBuffer + TEXT("_"); ValueColor = CockpitGreen; }
+            // Right-align the value: measure its width and draw from the right.
+            float VW = 0, VH = 0;
+            Canvas->TextSize(GEngine->GetMediumFont(), Shown, VW, VH, 1.15f * Scale, 1.15f * Scale);
+            DrawTextAt(Shown, PanelX + PanelWidth - 14.0f * Scale - VW, RowY + 6.0f * Scale, WithAlpha(ValueColor, Alpha), 1.15f * Scale, false);
+        }
+        RowY += RowHeight;
+    }
+    DrawTextAt(TEXT("CLICK A ROW  //  TYPE FOR TEXT  //  ENTER SAVE  //  ESC CANCEL"), PanelX + PanelWidth * 0.5f, PanelY + PanelHeight - 20.0f * Scale, WithAlpha(CockpitDim, Alpha), 0.9f * Scale, true);
 }
 
 void AIonCockpitHudActor::DrawHoverTooltip(float Scale, float Alpha)

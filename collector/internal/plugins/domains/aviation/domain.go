@@ -103,6 +103,7 @@ func (d *Domain) Normalize(_ context.Context, record plugins.RawRecord) ([]event
 		"altitudeFt":         raw.AltFt,
 		"groundSpeedKt":      raw.GsKt,
 		"trackDeg":           raw.Track,
+		"onGround":           raw.OnGround,
 		"visual.markerScale": 0.9,
 		"visual.icon":        kind,
 		// True altitude is visually imperceptible at globe scale (10 km on

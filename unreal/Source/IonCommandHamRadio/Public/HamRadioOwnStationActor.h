@@ -33,4 +33,7 @@ private:
     UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> Marker;
     UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> Halo;
     double PulsePhase = 0.0;
+    // Last locator the world position was placed from; a change (settings
+    // panel) re-places the halo live.
+    FString AppliedLocator;
 };

@@ -198,6 +198,7 @@ void AGeoPointLayerActor::Submit(const FGeoMessageEnvelope& Message)
         PointScale = FMath::Clamp(FCString::Atof(*ScaleProperty), 0.3f, 5.0f);
     }
     const bool bMessageEmergency = !Message.Properties.FindRef(TEXT("visual.emergency")).IsEmpty();
+    const bool bMessageOnGround = Message.Properties.FindRef(TEXT("onGround")) == TEXT("true");
     // Kinematics: compass heading and ground speed, converted into a world
     // tangent vector and globe units per second for glyph orientation and
     // dead reckoning.
@@ -229,6 +230,7 @@ void AGeoPointLayerActor::Submit(const FGeoMessageEnvelope& Message)
         Point.RadialDirection = Radial;
         Point.AltitudeMeters = Position.AltitudeMeters;
         Point.DeclaredAltitudeScale = DeclaredAltitudeScale;
+        Point.bOnGround = bMessageOnGround;
         Point.HeadingWorld = HeadingWorld;
         Point.SpeedUnitsPerSecond = SpeedUnitsPerSecond;
         if (ExpireAt > 0.0) Point.ExpireAtSeconds = ExpireAt;
@@ -296,6 +298,7 @@ void AGeoPointLayerActor::Submit(const FGeoMessageEnvelope& Message)
     Point.RadialDirection = Radial;
     Point.AltitudeMeters = Position.AltitudeMeters;
     Point.DeclaredAltitudeScale = DeclaredAltitudeScale;
+    Point.bOnGround = bMessageOnGround;
     Point.HeadingWorld = HeadingWorld;
     Point.SpeedUnitsPerSecond = SpeedUnitsPerSecond;
     // A lone kinematic marker added into an otherwise-quiet, static-camera
@@ -375,6 +378,35 @@ void AGeoPointLayerActor::SetAltitudeExaggerationEnabled(bool bEnabled)
     bNeedsRebuild = true;
 }
 
+bool AGeoPointLayerActor::IsAircraftFiltered(const FRenderedGeoPoint& Point) const
+{
+    // Only aviation markers are affected; satellites/ham/etc. never filter.
+    if (Point.Domain != TEXT("aviation")) return false;
+    if (Point.bOnGround) return !bShowGroundAircraft;
+    return Point.AltitudeMeters < MinAircraftAltitudeMeters;
+}
+
+void AGeoPointLayerActor::SetMinAircraftAltitudeMeters(double Meters)
+{
+    Meters = FMath::Max(0.0, Meters);
+    if (FMath::IsNearlyEqual(MinAircraftAltitudeMeters, Meters)) return;
+    MinAircraftAltitudeMeters = Meters;
+    bNeedsRebuild = true;
+}
+
+void AGeoPointLayerActor::SetShowGroundAircraft(bool bShow)
+{
+    if (bShowGroundAircraft == bShow) return;
+    bShowGroundAircraft = bShow;
+    bNeedsRebuild = true;
+}
+
+void AGeoPointLayerActor::SetMarkerLifetimeSeconds(double Seconds)
+{
+    MarkerLifetimeSeconds = FMath::Clamp(Seconds, 15.0, 7200.0);
+    bNeedsRebuild = true;
+}
+
 void AGeoPointLayerActor::SetDomainVisible(const FString& Domain, bool bVisible)
 {
     const bool bChanged = bVisible ? HiddenDomains.Remove(Domain) > 0 : !HiddenDomains.Contains(Domain);
@@ -399,6 +431,7 @@ const FRenderedGeoPoint* AGeoPointLayerActor::FindNearestToRay(const FVector& Ra
         if (!IsDomainVisible(Point.Domain)) continue;
         // Skip expired markers awaiting the batched cleanup sweep.
         if (IsExpired(Point, NowSeconds)) continue;
+        if (IsAircraftFiltered(Point)) continue;
         const FVector ToPoint = Point.RenderedLocation - RayOrigin;
         const double Along = FVector::DotProduct(ToPoint, RayDirection);
         if (Along <= 0.0) continue;
@@ -477,6 +510,7 @@ void AGeoPointLayerActor::RebuildInstances()
         // for the batched sweep: they rendered as glyph-less ghosts that the
         // hover pick nonetheless reported (audit finding #4).
         if (IsExpired(Point, NowSeconds)) continue;
+        if (IsAircraftFiltered(Point)) continue;
         if (Point.SpeedUnitsPerSecond > 0.0) bHasKinematicPoints = true;
         const FVector Scale(MarkerScale * CurrentZoomFactor * Point.Scale);
         Transforms.Emplace(FQuat::Identity, Point.RenderedLocation, Scale);

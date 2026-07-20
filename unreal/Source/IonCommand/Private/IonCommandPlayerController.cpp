@@ -19,6 +19,44 @@ AIonCommandPlayerController::AIonCommandPlayerController()
     bEnableMouseOverEvents = true;
 }
 
+bool AIonCommandPlayerController::IsTypingText() const
+{
+    const AIonCockpitHudActor* Cockpit = Cast<AIonCockpitHudActor>(GetHUD());
+    return Cockpit && Cockpit->IsCapturingText();
+}
+
+bool AIonCommandPlayerController::InputKey(const FInputKeyEventArgs& Params)
+{
+    AIonCockpitHudActor* Cockpit = Cast<AIonCockpitHudActor>(GetHUD());
+    if (Cockpit && Cockpit->IsCapturingText() && Params.Event == IE_Pressed)
+    {
+        const FKey Key = Params.Key;
+        if (Key == EKeys::BackSpace) { Cockpit->SettingsTextControl(0); return true; }
+        if (Key == EKeys::Enter) { Cockpit->SettingsTextControl(1); return true; }
+        if (Key == EKeys::Escape) { Cockpit->SettingsTextControl(2); return true; }
+        // Constrained callsign/grid character set. Letter keys report a
+        // one-character FName ("A".."Z"); digits report "Zero".."Nine".
+        const FString Name = Key.GetFName().ToString();
+        TCHAR Typed = 0;
+        if (Name.Len() == 1 && Name[0] >= 'A' && Name[0] <= 'Z') Typed = Name[0];
+        else if (Name == TEXT("Zero")) Typed = '0';
+        else if (Name == TEXT("One")) Typed = '1';
+        else if (Name == TEXT("Two")) Typed = '2';
+        else if (Name == TEXT("Three")) Typed = '3';
+        else if (Name == TEXT("Four")) Typed = '4';
+        else if (Name == TEXT("Five")) Typed = '5';
+        else if (Name == TEXT("Six")) Typed = '6';
+        else if (Name == TEXT("Seven")) Typed = '7';
+        else if (Name == TEXT("Eight")) Typed = '8';
+        else if (Name == TEXT("Nine")) Typed = '9';
+        else if (Key == EKeys::Slash) Typed = '/';
+        if (Typed != 0) { Cockpit->SettingsTextChar(Typed); return true; }
+        // Swallow any other key while editing so it cannot trigger hotkeys.
+        return true;
+    }
+    return Super::InputKey(Params);
+}
+
 void AIonCommandPlayerController::SetupInputComponent()
 {
     Super::SetupInputComponent();
@@ -46,6 +84,7 @@ void AIonCommandPlayerController::SetupInputComponent()
 
 void AIonCommandPlayerController::ToggleOverlayMenu()
 {
+    if (IsTypingText()) return;
     if (AIonCockpitHudActor* Cockpit = Cast<AIonCockpitHudActor>(GetHUD()))
     {
         Cockpit->ToggleOverlayMenu();
@@ -54,6 +93,7 @@ void AIonCommandPlayerController::ToggleOverlayMenu()
 
 void AIonCommandPlayerController::CycleModeFilter()
 {
+    if (IsTypingText()) return;
     // Cycle through the transmission modes present in the active window
     // (alphabetical), then back to no filter. Property-driven, so any domain
     // that publishes a "mode" property participates.
@@ -86,6 +126,7 @@ void AIonCommandPlayerController::CycleModeFilter()
 
 void AIonCommandPlayerController::TogglePaths()
 {
+    if (IsTypingText()) return;
     // Clears the view when thousands of live paths bury the globe; markers,
     // heatmap, and instruments stay.
     for (TActorIterator<AGeoArcLayerActor> It(GetWorld()); It; ++It)
@@ -96,6 +137,7 @@ void AIonCommandPlayerController::TogglePaths()
 
 void AIonCommandPlayerController::ToggleHeatmap()
 {
+    if (IsTypingText()) return;
     for (TActorIterator<AIonActivityHeatmapActor> It(GetWorld()); It; ++It)
     {
         It->SetActorHiddenInGame(!It->IsHidden());
@@ -104,6 +146,7 @@ void AIonCommandPlayerController::ToggleHeatmap()
 
 void AIonCommandPlayerController::CycleHudMode()
 {
+    if (IsTypingText()) return;
     if (AIonCockpitHudActor* Cockpit = Cast<AIonCockpitHudActor>(GetHUD()))
     {
         Cockpit->CycleMode();
@@ -112,16 +155,19 @@ void AIonCommandPlayerController::CycleHudMode()
 
 void AIonCommandPlayerController::SelectBandPreset(int32 PaletteIndex)
 {
+    if (IsTypingText()) return;
     for (TActorIterator<AGeoArcLayerActor> It(GetWorld()); It; ++It) It->SetBandFocus(PaletteIndex);
 }
 
 void AIonCommandPlayerController::ClearBandPreset()
 {
+    if (IsTypingText()) return;
     for (TActorIterator<AGeoArcLayerActor> It(GetWorld()); It; ++It) if (It->GetBandFocus() != INDEX_NONE) It->SetBandFocus(It->GetBandFocus());
 }
 
 void AIonCommandPlayerController::StartRecentReplay()
 {
+    if (IsTypingText()) return;
     ReplayToUtc = FDateTime::UtcNow();
     ReplayFromUtc = ReplayToUtc - FTimespan::FromMinutes(15.0);
     ReplaySpeed = 1.0;
@@ -146,6 +192,7 @@ void AIonCommandPlayerController::ChangeReplaySpeed(double Factor)
 
 void AIonCommandPlayerController::ToggleOwnStationFilter()
 {
+    if (IsTypingText()) return;
     const TArray<FString> OwnEntityIds = AHamRadioOwnStationActor::OwnStationEntityIds();
     for (TActorIterator<AGeoArcLayerActor> It(GetWorld()); It; ++It)
     {
@@ -155,6 +202,7 @@ void AIonCommandPlayerController::ToggleOwnStationFilter()
 
 void AIonCommandPlayerController::ToggleIonosphere()
 {
+    if (IsTypingText()) return;
     for (TActorIterator<AIonIonosphereActor> It(GetWorld()); It; ++It)
     {
         It->SetActorHiddenInGame(!It->IsHidden());
@@ -163,6 +211,7 @@ void AIonCommandPlayerController::ToggleIonosphere()
 
 void AIonCommandPlayerController::FocusSelection()
 {
+    if (IsTypingText()) return;
     if (AIonCommandCameraPawn* CameraPawn = Cast<AIonCommandCameraPawn>(GetPawn()))
     {
         CameraPawn->FocusOnSelection();
