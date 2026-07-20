@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"time"
 
 	"github.com/ion-command/ion-command/collector/internal/events"
 	"github.com/ion-command/ion-command/collector/internal/plugins"
@@ -127,10 +128,14 @@ func (p *Pipeline) publish(message events.Envelope) {
 		p.stats.IncRecorded()
 	}
 	retainKey := ""
+	var retainExpiry time.Time
 	if _, retainable := p.retainTypes[message.SemanticType]; retainable {
 		retainKey = message.SemanticType + "|" + message.EntityID
+		if message.Time.ValidUntilUTC != nil {
+			retainExpiry = *message.Time.ValidUntilUTC
+		}
 	}
-	p.hub.Publish(encoded, retainKey)
+	p.hub.Publish(encoded, retainKey, retainExpiry)
 	p.stats.IncPublished()
 }
 

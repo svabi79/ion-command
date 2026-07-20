@@ -2,13 +2,16 @@ package stream
 
 import (
 	"sync"
+	"time"
 
 	"github.com/ion-command/ion-command/collector/internal/telemetry"
 )
 
 type Client struct{ Messages chan []byte }
 
-const maxRetainedMessages = 4096
+// Sized for a full global aviation snapshot (~13k airframes) on top of the
+// state-like singletons; expired entries are purged lazily.
+const maxRetainedMessages = 40000
 
 type Hub struct {
 	mu                  sync.RWMutex
@@ -17,20 +20,31 @@ type Hub struct {
 	stats               *telemetry.Stats
 	// retained holds the latest message per retain key (semantic type plus
 	// entity), replayed to new clients so state-like values are immediately
-	// present instead of blank until the next live sample.
-	retained map[string][]byte
+	// present instead of blank until the next live sample. Entries carry the
+	// envelope's validity horizon so dead entities (landed aircraft) age out.
+	retained map[string]retainedMessage
+}
+
+type retainedMessage struct {
+	data      []byte
+	expiresAt time.Time
 }
 
 func NewHub(clientQueueCapacity int, stats *telemetry.Stats) *Hub {
-	return &Hub{clients: make(map[*Client]struct{}), clientQueueCapacity: clientQueueCapacity, stats: stats, retained: make(map[string][]byte)}
+	return &Hub{clients: make(map[*Client]struct{}), clientQueueCapacity: clientQueueCapacity, stats: stats, retained: make(map[string]retainedMessage)}
 }
 
 func (h *Hub) Register() *Client {
 	client := &Client{Messages: make(chan []byte, h.clientQueueCapacity)}
+	now := time.Now().UTC()
 	h.mu.Lock()
-	for _, message := range h.retained {
+	for key, message := range h.retained {
+		if !message.expiresAt.IsZero() && now.After(message.expiresAt) {
+			delete(h.retained, key)
+			continue
+		}
 		select {
-		case client.Messages <- append([]byte(nil), message...):
+		case client.Messages <- append([]byte(nil), message.data...):
 		default:
 		}
 	}
@@ -53,11 +67,20 @@ func (h *Hub) Unregister(client *Client) {
 // Publish fans the message out to all live clients. A non-empty retainKey
 // additionally stores it as the latest state for that key (bounded; new keys
 // are ignored once the cap is reached rather than evicting arbitrary state).
-func (h *Hub) Publish(message []byte, retainKey string) {
+func (h *Hub) Publish(message []byte, retainKey string, expiresAt time.Time) {
 	if retainKey != "" {
 		h.mu.Lock()
+		if len(h.retained) >= maxRetainedMessages {
+			// Purge expired entries before refusing new keys.
+			now := time.Now().UTC()
+			for key, existing := range h.retained {
+				if !existing.expiresAt.IsZero() && now.After(existing.expiresAt) {
+					delete(h.retained, key)
+				}
+			}
+		}
 		if _, exists := h.retained[retainKey]; exists || len(h.retained) < maxRetainedMessages {
-			h.retained[retainKey] = append([]byte(nil), message...)
+			h.retained[retainKey] = retainedMessage{data: append([]byte(nil), message...), expiresAt: expiresAt}
 		}
 		h.mu.Unlock()
 	}

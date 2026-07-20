@@ -707,8 +707,32 @@ def build_starfield_master(texture) -> unreal.Material:
     material.set_editor_property("blend_mode", unreal.BlendMode.BLEND_OPAQUE)
     material.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
     material.set_editor_property("two_sided", True)
+    # The NASA star map is stored in sky convention (RA increasing LEFTWARD,
+    # left edge RA 180) — measured against LMC/SMC/galactic bulge positions.
+    # Flipping U restores the map convention the sphere UV expects, so every
+    # star texel lands on its true celestial direction; the actor then only
+    # needs yaw = GMST for the sky to stand correctly over the earth.
+    uv = expression(material, unreal.MaterialExpressionTextureCoordinate, -1000, -80)
+    u_mask = expression(material, unreal.MaterialExpressionComponentMask, -880, -120)
+    u_mask.set_editor_property("r", True)
+    u_mask.set_editor_property("g", False)
+    u_mask.set_editor_property("b", False)
+    u_mask.set_editor_property("a", False)
+    MEL.connect_material_expressions(uv, "", u_mask, "")
+    v_mask = expression(material, unreal.MaterialExpressionComponentMask, -880, -40)
+    v_mask.set_editor_property("r", False)
+    v_mask.set_editor_property("g", True)
+    v_mask.set_editor_property("b", False)
+    v_mask.set_editor_property("a", False)
+    MEL.connect_material_expressions(uv, "", v_mask, "")
+    u_flip = expression(material, unreal.MaterialExpressionOneMinus, -770, -120)
+    MEL.connect_material_expressions(u_mask, "", u_flip, "")
+    flipped_uv = expression(material, unreal.MaterialExpressionAppendVector, -680, -90)
+    MEL.connect_material_expressions(u_flip, "", flipped_uv, "A")
+    MEL.connect_material_expressions(v_mask, "", flipped_uv, "B")
     sample = expression(material, unreal.MaterialExpressionTextureSample, -600, -80)
     sample.set_editor_property("texture", texture)
+    MEL.connect_material_expressions(flipped_uv, "", sample, "UVs")
     strength = scalar(material, "Intensity", 0.8, -600, 150)
     emissive = expression(material, unreal.MaterialExpressionMultiply, -280, -20)
     MEL.connect_material_expressions(sample, "RGB", emissive, "A")

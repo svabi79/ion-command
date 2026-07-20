@@ -2,16 +2,17 @@ package stream
 
 import (
 	"testing"
+	"time"
 
 	"github.com/ion-command/ion-command/collector/internal/telemetry"
 )
 
 func TestRetainedStateReplaysToNewClients(t *testing.T) {
 	hub := NewHub(16, telemetry.New())
-	hub.Publish([]byte(`{"v":"old"}`), "spaceweather.state|")
-	hub.Publish([]byte(`{"v":"new"}`), "spaceweather.state|")
-	hub.Publish([]byte(`{"v":"ea036"}`), "ionosphere.sounding|ionosphere:station:EA036")
-	hub.Publish([]byte(`{"v":"transient"}`), "")
+	hub.Publish([]byte(`{"v":"old"}`), "spaceweather.state|", time.Time{})
+	hub.Publish([]byte(`{"v":"new"}`), "spaceweather.state|", time.Time{})
+	hub.Publish([]byte(`{"v":"ea036"}`), "ionosphere.sounding|ionosphere:station:EA036", time.Time{})
+	hub.Publish([]byte(`{"v":"transient"}`), "", time.Time{})
 
 	client := hub.Register()
 	defer hub.Unregister(client)
@@ -37,7 +38,7 @@ func TestRetainedStateReplaysToNewClients(t *testing.T) {
 func TestRetainedStateIsBounded(t *testing.T) {
 	hub := NewHub(1, telemetry.New())
 	for i := 0; i < maxRetainedMessages+50; i++ {
-		hub.Publish([]byte(`{}`), string(rune('a'+i%26))+string(rune('0'+i%10))+string(rune(i)))
+		hub.Publish([]byte(`{}`), string(rune('a'+i%26))+string(rune('0'+i%10))+string(rune(i)), time.Time{})
 	}
 	if len(hub.retained) > maxRetainedMessages {
 		t.Fatalf("retained map exceeded cap: %d", len(hub.retained))

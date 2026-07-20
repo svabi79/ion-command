@@ -196,6 +196,12 @@ void AIonGlobeActor::Tick(float DeltaSeconds)
     const FGeoPosition Subsolar = UGeoMathLibrary::SolarSubpoint(TimelineUtc);
     const FVector DirectionToSun = UGeoMathLibrary::LatitudeLongitudeToUnitSphere(Subsolar.Latitude, Subsolar.Longitude);
     SunLight->SetWorldRotation((-DirectionToSun).Rotation());
+    // Sidereal sky: with the star map's U-flip every star texel sits at its
+    // RA/Dec direction; yaw = GMST turns the celestial sphere so the star
+    // with hour angle zero at Greenwich actually stands over Greenwich.
+    const double DaysSinceJ2000 = (TimelineUtc - FDateTime(2000, 1, 1, 11, 58, 55, 816)).GetTotalDays();
+    const double GmstDegrees = FMath::Fmod(280.46061837 + 360.98564736629 * DaysSinceJ2000, 360.0);
+    Starfield->SetRelativeRotation(FRotator(0.0, GmstDegrees, 0.0));
     if (!EarthMID)
     {
         EarthMID = Earth->CreateAndSetMaterialInstanceDynamic(0);

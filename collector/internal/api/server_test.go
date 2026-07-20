@@ -55,7 +55,7 @@ func TestLiveWebSocketReceivesCanonicalMessage(t *testing.T) {
 	for stats.Snapshot().ConnectedClients == 0 && time.Now().Before(deadline) {
 		time.Sleep(time.Millisecond)
 	}
-	hub.Publish([]byte(`{"messageId":"one"}`), "")
+	hub.Publish([]byte(`{"messageId":"one"}`), "", time.Time{})
 	_ = connection.SetReadDeadline(time.Now().Add(time.Second))
 	_, payload, err := connection.ReadMessage()
 	if err != nil {
