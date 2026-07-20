@@ -81,6 +81,9 @@ void AHamRadioOwnStationActor::Tick(float DeltaSeconds)
         }
     }
     const double Pulse = 0.6 + 0.4 * (0.5 + 0.5 * FMath::Sin(PulsePhase * 2.4));
-    Marker->SetRelativeScale3D(FVector(0.07 * ZoomFactor));
-    Halo->SetRelativeScale3D(FVector((0.14 + 0.06 * Pulse) * ZoomFactor));
+    // Distinctly larger than a normal point marker (~0.2 x zoom) so "you are
+    // here" reads at a glance, but zoom-scaled so it never blooms into a sun
+    // when the operator zooms in (the old fixed 24/45-70 unit spheres did).
+    Marker->SetRelativeScale3D(FVector(0.18 * ZoomFactor));
+    Halo->SetRelativeScale3D(FVector((0.5 + 0.18 * Pulse) * ZoomFactor));
 }
