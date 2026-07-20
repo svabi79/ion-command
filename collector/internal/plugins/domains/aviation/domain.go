@@ -64,6 +64,12 @@ func (d *Domain) Normalize(_ context.Context, record plugins.RawRecord) ([]event
 		"display.title":      title,
 		"display.primary":    primary,
 	}
+	// Generic kinematics: renderers orient the glyph along the compass
+	// heading and dead-reckon the marker between polls.
+	if !raw.OnGround && raw.GsKt > 1 {
+		event.Properties["visual.headingDeg"] = raw.Track
+		event.Properties["visual.speedMps"] = raw.GsKt * 0.514444
+	}
 	if raw.AcType != "" {
 		event.Properties["display.secondary"] = raw.AcType
 	}

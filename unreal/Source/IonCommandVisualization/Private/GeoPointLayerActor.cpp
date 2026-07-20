@@ -46,7 +46,19 @@ namespace
         return Fallback;
     }
 
-    constexpr int32 MarkerCustomFloats = 7;
+    constexpr int32 MarkerCustomFloats = 10;
+
+    // World-space compass heading at a globe position: sampled numerically
+    // from the pinned geo math so it can never disagree with the sphere frame.
+    FVector CompassHeadingWorld(double Latitude, double Longitude, double HeadingDegrees)
+    {
+        const double SafeLatitude = FMath::Clamp(Latitude, -89.5, 89.5);
+        const FVector Here = UGeoMathLibrary::LatitudeLongitudeToUnitSphere(SafeLatitude, Longitude);
+        const FVector North = (UGeoMathLibrary::LatitudeLongitudeToUnitSphere(SafeLatitude + 0.1, Longitude) - Here).GetSafeNormal();
+        const FVector East = (UGeoMathLibrary::LatitudeLongitudeToUnitSphere(SafeLatitude, Longitude + 0.1) - Here).GetSafeNormal();
+        const double Radians = FMath::DegreesToRadians(HeadingDegrees);
+        return (North * FMath::Cos(Radians) + East * FMath::Sin(Radians)).GetSafeNormal();
+    }
 }
 
 AGeoPointLayerActor::AGeoPointLayerActor()
@@ -67,9 +79,13 @@ void AGeoPointLayerActor::AppendCustomData(TArray<float>& Out, const FRenderedGe
     Out.Add(Point.Color.R);
     Out.Add(Point.Color.G);
     Out.Add(Point.Color.B);
-    Out.Add(static_cast<float>(Point.Location.X));
-    Out.Add(static_cast<float>(Point.Location.Y));
-    Out.Add(static_cast<float>(Point.Location.Z));
+    // Billboard pivot: the position the instance is actually drawn at.
+    Out.Add(static_cast<float>(Point.RenderedLocation.X));
+    Out.Add(static_cast<float>(Point.RenderedLocation.Y));
+    Out.Add(static_cast<float>(Point.RenderedLocation.Z));
+    Out.Add(static_cast<float>(Point.HeadingWorld.X));
+    Out.Add(static_cast<float>(Point.HeadingWorld.Y));
+    Out.Add(static_cast<float>(Point.HeadingWorld.Z));
 }
 
 void AGeoPointLayerActor::OnConstruction(const FTransform& Transform)
@@ -98,6 +114,7 @@ void AGeoPointLayerActor::BuildEditorPreview()
         Preview.IconIndex = static_cast<float>(Index % 8);
         Preview.Color = FLinearColor::White;
         Preview.Location = Location;
+        Preview.RenderedLocation = Location;
         TArray<float> CustomData;
         AppendCustomData(CustomData, Preview);
         MarkerInstances->SetCustomData(InstanceIndex, CustomData, false);
@@ -148,6 +165,21 @@ void AGeoPointLayerActor::Submit(const FGeoMessageEnvelope& Message)
         PointScale = FMath::Clamp(FCString::Atof(*ScaleProperty), 0.3f, 5.0f);
     }
     const bool bMoves = Position.AltitudeMeters > 1000.0;
+    // Kinematics: compass heading and ground speed, converted into a world
+    // tangent vector and globe units per second for glyph orientation and
+    // dead reckoning.
+    FVector HeadingWorld = FVector::ZeroVector;
+    double SpeedUnitsPerSecond = 0.0;
+    const FString HeadingProperty = Message.Properties.FindRef(TEXT("visual.headingDeg"));
+    if (!HeadingProperty.IsEmpty())
+    {
+        HeadingWorld = CompassHeadingWorld(Position.Latitude, Position.Longitude, FCString::Atod(*HeadingProperty));
+        const FString SpeedProperty = Message.Properties.FindRef(TEXT("visual.speedMps"));
+        if (!SpeedProperty.IsEmpty())
+        {
+            SpeedUnitsPerSecond = FCString::Atod(*SpeedProperty) / 6371000.0 * GlobeRadius;
+        }
+    }
     if (int32* ExistingIndex = EntityToPoint.Find(EntityKey))
     {
         FRenderedGeoPoint& Point = ActivePoints[*ExistingIndex];
@@ -159,6 +191,8 @@ void AGeoPointLayerActor::Submit(const FGeoMessageEnvelope& Message)
             bMovementDirty = true;
         }
         Point.Location = Location;
+        Point.HeadingWorld = HeadingWorld;
+        Point.SpeedUnitsPerSecond = SpeedUnitsPerSecond;
         if (ExpireAt > 0.0) Point.ExpireAtSeconds = ExpireAt;
         Point.Scale = PointScale;
         // Tooltip data follows the latest sighting (a climbing aircraft's
@@ -183,6 +217,8 @@ void AGeoPointLayerActor::Submit(const FGeoMessageEnvelope& Message)
     Point.EntityKey = EntityKey;
     Point.Location = Location;
     Point.RenderedLocation = Location;
+    Point.HeadingWorld = HeadingWorld;
+    Point.SpeedUnitsPerSecond = SpeedUnitsPerSecond;
     Point.LastSeenSeconds = NowSeconds;
     Point.ExpireAtSeconds = ExpireAt;
     Point.Scale = PointScale;
@@ -244,10 +280,10 @@ const FRenderedGeoPoint* AGeoPointLayerActor::FindNearestToRay(const FVector& Ra
     for (const FRenderedGeoPoint& Point : ActivePoints)
     {
         if (!IsDomainVisible(Point.Domain)) continue;
-        const FVector ToPoint = Point.Location - RayOrigin;
+        const FVector ToPoint = Point.RenderedLocation - RayOrigin;
         const double Along = FVector::DotProduct(ToPoint, RayDirection);
         if (Along <= 0.0) continue;
-        const double Distance = FVector::Dist(RayOrigin + RayDirection * Along, Point.Location);
+        const double Distance = FVector::Dist(RayOrigin + RayDirection * Along, Point.RenderedLocation);
         // Prefer the closest lateral hit; among near-ties take the marker
         // nearer the camera (the one visually in front).
         if (Distance < BestDistance || (Distance < BestDistance + 2.0 && Along < BestAlong))
@@ -264,7 +300,9 @@ void AGeoPointLayerActor::Tick(float DeltaSeconds)
 {
     Super::Tick(DeltaSeconds);
     const double NowSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
-    if (bNeedsRebuild || (bMovementDirty && NowSeconds - LastMovementRebuild >= MovementRebuildSeconds))
+    // Kinematic markers keep the cadence running even without fresh
+    // sightings: dead reckoning needs periodic rebuilds to glide.
+    if (bNeedsRebuild || ((bMovementDirty || bHasKinematicPoints) && NowSeconds - LastMovementRebuild >= MovementRebuildSeconds))
     {
         bNeedsRebuild = false;
         RebuildInstances();
@@ -300,20 +338,31 @@ void AGeoPointLayerActor::Tick(float DeltaSeconds)
 
 void AGeoPointLayerActor::RebuildInstances()
 {
+    const double NowSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
     TArray<FTransform> Transforms;
     TArray<const FRenderedGeoPoint*> Rendered;
     Transforms.Reserve(ActivePoints.Num());
     Rendered.Reserve(ActivePoints.Num());
+    bHasKinematicPoints = false;
     for (FRenderedGeoPoint& Point : ActivePoints)
     {
+        // Dead reckoning: glide the marker along its heading between
+        // sightings (capped so a stalled feed cannot fly it off course);
+        // each fresh sighting snaps the base position back to truth.
         Point.RenderedLocation = Point.Location;
+        if (Point.SpeedUnitsPerSecond > 0.0)
+        {
+            const double CoastSeconds = FMath::Clamp(NowSeconds - Point.LastSeenSeconds, 0.0, 120.0);
+            Point.RenderedLocation += Point.HeadingWorld * (Point.SpeedUnitsPerSecond * CoastSeconds);
+        }
         if (!IsDomainVisible(Point.Domain)) continue;
+        if (Point.SpeedUnitsPerSecond > 0.0) bHasKinematicPoints = true;
         const FVector Scale(MarkerScale * CurrentZoomFactor * Point.Scale);
-        Transforms.Emplace(FQuat::Identity, Point.Location, Scale);
+        Transforms.Emplace(FQuat::Identity, Point.RenderedLocation, Scale);
         Rendered.Add(&Point);
     }
     bMovementDirty = false;
-    LastMovementRebuild = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+    LastMovementRebuild = NowSeconds;
     MarkerInstances->ClearInstances();
     MarkerInstances->AddInstances(Transforms, false);
     for (int32 Index = 0; Index < Rendered.Num(); ++Index)

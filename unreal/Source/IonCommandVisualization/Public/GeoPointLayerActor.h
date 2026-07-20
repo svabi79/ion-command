@@ -32,6 +32,11 @@ struct FRenderedGeoPoint
     // registry) and its tint, both baked into per-instance custom data.
     float IconIndex = 0.0f;
     FLinearColor Color = FLinearColor(0.0f, 0.82f, 1.0f);
+    // Kinematics from visual.headingDeg / visual.speedMps: world-space unit
+    // heading orients the glyph (material) and, with the speed, dead-reckons
+    // the marker between sightings. Zero heading = static marker.
+    FVector HeadingWorld = FVector::ZeroVector;
+    double SpeedUnitsPerSecond = 0.0;
     // Domain drives the overlay menu's per-category visibility; the display
     // strings feed the hover tooltip.
     FString Domain;
@@ -106,6 +111,9 @@ private:
     // few hundred aircraft updating every poll do not force a full rebuild
     // four times a second.
     bool bMovementDirty = false;
+    // True while any visible marker dead-reckons; keeps the rebuild cadence
+    // running so gliding markers actually glide.
+    bool bHasKinematicPoints = false;
     double LastMovementRebuild = 0.0;
     double LastExpiryCheck = 0.0;
 };
