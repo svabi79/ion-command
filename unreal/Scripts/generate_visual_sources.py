@@ -95,7 +95,7 @@ def main() -> None:
 ICON_ATLAS = Path(__file__).resolve().parents[1] / "SourceAssets" / "Generated" / "marker_icons.png"
 ICON_TILE = 512
 ICON_COLS = 4
-ICON_ROWS = 2
+ICON_ROWS = 4
 
 
 def _icon_tile(draw_fn) -> Image.Image:
@@ -189,14 +189,58 @@ def _icon_spare(draw, pt, size):
     draw.polygon([pt(0.5, 0.14), pt(0.80, 0.5), pt(0.5, 0.86), pt(0.20, 0.5)], fill=255)
 
 
+def _icon_helicopter(draw, pt, size):
+    # Top view, nose up: rotor disc with crossed blades over a slim
+    # fuselage and tail boom with tail rotor bar.
+    stroke = int(size * 0.045)
+    draw.ellipse([pt(0.18, 0.10), pt(0.82, 0.74)], outline=255, width=int(size * 0.03))
+    draw.line([pt(0.24, 0.16), pt(0.76, 0.68)], fill=255, width=stroke)
+    draw.line([pt(0.76, 0.16), pt(0.24, 0.68)], fill=255, width=stroke)
+    draw.ellipse([pt(0.42, 0.26), pt(0.58, 0.60)], fill=255)
+    draw.line([pt(0.5, 0.58), pt(0.5, 0.92)], fill=255, width=stroke)
+    draw.line([pt(0.38, 0.90), pt(0.62, 0.90)], fill=255, width=stroke)
+
+
+def _icon_balloon(draw, pt, size):
+    # Envelope with gores, load lines, and a basket.
+    draw.ellipse([pt(0.22, 0.06), pt(0.78, 0.62)], fill=255)
+    for x in (0.38, 0.5, 0.62):
+        draw.line([pt(x, 0.08), pt(x, 0.60)], fill=0, width=int(size * 0.018))
+    draw.polygon([pt(0.34, 0.52), pt(0.66, 0.52), pt(0.58, 0.72), pt(0.42, 0.72)], fill=255)
+    stroke = int(size * 0.03)
+    draw.line([pt(0.42, 0.72), pt(0.44, 0.82)], fill=255, width=stroke)
+    draw.line([pt(0.58, 0.72), pt(0.56, 0.82)], fill=255, width=stroke)
+    draw.rectangle([pt(0.42, 0.82), pt(0.58, 0.94)], fill=255)
+
+
+def _icon_drone(draw, pt, size):
+    # Quadcopter: X arms, four rotor rings, center body.
+    stroke = int(size * 0.05)
+    draw.line([pt(0.22, 0.22), pt(0.78, 0.78)], fill=255, width=stroke)
+    draw.line([pt(0.78, 0.22), pt(0.22, 0.78)], fill=255, width=stroke)
+    ring = int(size * 0.035)
+    for cx, cy in ((0.22, 0.22), (0.78, 0.22), (0.22, 0.78), (0.78, 0.78)):
+        draw.ellipse([pt(cx - 0.14, cy - 0.14), pt(cx + 0.14, cy + 0.14)], outline=255, width=ring)
+    draw.ellipse([pt(0.38, 0.38), pt(0.62, 0.62)], fill=255)
+
+
+def _icon_glider(draw, pt, size):
+    # Top view, nose up: very long thin wings, slim fuselage, small tail.
+    draw.polygon([pt(0.5, 0.10), pt(0.545, 0.30), pt(0.53, 0.72), pt(0.47, 0.72), pt(0.455, 0.30)], fill=255)
+    draw.polygon([pt(0.04, 0.36), pt(0.96, 0.36), pt(0.96, 0.43), pt(0.04, 0.45)], fill=255)
+    draw.polygon([pt(0.34, 0.80), pt(0.66, 0.80), pt(0.66, 0.87), pt(0.34, 0.87)], fill=255)
+
+
 def generate_marker_icons() -> None:
-    """Marker pictogram atlas: 4x2 grid of white-on-black silhouettes. Tile
+    """Marker pictogram atlas: 4x4 grid of white-on-black silhouettes. Tile
     order is the client's icon index contract (GeoPointLayerActor):
     0 dot, 1 signal, 2 aircraft, 3 satellite, 4 lightning, 5 sounding,
-    6 earthquake, 7 spare."""
+    6 earthquake, 7 spare, 8 helicopter, 9 balloon, 10 drone, 11 glider;
+    12-15 reserved."""
     tiles = [
         _icon_dot, _icon_signal, _icon_aircraft, _icon_satellite,
         _icon_lightning, _icon_sounding, _icon_earthquake, _icon_spare,
+        _icon_helicopter, _icon_balloon, _icon_drone, _icon_glider,
     ]
     atlas = Image.new("RGB", (ICON_TILE * ICON_COLS, ICON_TILE * ICON_ROWS), (0, 0, 0))
     for index, draw_fn in enumerate(tiles):

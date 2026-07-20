@@ -108,6 +108,12 @@
       "pollSeconds": 60
     },
     {
+      "id": "opensky-world",
+      "type": "aviation.opensky",
+      "enabled": true,
+      "pollSeconds": 900
+    },
+    {
       "id": "rbn-primary",
       "type": "hamradio.rbn",
       "enabled": true,

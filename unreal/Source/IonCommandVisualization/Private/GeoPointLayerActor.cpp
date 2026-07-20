@@ -27,6 +27,12 @@ namespace
             {TEXT("lightning"),  {4.0f, FLinearColor(0.78f, 0.55f, 1.00f)}},
             {TEXT("sounding"),   {5.0f, FLinearColor(0.25f, 1.00f, 0.55f)}},
             {TEXT("earthquake"), {6.0f, FLinearColor(1.00f, 0.28f, 0.12f)}},
+            // Airframe kinds share the aviation amber; the silhouette is
+            // the discriminator.
+            {TEXT("helicopter"), {8.0f, FLinearColor(1.00f, 0.72f, 0.10f)}},
+            {TEXT("balloon"),    {9.0f, FLinearColor(1.00f, 0.60f, 0.25f)}},
+            {TEXT("drone"),      {10.0f, FLinearColor(1.00f, 0.45f, 0.20f)}},
+            {TEXT("glider"),     {11.0f, FLinearColor(1.00f, 0.85f, 0.35f)}},
         };
         return Styles;
     }
@@ -149,8 +155,16 @@ void AGeoPointLayerActor::Submit(const FGeoMessageEnvelope& Message)
     const double NowSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
     const FGeoPosition& Position = Message.Geometry.Positions[0];
     // Altitude lifts markers off the surface at globe scale (satellites);
-    // surface events keep the small readability offset.
-    const double AltitudeUnits = FMath::Max(Position.AltitudeMeters, 0.0) / 6371000.0 * GlobeRadius;
+    // surface events keep the small readability offset. Domains whose true
+    // altitude is imperceptible at globe scale (aircraft: 10 km on a
+    // 6371 km sphere) declare a visual exaggeration factor.
+    double AltitudeExaggeration = 1.0;
+    const FString AltitudeScaleProperty = Message.Properties.FindRef(TEXT("visual.altitudeScale"));
+    if (!AltitudeScaleProperty.IsEmpty())
+    {
+        AltitudeExaggeration = FMath::Clamp(FCString::Atod(*AltitudeScaleProperty), 1.0, 100.0);
+    }
+    const double AltitudeUnits = FMath::Max(Position.AltitudeMeters, 0.0) * AltitudeExaggeration / 6371000.0 * GlobeRadius;
     const FVector Location = UGeoMathLibrary::LatitudeLongitudeToUnitSphere(Position.Latitude, Position.Longitude) * (GlobeRadius + 8.0 + AltitudeUnits);
     // validUntil bounds the marker's visual lifetime when the domain set one.
     double ExpireAt = 0.0;
@@ -195,6 +209,30 @@ void AGeoPointLayerActor::Submit(const FGeoMessageEnvelope& Message)
         Point.SpeedUnitsPerSecond = SpeedUnitsPerSecond;
         if (ExpireAt > 0.0) Point.ExpireAtSeconds = ExpireAt;
         Point.Scale = PointScale;
+        // Icon and tint follow the latest sighting: a later source may know
+        // the airframe kind, and an emergency squawk must turn red NOW.
+        const FString FreshTint = Message.Properties.FindRef(TEXT("visual.tint"));
+        FString FreshIcon = Message.Properties.FindRef(TEXT("visual.icon"));
+        if (FreshIcon.IsEmpty()) FreshIcon = DomainIconFallback().FindRef(Message.Domain);
+        if (const FMarkerIconStyle* FreshStyle = IconStyles().Find(FreshIcon))
+        {
+            if (!FMath::IsNearlyEqual(Point.IconIndex, FreshStyle->AtlasIndex))
+            {
+                Point.IconIndex = FreshStyle->AtlasIndex;
+                bNeedsRebuild = true;
+            }
+            Point.Color = FreshStyle->Color;
+        }
+        if (!FreshTint.IsEmpty())
+        {
+            TArray<FString> Parts;
+            FreshTint.ParseIntoArray(Parts, TEXT(","));
+            if (Parts.Num() == 3)
+            {
+                Point.Color = FLinearColor(FCString::Atof(*Parts[0]), FCString::Atof(*Parts[1]), FCString::Atof(*Parts[2]));
+                bNeedsRebuild = true;
+            }
+        }
         // Tooltip data follows the latest sighting (a climbing aircraft's
         // flight level, a station's newest report).
         const FString NewPrimary = Message.Properties.FindRef(TEXT("display.primary"));
@@ -237,6 +275,17 @@ void AGeoPointLayerActor::Submit(const FGeoMessageEnvelope& Message)
     {
         Point.IconIndex = 0.0f;
         Point.Color = Point.bObservation ? FLinearColor(1.0f, 0.32f, 0.05f) : FLinearColor(0.0f, 0.82f, 1.0f);
+    }
+    // Explicit tint override (e.g. emergency-squawk aircraft turn red).
+    const FString TintProperty = Message.Properties.FindRef(TEXT("visual.tint"));
+    if (!TintProperty.IsEmpty())
+    {
+        TArray<FString> Parts;
+        TintProperty.ParseIntoArray(Parts, TEXT(","));
+        if (Parts.Num() == 3)
+        {
+            Point.Color = FLinearColor(FCString::Atof(*Parts[0]), FCString::Atof(*Parts[1]), FCString::Atof(*Parts[2]));
+        }
     }
     Point.Title = Message.Properties.FindRef(TEXT("display.title"));
     if (Point.Title.IsEmpty()) Point.Title = Message.Properties.FindRef(TEXT("callsign"));
@@ -352,7 +401,8 @@ void AGeoPointLayerActor::RebuildInstances()
         Point.RenderedLocation = Point.Location;
         if (Point.SpeedUnitsPerSecond > 0.0)
         {
-            const double CoastSeconds = FMath::Clamp(NowSeconds - Point.LastSeenSeconds, 0.0, 120.0);
+            // Cap covers the slow global-snapshot cycle (15 min polls).
+            const double CoastSeconds = FMath::Clamp(NowSeconds - Point.LastSeenSeconds, 0.0, 1200.0);
             Point.RenderedLocation += Point.HeadingWorld * (Point.SpeedUnitsPerSecond * CoastSeconds);
         }
         if (!IsDomainVisible(Point.Domain)) continue;

@@ -71,15 +71,36 @@ func (e errRateLimited) Error() string {
 
 type pointResponse struct {
 	Aircraft []struct {
-		Hex     string          `json:"hex"`
-		Flight  string          `json:"flight"`
-		Type    string          `json:"t"`
-		AltBaro json.RawMessage `json:"alt_baro"` // number of feet, or the string "ground"
-		GsKt    float64         `json:"gs"`
-		Track   float64         `json:"track"`
-		Lat     *float64        `json:"lat"`
-		Lon     *float64        `json:"lon"`
+		Hex          string          `json:"hex"`
+		Flight       string          `json:"flight"`
+		Type         string          `json:"t"`
+		Registration string          `json:"r"`
+		Category     string          `json:"category"` // readsb emitter category (A0-A7, B0-B7...)
+		Squawk       string          `json:"squawk"`
+		BaroRateFpm  float64         `json:"baro_rate"`
+		AltBaro      json.RawMessage `json:"alt_baro"` // number of feet, or the string "ground"
+		GsKt         float64         `json:"gs"`
+		Track        float64         `json:"track"`
+		Lat          *float64        `json:"lat"`
+		Lon          *float64        `json:"lon"`
 	} `json:"ac"`
+}
+
+// kindForReadsbCategory maps the ADS-B emitter category to the generic
+// airframe kind vocabulary shared with other aviation sources.
+func kindForReadsbCategory(category string) string {
+	switch category {
+	case "A7":
+		return "helicopter"
+	case "B1", "B4":
+		return "glider"
+	case "B2":
+		return "balloon"
+	case "B6":
+		return "drone"
+	default:
+		return "aircraft"
+	}
 }
 
 type Source struct {
@@ -192,15 +213,19 @@ func (s *Source) sample(ctx context.Context) ([]plugins.RawRecord, error) {
 			}
 		}
 		payload, err := json.Marshal(map[string]any{
-			"hex":      aircraft.Hex,
-			"callsign": strings.TrimSpace(aircraft.Flight),
-			"acType":   aircraft.Type,
-			"lat":      *aircraft.Lat,
-			"lon":      *aircraft.Lon,
-			"altFt":    altFt,
-			"gsKt":     aircraft.GsKt,
-			"track":    aircraft.Track,
-			"onGround": onGround,
+			"hex":          aircraft.Hex,
+			"callsign":     strings.TrimSpace(aircraft.Flight),
+			"acType":       aircraft.Type,
+			"registration": aircraft.Registration,
+			"kind":         kindForReadsbCategory(aircraft.Category),
+			"squawk":       aircraft.Squawk,
+			"baroRateFpm":  aircraft.BaroRateFpm,
+			"lat":          *aircraft.Lat,
+			"lon":          *aircraft.Lon,
+			"altFt":        altFt,
+			"gsKt":         aircraft.GsKt,
+			"track":        aircraft.Track,
+			"onGround":     onGround,
 		})
 		if err != nil {
 			continue

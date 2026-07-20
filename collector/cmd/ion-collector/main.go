@@ -25,6 +25,7 @@ import (
 	"github.com/ion-command/ion-command/collector/internal/plugins/domains/spaceweather"
 	"github.com/ion-command/ion-command/collector/internal/plugins/domains/weather"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/adsb"
+	"github.com/ion-command/ion-command/collector/internal/plugins/sources/opensky"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/blitzortung"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/celestrak"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/kc2g"
@@ -88,6 +89,8 @@ func run(configPath string, logger *slog.Logger) error {
 			source, err = celestrak.New(sourceConfig, logger)
 		case sourceConfig.Type == "aviation.adsb":
 			source, err = adsb.New(sourceConfig, logger)
+		case sourceConfig.Type == "aviation.opensky":
+			source, err = opensky.New(sourceConfig, logger)
 		case sourceConfig.Type == "hamradio.rbn":
 			source, err = rbn.New(sourceConfig, logger)
 		default:

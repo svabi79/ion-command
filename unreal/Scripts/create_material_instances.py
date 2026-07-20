@@ -396,7 +396,7 @@ def build_marker_icon_master(icon_texture) -> unreal.Material:
     MEL.connect_material_expressions(tile, "", uv_sum, "B")
     tile_scale = expression(material, unreal.MaterialExpressionConstant2Vector, -980, -240)
     tile_scale.set_editor_property("r", 0.25)
-    tile_scale.set_editor_property("g", 0.5)
+    tile_scale.set_editor_property("g", 0.25)
     uv = expression(material, unreal.MaterialExpressionMultiply, -850, -300)
     MEL.connect_material_expressions(uv_sum, "", uv, "A")
     MEL.connect_material_expressions(tile_scale, "", uv, "B")

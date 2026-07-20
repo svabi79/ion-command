@@ -72,7 +72,9 @@ public:
     const FRenderedGeoPoint* FindNearestToRay(const FVector& RayOrigin, const FVector& RayDirection, double MaxDistance) const;
 
     UPROPERTY(EditAnywhere, Category="ION COMMAND|Layer") double GlobeRadius = 1000.0;
-    UPROPERTY(EditAnywhere, Category="ION COMMAND|Layer") int32 MaxVisiblePoints = 25000;
+    // Sized for the global aviation snapshot (~8k airframes) on top of the
+    // ham station, lightning, and satellite populations.
+    UPROPERTY(EditAnywhere, Category="ION COMMAND|Layer") int32 MaxVisiblePoints = 60000;
     // Pictogram quads read slightly smaller than the old solid spheres at
     // equal scale, hence the larger default.
     UPROPERTY(EditAnywhere, Category="ION COMMAND|Layer") double MarkerScale = 0.2;

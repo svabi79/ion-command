@@ -49,8 +49,10 @@ type Source struct {
 	ClientID        string  `json:"clientId,omitempty"`
 	PollSeconds     int     `json:"pollSeconds,omitempty"`
 	// Login is the callsign or account used by sources that authenticate
-	// (e.g. the RBN telnet feed).
+	// (e.g. the RBN telnet feed, or an OpenSky account).
 	Login string `json:"login,omitempty"`
+	// Password pairs with Login for HTTP basic-auth sources (OpenSky).
+	Password string `json:"password,omitempty"`
 	// Geographic scope for area-query sources (e.g. ADS-B around a point).
 	Latitude  float64 `json:"latitude,omitempty"`
 	Longitude float64 `json:"longitude,omitempty"`
