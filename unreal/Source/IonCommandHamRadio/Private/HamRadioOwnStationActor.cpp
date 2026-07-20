@@ -69,6 +69,18 @@ void AHamRadioOwnStationActor::Tick(float DeltaSeconds)
 {
     Super::Tick(DeltaSeconds);
     PulsePhase += DeltaSeconds;
+    // Roughly constant screen size, like the point markers: the old fixed
+    // 24/45-70 unit spheres ballooned into a small sun when zoomed in.
+    double ZoomFactor = 1.0;
+    if (const APlayerController* Player = GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr)
+    {
+        if (Player->PlayerCameraManager)
+        {
+            const double CameraDistance = Player->PlayerCameraManager->GetCameraLocation().Length();
+            ZoomFactor = FMath::Clamp((CameraDistance - 1000.0) / 2400.0, 0.22, 1.15);
+        }
+    }
     const double Pulse = 0.6 + 0.4 * (0.5 + 0.5 * FMath::Sin(PulsePhase * 2.4));
-    Halo->SetRelativeScale3D(FVector(0.45 + 0.25 * Pulse));
+    Marker->SetRelativeScale3D(FVector(0.07 * ZoomFactor));
+    Halo->SetRelativeScale3D(FVector((0.14 + 0.06 * Pulse) * ZoomFactor));
 }

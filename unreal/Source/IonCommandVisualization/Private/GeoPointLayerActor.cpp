@@ -346,12 +346,19 @@ void AGeoPointLayerActor::SetDomainVisible(const FString& Domain, bool bVisible)
 
 const FRenderedGeoPoint* AGeoPointLayerActor::FindNearestToRay(const FVector& RayOrigin, const FVector& RayDirection, double MaxDistance) const
 {
+    // Never report markers the operator cannot see: a tooltip on an invisible
+    // marker reads as "marker is missing" and sends debugging the wrong way.
+    if (IsHidden()) return nullptr;
+    const double NowSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
     const FRenderedGeoPoint* Best = nullptr;
     double BestDistance = MaxDistance;
     double BestAlong = TNumericLimits<double>::Max();
     for (const FRenderedGeoPoint& Point : ActivePoints)
     {
         if (!IsDomainVisible(Point.Domain)) continue;
+        // Skip expired markers awaiting the batched cleanup sweep.
+        if (Point.ExpireAtSeconds > 0.0 && NowSeconds > Point.ExpireAtSeconds) continue;
+        if (Point.ExpireAtSeconds <= 0.0 && NowSeconds - Point.LastSeenSeconds > (Point.bObservation ? ObservationLifetimeSeconds : MarkerLifetimeSeconds)) continue;
         const FVector ToPoint = Point.RenderedLocation - RayOrigin;
         const double Along = FVector::DotProduct(ToPoint, RayDirection);
         if (Along <= 0.0) continue;
