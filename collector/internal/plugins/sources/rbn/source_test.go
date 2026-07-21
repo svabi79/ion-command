@@ -10,7 +10,7 @@ import (
 
 func testSource(t *testing.T) *Source {
 	t.Helper()
-	source, err := New(config.Source{ID: "test", Type: "hamradio.rbn", Login: "HB9HSJ"}, slog.Default())
+	source, err := New(config.Source{ID: "test", Type: "hamradio.rbn", Login: "HB9ABC"}, slog.Default())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,7 +49,7 @@ func TestParseLiveSpotLines(t *testing.T) {
 
 func TestParseRejectsChatter(t *testing.T) {
 	source := testSource(t)
-	for _, line := range []string{"Local users: 477\r\n", "Spot rate: 9/s (33,943/h)\r\n", "HB9HSJ de RELAY 19-Jul-2026 15:28Z >\r\n", "\r\n"} {
+	for _, line := range []string{"Local users: 477\r\n", "Spot rate: 9/s (33,943/h)\r\n", "HB9ABC de RELAY 19-Jul-2026 15:28Z >\r\n", "\r\n"} {
 		if _, ok := source.ParseSpot(line); ok {
 			t.Fatalf("chatter accepted as spot: %q", line)
 		}

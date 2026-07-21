@@ -25,6 +25,13 @@ const (
 	tleRefresh       = 6 * time.Hour
 	positionInterval = 10 * time.Second
 	maxSatellites    = 400
+	// CelesTrak's usage policy requires machine clients to stop querying on
+	// any non-200 response. Without this, a failing fetch left sets empty and
+	// the loop refetched every positionInterval forever - exactly the abuse
+	// that gets an address firewalled.
+	fetchBackoffInitial = 5 * time.Minute
+	fetchBackoffMax     = 2 * time.Hour
+	fetchFailureLimit   = 8
 )
 
 type trackedSatellite struct {
@@ -131,14 +138,44 @@ func PositionRecord(tracked trackedSatellite, at time.Time, sourceInstanceID str
 func (s *Source) Start(ctx context.Context, output chan<- plugins.RawRecord) error {
 	var sets []trackedSatellite
 	var lastRefresh time.Time
+	// Retry governor: a failed or empty fetch must not turn the position
+	// ticker into a download loop (CelesTrak usage policy).
+	var consecutiveFailures int
+	var nextFetchAllowed time.Time
 	ticker := time.NewTicker(positionInterval)
 	defer ticker.Stop()
 	for ctx.Err() == nil {
-		if len(sets) == 0 || time.Since(lastRefresh) > tleRefresh {
+		dueForRefresh := len(sets) == 0 || time.Since(lastRefresh) > tleRefresh
+		if dueForRefresh && consecutiveFailures < fetchFailureLimit && time.Now().After(nextFetchAllowed) {
 			body, err := s.fetch(ctx)
-			if err != nil {
-				s.logger.Warn("celestrak TLE fetch failed", "error", err)
-			} else if parsed := ParseTLESets(body); len(parsed) > 0 {
+			parsed := []trackedSatellite(nil)
+			if err == nil {
+				parsed = ParseTLESets(body)
+			}
+			switch {
+			case err != nil || len(parsed) == 0:
+				consecutiveFailures++
+				backoff := fetchBackoffInitial << min(consecutiveFailures-1, 8)
+				if backoff > fetchBackoffMax || backoff <= 0 {
+					backoff = fetchBackoffMax
+				}
+				nextFetchAllowed = time.Now().Add(backoff)
+				reason := "empty or unparsable TLE response"
+				if err != nil {
+					reason = err.Error()
+				}
+				s.logger.Warn("celestrak TLE fetch failed; backing off",
+					"error", reason, "consecutiveFailures", consecutiveFailures, "retryIn", backoff.String())
+				if consecutiveFailures >= fetchFailureLimit {
+					s.logger.Error("celestrak fetch giving up until restart; refusing to keep polling (usage policy)",
+						"consecutiveFailures", consecutiveFailures)
+				}
+			default:
+				if consecutiveFailures > 0 {
+					s.logger.Info("celestrak recovered", "afterFailures", consecutiveFailures)
+				}
+				consecutiveFailures = 0
+				nextFetchAllowed = time.Time{}
 				sets = parsed
 				lastRefresh = time.Now()
 				s.logger.Info("celestrak TLE set refreshed", "satellites", len(sets))

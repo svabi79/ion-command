@@ -8,7 +8,7 @@ func TestLookupKnownEntities(t *testing.T) {
 		name     string
 		lat, lon float64
 	}{
-		{"HB9HSJ", "Switzerland", 46.9, 8.2},
+		{"HB9ABC", "Switzerland", 46.9, 8.2},
 		{"K1ABC", "United States", 37.5, -91.9},
 		{"G4EDG/P", "England", 52.8, -2.1},
 		{"JA1XYZ", "Japan", 36.4, 138.4},

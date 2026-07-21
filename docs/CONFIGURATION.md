@@ -1,0 +1,172 @@
+# Configuration
+
+ION COMMAND has two halves that are configured separately:
+
+| Part | What it does | Where it is configured |
+| --- | --- | --- |
+| **Client** (the globe) | rendering, your station identity, display filters | in-app **SETTINGS** panel → written to `Saved/Config/Windows/Game.ini` |
+| **Collector** (the data feed) | which services are polled, how often, recording | `collector/configs/live.json` (installed copy: `<install>\collector\configs\live.json`) |
+
+Client settings apply immediately. Collector settings need a collector restart.
+
+---
+
+## Client: the SETTINGS panel
+
+Press **O** to open the overlay menu, then click **SETTINGS >**.
+(For unattended use you can also start the client with `-IonSettings`.)
+
+| Row | Meaning |
+| --- | --- |
+| **CALLSIGN** | Your callsign. Click the row and type; **Enter** saves, **Esc** cancels. Drives the "you are here" reticle and the *MY RX/TX* path filter. |
+| **GRID LOCATOR** | Your Maidenhead locator, e.g. `JO62qm`. Moves the home marker and reticle immediately. |
+| **MARKER LIFETIME** | How long a marker stays after its last sighting (60 / 120 / 300 / 600 / 1200 s). Lower = tidier globe, higher = longer trails of activity. |
+| **MIN FLIGHT LEVEL** | Hides aircraft below this level (OFF / FL050 / FL100 / FL200 / FL300). The quickest way to thin out dense airspace — at FL100 the airport clutter disappears and only cruising traffic remains. |
+| **SHOW GROUND A/C** | Show or hide aircraft reported as on the ground. |
+
+While a text field is focused all hotkeys are suspended, so typing a callsign
+cannot toggle layers.
+
+Values persist to `Game.ini` under `[IonCommand.Station]` (callsign, locator)
+and `[IonCommand.Display]` (`MarkerLifetime`, `MinFlightLevelFt`, `ShowGround`).
+
+## Client: overlay menu
+
+Press **O**. Every row is clickable and shows its state:
+
+- **SETTINGS >** — opens the panel above
+- **PATHS** — the propagation arcs
+- **MY RX/TX ONLY** — only paths where your station is transmitter or receiver
+- **HEATMAP** — activity density splats
+- **IONOSPHERE SHELLS** — ionosonde shells
+- **ALT EXAGGERATION 12X** — aircraft altitude exaggerated so flight level is
+  visible at globe scale; off renders true scale
+- **&lt;DOMAIN&gt; MARKERS** — one row per marker domain currently present
+  (aviation, hamradio, orbital, weather, geophysics, ionosphere …). Hiding a
+  domain only stops it drawing; the data keeps flowing.
+
+## Client: keyboard and mouse
+
+| Input | Action |
+| --- | --- |
+| **Left mouse** | select a path / click menu rows |
+| **Right mouse** (drag) | orbit the globe |
+| **Mouse wheel** | zoom |
+| **Hover a marker** | tooltip with callsign/flight level/type/… |
+| **Tab** | cycle HUD: full → minimal → hidden |
+| **O** | overlay menu |
+| **V** | show/hide paths |
+| **M** | only my station's RX/TX paths |
+| **H** | activity heatmap |
+| **I** | ionosphere shells |
+| **N** | cycle transmission-mode filter |
+| **F** | focus the selected path |
+| **Esc** | clear selection |
+| **1** … **9** | band presets |
+| **0** | all bands |
+| **Space** | pause/resume the timeline |
+| **R** | replay the last 15 minutes |
+| **,** / **.** | replay slower / faster |
+| **L** | return to live |
+
+## Client: command-line switches
+
+Useful when driving the client from a script or a video wall:
+
+| Switch | Effect |
+| --- | --- |
+| `-windowed` / `-fullscreen`, `-ResX=` `-ResY=` | window mode and resolution |
+| `-IonCollectorUrl=ws://host:port/ws/live` | connect to a non-default collector |
+| `-IonShowDeck` | restore the diegetic console panels (off by default) |
+| `-IonSettings` | open the settings panel at startup |
+| `-IonOverlayMenu` | open the overlay menu at startup |
+| `-IonPathsHidden` | start with the path layer hidden |
+| `-IonNoLiveClouds` | keep the offline cloud texture instead of fetching live imagery |
+| `-IonMute` | no ambience audio |
+| `-IonCameraDistance=` `-IonCameraLongitude=` `-IonCameraLatitude=` | pin the camera (captures) |
+| `-IonScreenshotAfter=<s>` `-IonScreenshotFile=<path>` `-IonExitAfterScreenshot` | unattended screenshots |
+
+> Use an absolute path **without spaces** for `-IonScreenshotFile`; the engine
+> splits the command line on spaces.
+
+---
+
+## Collector: `live.json`
+
+```jsonc
+{
+  "server":   { "listenAddress": "127.0.0.1:7810", "writeTimeoutSeconds": 10 },
+  "pipeline": {
+    "queueCapacity": 32768,
+    "clientQueueCapacity": 49152,   // must exceed the retained-state count
+    "workerCount": 4,
+    "retainLatest": ["spaceweather.state", "ionosphere.sounding", "aviation.aircraft"]
+  },
+  "recording": {
+    "enabled": false,               // ON writes several GB per hour
+    "directory": "../data/recordings",
+    "flushIntervalSeconds": 1,
+    "maxTotalGigabytes": 20
+  },
+  "sources": [ /* see below */ ]
+}
+```
+
+`retainLatest` lists semantic types whose newest message per entity is kept and
+replayed to every client that connects, so the globe is populated within
+seconds instead of waiting for the next poll.
+
+### Source entries
+
+Every source has `id`, `type`, `enabled`. Additional fields by type:
+
+| `type` | Extra fields | Notes |
+| --- | --- | --- |
+| `pskreporter.mqtt` | `broker`, `topic`, `clientId` | Public broker, no credentials. ~300–500 spots/s. |
+| `spaceweather.swpc` | `pollSeconds` | Kp, solar flux, wind, Bz, A-index, GOES X-ray. |
+| `ionosonde.kc2g` | `pollSeconds` | foF2 / MUF soundings. |
+| `lightning.blitzortung` | — | WebSocket stream of strikes. |
+| `earthquake.usgs` | `pollSeconds` | Recent quakes. |
+| `orbital.celestrak` | `pollSeconds` | TLEs, propagated with SGP4. |
+| `aviation.adsb` | `latitude`, `longitude`, `radiusNm`, `pollSeconds` | Regional circle around a point (max 250 nm). Add one entry per area you care about. |
+| `aviation.opensky` | `pollSeconds`, `login`, `password` | One global snapshot per request. Anonymous access is credit-limited, so the default poll is 900 s; an account allows far shorter intervals. |
+| `hamradio.rbn` | `login` | Reverse Beacon Network telnet; **requires a real callsign**. Disabled by default. |
+| `wsjtx.udp` | `broker` (listen address) | Local WSJT-X UDP feed. |
+
+### Common adjustments
+
+**Point the aircraft view at your own area** — edit the example entry:
+
+```json
+{ "id": "adsb-home", "type": "aviation.adsb", "enabled": true,
+  "latitude": 47.3, "longitude": 8.5, "radiusNm": 250, "pollSeconds": 60 }
+```
+
+Add more entries with different centres for wider coverage. All sources share a
+global request gate and honour rate limiting, but keep intervals ≥ 30 s and be
+considerate: these are volunteer-run services.
+
+**Enable the Reverse Beacon Network** — set `enabled: true` and put your own
+callsign in `login`.
+
+**Use an OpenSky account** for far fresher worldwide aircraft data:
+
+```json
+{ "id": "opensky-world", "type": "aviation.opensky", "enabled": true,
+  "pollSeconds": 300, "login": "your-user", "password": "your-password" }
+```
+
+**Turn on recording** (`recording.enabled: true`) to capture a JSONL event log
+for later replay. Mind the volume — the live feeds produce several GB per hour;
+`maxTotalGigabytes` deletes the oldest hourly files once the cap is reached.
+
+### Checking the collector
+
+```
+http://127.0.0.1:7810/api/health      status
+http://127.0.0.1:7810/api/status      sources and their state
+http://127.0.0.1:7810/api/statistics  accepted / dropped / evicted counters
+```
+
+Installed builds write collector logs to
+`%LOCALAPPDATA%\IonCommand\logs\collector-out.log`.

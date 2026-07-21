@@ -1,86 +1,179 @@
 # ION COMMAND
 
-**Global Geospatial Operations & HF Propagation Command Center**
+**A live situation display for the sky above you.**
 
-ION COMMAND is a native Unreal Engine 5 fat client for live, historical, and
-contextual geospatial data. Its first application is global amateur-radio
-propagation, while the platform core remains independent of callsigns, bands,
-and any individual feed.
+ION COMMAND puts real-time HF propagation, aircraft, lightning, satellites,
+earthquakes, ionosphere soundings and space weather on one photoreal globe —
+a mission-control wall you can actually read.
 
-The current bootstrap includes:
+![ION COMMAND](docs/images/overview.jpg)
 
-- a bounded, concurrent Go collector with source/domain plugin registries;
-- canonical Point and GreatCircle messages over WebSocket;
-- radio, lightning, and space-weather mock sources;
-- health, status, statistics, source, recording, and replay endpoints;
-- JSONL recording and time-scaled replay;
-- an Unreal C++ project split into generic core/data/rendering modules and an
-  application shell;
-- a NASA Blue Marble day/night globe, generated starfield, atmosphere/aurora,
-  bounded instanced paths, ultrawide camera rig, and world-space command deck;
-- repeatable Unreal Editor automation and repository validation scripts.
+It is two pieces: a **Go collector** that speaks to a dozen public data
+services and normalises everything into one canonical event format, and an
+**Unreal Engine 5 client** that renders it. The core is deliberately generic —
+the globe knows about *points*, *paths* and *domains*, not about callsigns —
+so a new data source is a plugin, not a rewrite.
 
-## Quick start: collector
+Status: **pre-1.0**, Windows x64, single-operator local use. MIT licensed.
 
-```powershell
-cd collector
-go test ./...
-go run ./cmd/ion-collector -config ./configs/development.json
+---
+
+## What you see
+
+| Layer | Source | What it tells you |
+| --- | --- | --- |
+| **Propagation paths** | PSKReporter, Reverse Beacon Network, WSJT-X | Who is hearing whom right now, coloured by band. Press **M** for just your own station's RX/TX. |
+| **Aircraft** | OpenSky (worldwide) + adsb.lol (regional detail) | Thousands of airframes, oriented on their true track and gliding between updates. Type-specific glyphs for airliners, helicopters, gliders, balloons and drones; emergency squawks turn red. |
+| **Lightning** | Blitzortung (opt-in) | Individual strikes as they happen. |
+| **Satellites** | CelesTrak TLEs, SGP4-propagated | Amateur satellites at true orbital altitude. |
+| **Earthquakes** | USGS | Recent quakes, sized by magnitude. |
+| **Ionosphere** | GIRO / KC2G soundings | foF2 and MUF per station, feeding a hop-by-hop path analysis. |
+| **Space weather** | NOAA SWPC + GOES | Kp, solar flux, A-index, solar wind, Bz, X-ray flare class, and an aurora oval that grows with Kp. |
+| **Clouds** | EUMETSAT world IR composite | The actual weather of the last hour, refreshed hourly. |
+| **Sky** | NASA SVS Deep Star Map | The real celestial sphere, rotated to current sidereal time. |
+
+The cockpit HUD adds band activity, a path-rate sparkline, top DXCC regions
+with flags, an auroral oval dial, an HF conditions estimate and a hop/MUF
+analysis for whatever path you click.
+
+**What it is not:** the analysis panels are labelled `// HEURISTIC` for a
+reason. The HF conditions verdict is a rule of thumb, not a NOAA forecast, and
+the arcs are *reported reception links*, not measured ray paths.
+
+![Aircraft over Europe](docs/images/traffic-europe.jpg)
+
+## Install (Windows)
+
+1. Download `ION-COMMAND-<version>-Setup.exe` from
+   [Releases](https://github.com/svabi79/ion-command/releases).
+2. Run it. Windows SmartScreen will warn about an unsigned binary — the
+   installer is not code-signed. Choose *More info → Run anyway* if you are
+   comfortable with that.
+3. Launch **ION COMMAND** from the Start Menu. The collector starts
+   automatically and the globe fills within seconds.
+
+Requires 64-bit Windows 10 or later, a GPU that can run UE5, ~1.5 GB of disk
+and an internet connection. The collector listens on `127.0.0.1:7810` only.
+
+**Set your station:** press **O**, click **SETTINGS >**, then click the
+CALLSIGN and GRID LOCATOR rows and type. Your position appears as a green
+"you are here" reticle and unlocks the *MY RX/TX* filter.
+
+![Settings panel](docs/images/settings-panel.jpg)
+
+## Controls
+
+| Key | Action | | Key | Action |
+| --- | --- | --- | --- | --- |
+| **O** | overlay menu | | **Tab** | HUD: full / minimal / off |
+| **V** | show/hide paths | | **M** | only my station's paths |
+| **H** | activity heatmap | | **I** | ionosphere shells |
+| **N** | cycle mode filter | | **F** | focus selection |
+| **1–9 / 0** | band presets / all | | **Space** | pause timeline |
+| **R** | replay last 15 min | | **L** | back to live |
+| **Wheel** | zoom | | **RMB** | orbit |
+
+Hover any marker for details; click a path for distance, azimuth, grayline and
+a hop-by-hop MUF verdict. Full reference in
+[docs/CONFIGURATION.md](docs/CONFIGURATION.md).
+
+**Too much traffic?** A busy afternoon really is 13 000 aircraft. Open
+**O → SETTINGS** and set **MIN FLIGHT LEVEL** to FL100 to drop the airport
+clutter, or **SHOW GROUND A/C** to OFF. **V** hides the paths entirely.
+
+## Configure the data
+
+The collector reads `collector/configs/live.json` (installed:
+`<install>\collector\configs\live.json`). Out of the box it uses only services
+that need no account, and recording is off. The two most common changes:
+
+- **Aircraft detail for your area** — add `aviation.adsb` entries with your own
+  centre coordinates.
+- **Reverse Beacon Network** — enable it and set your own callsign.
+
+See [docs/CONFIGURATION.md](docs/CONFIGURATION.md) for every field.
+
+> **Be a good citizen.** Most of these feeds are run by volunteers. The
+> collector rate-limits itself, backs off on HTTP 429/420 and stops polling
+> services that keep failing. Please do not shorten the shipped intervals, and
+> read [docs/DATA-SOURCES.md](docs/DATA-SOURCES.md) before redistributing your
+> own build — several sources are **non-commercial only**.
+
+## Architecture
+
+```
+ data services ──► Go collector ──────────────► WebSocket ──► UE5 client
+                   ├ source plugins            canonical      ├ globe + atmosphere
+                   │  (one per feed)           envelope       ├ arc layer (paths)
+                   ├ domain normalisers        {geometry,     ├ point layer (markers)
+                   │  (feed → canonical)        time, props}  ├ heatmap / ionosphere
+                   ├ recording (JSONL)                        └ cockpit HUD
+                   └ retained-state hub ───────────────────────► instant snapshot
+                                                                 on connect
 ```
 
-For the real global PSKReporter feed (public MQTT broker, no credentials)
-use the live configuration instead — roughly 300–500 spots/second:
+Sources produce raw records; domain normalisers turn them into one canonical
+`Entity` / `Observation` / `Relationship` envelope carrying geometry, validity
+and generic `display.*` / `visual.*` properties. The renderer only understands
+those properties — which is why adding a feed never touches rendering code.
+
+More in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
+[docs/DATA_CONTRACT.md](docs/DATA_CONTRACT.md).
+
+## Build from source
+
+Unreal Engine 5.8, Go 1.24+, Python 3.10+ with Pillow. Globe and star textures
+are **not** in the repository — fetch them first.
 
 ```powershell
-go run ./cmd/ion-collector -config ./configs/live.json
-```
-
-Then open:
-
-- `http://127.0.0.1:7810/api/health`
-- `http://127.0.0.1:7810/api/status`
-- `http://127.0.0.1:7810/api/stats`
-
-The canonical live stream is `ws://127.0.0.1:7810/ws/live`.
-
-## Quick start: Unreal
-
-The verified workstation setup is Unreal Engine 5.8 with Visual Studio 2022
-17.14, the v143 compiler, and Windows SDK 26100:
-
-```powershell
+cd collector; go test ./...; go build -o bin/ion-collector.exe ./cmd/ion-collector
+python tools\fetch-earth-textures.py     # NASA imagery
 .\tools\build.ps1 -Unreal
-.\tools\run-editor.ps1
+.\tools\package.ps1 -Config Shipping
 ```
 
-Run `unreal/Scripts/create_bootstrap_level.py` from the editor or through the
-provided command to generate the `L_CommandDeck` asset.
+Full instructions, including the installer, in [docs/BUILDING.md](docs/BUILDING.md).
 
-Start the collector before Play in Editor. Right mouse orbits, the wheel zooms,
-left mouse selects the nearest visible path, Escape releases it, Space pauses
-the shared timeline, and L returns to live. F re-centers the camera on the
-selection, I toggles the conceptual ionosphere shells, M shows only links
-touching the own station, 1-9 focus a single band (0 restores all), R replays
-the last 15 minutes, and comma/period change the replay speed. A selected path
-is pinned and shown as a bright dedicated arc with white endpoint markers while
-all other traffic dims, and the camera eases toward the selected link;
-observed-link details appear on the center console.
+## Documentation
 
-Configure the own station in `unreal/Config/DefaultGame.ini`:
+| Document | Contents |
+| --- | --- |
+| [CONFIGURATION.md](docs/CONFIGURATION.md) | Settings panel, every config field, all keys and switches |
+| [DATA-SOURCES.md](docs/DATA-SOURCES.md) | Every service used, with attribution and terms |
+| [BUILDING.md](docs/BUILDING.md) | Toolchain, build, package, installer |
+| [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | Empty globe, rate limits, performance |
+| [ARCHITECTURE.md](docs/ARCHITECTURE.md) | Module layout and plugin registries |
+| [DATA_CONTRACT.md](docs/DATA_CONTRACT.md) | The canonical envelope |
 
-```ini
-[IonCommand.Station]
-Callsign=N0CALL
-Locator=JN00AA
-```
+## Security
 
-Package a standalone client and benchmark it:
+The collector binds `127.0.0.1` and has **no authentication** on its HTTP or
+WebSocket endpoints. It is designed for local single-operator use. Do not
+expose it to a network without putting an authenticating proxy in front.
 
-```powershell
-.\tools\package.ps1        # -> dist\windows\IonCommand.exe
-.\tools\bench.ps1          # 600 mock spots/s, ~10k arcs, avg-fps report
-```
+## Contributing
 
-See [development instructions](docs/DEVELOPMENT.md), the
-[architecture](docs/ARCHITECTURE.md), and the
-[implementation status](docs/IMPLEMENTATION_STATUS.md).
+Issues and pull requests are welcome. There is no roadmap commitment and no
+support promise — this is a personal project developed in the open.
+
+If you add a data source, add it as a source plugin plus a domain normaliser
+and keep the rendering modules free of domain vocabulary. One warning worth
+your time: the engine's sphere UV runs **westward from world longitude −90°**,
+and the world frame is pinned to that by a test. Do not "fix" the geo maths
+without reading `GeoMathLibrary.cpp` first — that assumption once put German
+stations over Siberia.
+
+## Licence and credits
+
+ION COMMAND's own code is MIT-licensed — see [LICENSE](LICENSE).
+
+It stands on data and imagery generously made public by others. Every service
+used, with its required attribution and terms, is listed in
+**[docs/DATA-SOURCES.md](docs/DATA-SOURCES.md)**; redistributed third-party
+components are reproduced in
+**[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)**.
+
+ION COMMAND uses the Unreal® Engine. Unreal® is a trademark or registered
+trademark of Epic Games, Inc. in the United States of America and elsewhere.
+
+73 de HB9HSJ
