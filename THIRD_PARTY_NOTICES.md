@@ -27,13 +27,35 @@ retained in any redistribution.
 
 `collector/internal/cty/cty.dat` (version VER20260714) is the "Big CTY" country
 file compiled and maintained by Jim Reisert, **AD1C**, and is redistributed
-inside the collector binary for callsign-to-DXCC-entity resolution.
+unmodified inside the collector binary for callsign-to-DXCC-entity resolution.
 
-Source and terms: <https://www.country-files.com/>
+Source and terms: <https://www.country-files.com/copyright/>
 
-> **NOTICE — the verbatim AD1C copyright and permission notice still has to be
-> inserted here before this file is considered complete.** See
-> `collector/internal/cty/LICENSE`.
+The notice below is reproduced verbatim from that page. Its copyright line is
+published without a closing year or a named holder; it appears here exactly as
+published, unaltered.
+
+```
+Copyright © 1994-
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
 
 ---
 

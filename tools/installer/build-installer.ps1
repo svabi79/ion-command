@@ -54,6 +54,9 @@ Copy-Item (Join-Path $PSScriptRoot 'launch.ps1') $stage -Force
 Copy-Item (Join-Path $PSScriptRoot 'launch.cmd') $stage -Force
 Copy-Item (Join-Path $repo 'README.md') $stage -Force
 Copy-Item (Join-Path $repo 'LICENSE') (Join-Path $stage 'LICENSE.txt') -Force
+Copy-Item (Join-Path $repo 'THIRD_PARTY_NOTICES.md') $stage -Force
+# The embedded country file requires its notice to travel with the binary.
+Copy-Item (Join-Path $repo 'collector\internal\cty\LICENSE') (Join-Path $stage 'collector\cty-LICENSE.txt') -Force
 foreach ($doc in @('CONFIGURATION.md','DATA-SOURCES.md','BUILDING.md','TROUBLESHOOTING.md')) {
     $path = Join-Path $repo "docs\$doc"
     if (Test-Path $path) { Copy-Item $path (Join-Path $stage 'docs') -Force }

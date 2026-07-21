@@ -68,6 +68,8 @@ Source: "{#StageDir}\launch.ps1"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#StageDir}\launch.cmd"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#StageDir}\README.md";  DestDir: "{app}"; Flags: ignoreversion isreadme
 Source: "{#StageDir}\LICENSE.txt"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#StageDir}\THIRD_PARTY_NOTICES.md"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#StageDir}\collector\cty-LICENSE.txt"; DestDir: "{app}\collector"; Flags: ignoreversion
 Source: "{#StageDir}\docs\*"; DestDir: "{app}\docs"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
 
 [Icons]
