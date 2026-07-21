@@ -36,26 +36,62 @@ domain normalization workers, validation, JSONL recording, WebSocket fan-out,
 and replay. Each client has a bounded outgoing buffer; a slow visual client can
 lose messages without stalling acquisition, and the drop is visible in stats.
 
-The bootstrap registry is compile-time because native Go plugins are not
-portable to Windows. Plugin manifests and interfaces preserve the logical
-boundary. A future external-process or WASM plugin host can replace the registry
-without changing canonical consumers.
+### Compile-time plugins
 
-Implemented sources:
+The registry is compile-time: sources, domains and contexts implement registry
+interfaces and are registered statically in
+`collector/cmd/ion-collector/main.go`. Native Go plugins are deliberately not
+used because they do not work on Windows, the project's primary platform.
 
-- `mock.radio`
-- `mock.lightning`
-- `mock.spaceweather`
+This means **no dynamic loading and no third-party modules at runtime**. Adding
+a feed means editing the registry and rebuilding. The interfaces are narrow
+enough that an out-of-process or WASM host could replace the registry later
+without changing canonical consumers, but no such host exists today.
 
-Prepared integration boundary:
+The declarative manifests under `plugins/` are descriptive metadata only, and
+currently cover a subset of what is registered. **The registry code is
+authoritative.**
 
-- `pskreporter.live` with injected transport and decoder
+### What is registered
 
-Implemented domains:
+The current set of sources, domains, contexts and Unreal modules — with their
+shipped defaults and data constraints — lives in one place:
+**[COMPONENTS.md](COMPONENTS.md)**. It is deliberately not duplicated here, so
+this document can stay stable while the component list moves.
 
-- ham radio -> station entities and observed reception relationships;
-- weather -> lightning observations;
-- space weather -> global state observations.
+`mock.*` sources exist for development and tests: they generate deterministic
+synthetic traffic so the pipeline and renderer can be exercised without any
+network. They are disabled in shipped configurations.
+
+### Retained state
+
+Slow feeds would otherwise leave a freshly connected client staring at an empty
+globe until the next poll — up to half an hour for the global aircraft snapshot.
+The hub therefore keeps the **latest message per retain key**
+(`semanticType|entityId`) for the semantic types listed in
+`pipeline.retainLatest`, and replays that set to every client on connect.
+
+Retention is bounded and self-cleaning:
+
+- each entry carries the envelope's `validUntil`, so dead entities expire;
+- a janitor goroutine purges expired entries on an interval, independently of
+  traffic;
+- at the cap, the entry expiring soonest is evicted rather than refusing new
+  keys;
+- the replay is non-blocking, and anything that does not fit a client's queue is
+  counted as a drop like any other.
+
+The client queue must therefore be sized **above** the retain cap, or a
+connecting client silently receives a truncated world.
+
+### Rate limiting and provider policy
+
+Acquisition is deliberately conservative, because most feeds are volunteer-run:
+aviation requests pass a global spacing gate shared by all instances; HTTP 429
+and 420 responses trigger exponential backoff honouring `Retry-After`; and a
+source that keeps failing stops polling rather than retrying forever. A failed
+fetch must never turn a periodic loop into a download loop — see
+[DATA-SOURCES.md](DATA-SOURCES.md).
 
 ## Canonical model
 
@@ -64,7 +100,7 @@ of Entity, Observation, Relationship, Track, Area, Field, Volume, or Annotation.
 Semantic types are hierarchical strings registered by plugins. Unknown semantic
 types remain recordable and replayable.
 
-Point and GreatCircle are fully parsed by the bootstrap client. Interfaces and
+Point and GreatCircle are fully parsed by the client. Interfaces and
 schema names are reserved for tracks, polygons, grids, raster fields, shells,
 and volumes.
 
@@ -92,7 +128,7 @@ No renderer parses network data, and no unbounded array is used.
 
 ## Rendering path
 
-The bootstrap uses one hierarchical instanced mesh component per palette entry
+The renderer uses one hierarchical instanced mesh component per palette entry
 for arc segments, and one component per point class. It never creates an Actor
 or material per message. `AGeoArcLayerActor` is domain-neutral;
 `AHamRadioLinkLayerActor` reuses it and supplies band styling. The next renderer

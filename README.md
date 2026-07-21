@@ -123,6 +123,11 @@ Sources produce raw records; domain normalisers turn them into one canonical
 and generic `display.*` / `visual.*` properties. The renderer only understands
 those properties — which is why adding a feed never touches rendering code.
 
+Sources, domains and contexts are **compile-time plugins**: they are registered
+statically in the collector and built in. There is no dynamic loading and no
+third-party module support at runtime. The current component list is in
+[docs/COMPONENTS.md](docs/COMPONENTS.md).
+
 More in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
 [docs/DATA_CONTRACT.md](docs/DATA_CONTRACT.md).
 
@@ -148,7 +153,10 @@ Full instructions, including the installer, in [docs/BUILDING.md](docs/BUILDING.
 | [DATA-SOURCES.md](docs/DATA-SOURCES.md) | Every service used, with attribution and terms |
 | [BUILDING.md](docs/BUILDING.md) | Toolchain, build, package, installer |
 | [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | Empty globe, rate limits, performance |
-| [ARCHITECTURE.md](docs/ARCHITECTURE.md) | Module layout and plugin registries |
+| [COMPONENTS.md](docs/COMPONENTS.md) | Canonical list of sources, domains, contexts and modules |
+| [ARCHITECTURE.md](docs/ARCHITECTURE.md) | Boundaries, canonical model, retained state, rendering path |
+| [IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md) | What works, what is rough, what is missing |
+| [CHANGELOG.md](CHANGELOG.md) | Released changes |
 | [DATA_CONTRACT.md](docs/DATA_CONTRACT.md) | The canonical envelope |
 
 ## Security

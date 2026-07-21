@@ -1,3 +1,5 @@
+> **Historical — not maintained.** The original bootstrap plan, kept for context.
+
 # Bootstrap plan
 
 ## Phase 0: reproducible foundation

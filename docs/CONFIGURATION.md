@@ -118,24 +118,31 @@ seconds instead of waiting for the next poll.
 
 ### Source entries
 
-Every source has `id`, `type`, `enabled`. Additional fields by type:
+Every source has `id`, `type`, `enabled`. The canonical list of source types,
+with their shipped defaults and data constraints, is
+[COMPONENTS.md](COMPONENTS.md); the table below documents their *configuration
+fields*.
+
+Additional fields by type:
 
 | `type` | Extra fields | Notes |
 | --- | --- | --- |
 | `pskreporter.mqtt` | `broker`, `topic`, `clientId` | Public broker, no credentials. ~300–500 spots/s. |
 | `spaceweather.swpc` | `pollSeconds` | Kp, solar flux, wind, Bz, A-index, GOES X-ray. |
 | `ionosonde.kc2g` | `pollSeconds` | foF2 / MUF soundings. |
-| `lightning.blitzortung` | — | WebSocket stream of strikes. |
+| `lightning.blitzortung` | — | WebSocket stream of strikes. Enabled by default; read the [terms](DATA-SOURCES.md#a-word-about-blitzortung). |
 | `earthquake.usgs` | `pollSeconds` | Recent quakes. |
 | `orbital.celestrak` | `pollSeconds` | TLEs, propagated with SGP4. |
 | `aviation.adsb` | `latitude`, `longitude`, `radiusNm`, `pollSeconds` | Regional circle around a point (max 250 nm). Add one entry per area you care about. |
-| `aviation.opensky` | `pollSeconds`, `login`, `password` | One global snapshot per request. Anonymous access is credit-limited, so the default poll is 900 s; an account allows far shorter intervals. |
+| `aviation.opensky` | `pollSeconds`, `login` (see note) | One global snapshot per request. Anonymous access is credit-limited; the shipped default is 1800 s. |
 | `hamradio.rbn` | `login` | Reverse Beacon Network telnet; **requires a real callsign**. Disabled by default. |
 | `wsjtx.udp` | `broker` (listen address) | Local WSJT-X UDP feed. |
 
 ### Common adjustments
 
-**Point the aircraft view at your own area** — edit the example entry:
+**Point the aircraft view at your own area.** The shipped configuration
+contains one illustrative circle (`adsb-region-example`, 50.0/8.0, 250 nm).
+Replace it with your own — this is an example, not a recommended location:
 
 ```json
 { "id": "adsb-home", "type": "aviation.adsb", "enabled": true,
@@ -149,12 +156,11 @@ considerate: these are volunteer-run services.
 **Enable the Reverse Beacon Network** — set `enabled: true` and put your own
 callsign in `login`.
 
-**Use an OpenSky account** for far fresher worldwide aircraft data:
-
-```json
-{ "id": "opensky-world", "type": "aviation.opensky", "enabled": true,
-  "pollSeconds": 300, "login": "your-user", "password": "your-password" }
-```
+**OpenSky authentication does not currently work.** The `login`/`password`
+fields use HTTP basic auth, which OpenSky retired in favour of OAuth2 client
+credentials. Anonymous access works and is what the shipped configuration uses;
+lowering `pollSeconds` without a working account will exhaust the anonymous
+credit budget.
 
 **Turn on recording** (`recording.enabled: true`) to capture a JSONL event log
 for later replay. Mind the volume — the live feeds produce several GB per hour;
