@@ -24,7 +24,7 @@ Status: **pre-1.0**, Windows x64, single-operator local use. MIT licensed.
 | --- | --- | --- |
 | **Propagation paths** | PSKReporter, Reverse Beacon Network, WSJT-X | Who is hearing whom right now, coloured by band. Press **M** for just your own station's RX/TX. |
 | **Aircraft** | OpenSky (worldwide) + adsb.lol (regional detail) | Thousands of airframes, oriented on their true track and gliding between updates. Type-specific glyphs for airliners, helicopters, gliders, balloons and drones; emergency squawks turn red. |
-| **Lightning** | Blitzortung (opt-in) | Individual strikes as they happen. |
+| **Lightning** | Blitzortung | Individual strikes as they happen. [Please read the note](docs/DATA-SOURCES.md#a-word-about-blitzortung) — it is a volunteer network, non-commercial only, and not a warning system. |
 | **Satellites** | CelesTrak TLEs, SGP4-propagated | Amateur satellites at true orbital altitude. |
 | **Earthquakes** | USGS | Recent quakes, sized by magnitude. |
 | **Ionosphere** | GIRO / KC2G soundings | foF2 and MUF per station, feeding a hop-by-hop path analysis. |
@@ -98,6 +98,12 @@ See [docs/CONFIGURATION.md](docs/CONFIGURATION.md) for every field.
 > services that keep failing. Please do not shorten the shipped intervals, and
 > read [docs/DATA-SOURCES.md](docs/DATA-SOURCES.md) before redistributing your
 > own build — several sources are **non-commercial only**.
+>
+> In particular the **lightning layer** streams from Blitzortung.org, a network
+> of volunteers who each run their own detector. It is enabled by default;
+> if you use it, consider
+> [running a station](https://www.blitzortung.org/en/cover_your_area.php), and
+> switch it off in any commercial build.
 
 ## Architecture
 

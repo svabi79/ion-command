@@ -20,7 +20,7 @@ non-commercial only.
 | **U.S. Geological Survey** | Earthquake data from the U.S. Geological Survey (public domain). | [earthquake.usgs.gov](https://earthquake.usgs.gov/earthquakes/feed/) |
 | **CelesTrak** | Orbital elements courtesy of CelesTrak (Dr. T.S. Kelso). Users must observe the CelesTrak usage policy; the collector backs off and stops on repeated non-200 responses. | [celestrak.org](https://celestrak.org/usage-policy.php) |
 | **GIRO / prop.kc2g.com** | Ionosonde data distributed through GIRO and INGV, made available via prop.kc2g.com (Ian, KC2G), funded by WWROF. Licensed **CC BY-NC-SA 4.0 — non-commercial, share-alike**; recorded ionosonde data inherits this licence. Cite: Reinisch, B. W., and I. A. Galkin, *Global Ionospheric Radio Observatory (GIRO)*, Earth, Planets and Space, 63, 377–381, doi:10.5047/eps.2011.03.001, 2011. | [GIRO Rules of the Road](https://giro.uml.edu/didbase/RulesOfTheRoad.html) |
-| **Blitzortung.org** | Lightning data courtesy of Blitzortung.org and its volunteer station operators. **Disabled by default.** Private and entertainment use only; commercial use prohibited; raw access is intended for participating station operators. Not an official information service and **not a warning system**. | [blitzortung.org](https://www.blitzortung.org) |
+| **Blitzortung.org** | Lightning data courtesy of Blitzortung.org and its volunteer station operators. Private and entertainment use only; **commercial use is prohibited**; raw data access is intended for **participating station operators**. Not an official information service and **not a warning system** — never rely on it for safety decisions. See the note below. | [blitzortung.org](https://www.blitzortung.org) |
 | **adsb.lol** | Aircraft data from adsb.lol, licensed **ODbL 1.0**. Redistributing recorded ADS-B data means releasing that data under ODbL. Consider feeding adsb.lol to give back. | [adsb.lol](https://www.adsb.lol) · [ODbL](https://opendatacommons.org/licenses/odbl/1-0/) |
 | **OpenSky Network** | Aircraft data from the OpenSky Network. Licensed for **non-profit research and education only**; commercial or operational use requires written permission from OpenSky. Conditions pass through to downstream users. Cite: Schäfer, M., Strohmeier, M., Lenders, V., Martinovic, I., Wilhelm, M., *Bringing Up OpenSky: A Large-scale ADS-B Sensor Network for Research*, IPSN 2014, pp. 83–94. | [Terms of use](https://opensky-network.org/about/terms-of-use) |
 | **EUMETSAT** | Cloud imagery ©EUMETSAT 2026. Governed by the EUMETSAT Data Policy, not Creative Commons. | [Terms of use](https://www.eumetsat.int/about-us/terms-use) |
@@ -41,13 +41,45 @@ What each source actually does, in the order it appears in `live.json`:
 | `pskreporter.mqtt` | `mqtt.pskreporter.info:1883`, topic `pskr/filter/v2/#` | streaming, ~300–500 spots/s | `hamradio` → `radio.link`, `radio.station` | yes |
 | `spaceweather.swpc` | services.swpc.noaa.gov JSON + `wwv.txt` | 300 s | `spaceweather.state` | yes |
 | `ionosonde.kc2g` | prop.kc2g.com `stations.json` | 600 s (floor 300 s) | `ionosphere.sounding` | yes |
-| `lightning.blitzortung` | `wss://ws*.blitzortung.org/` | streaming | `weather.lightning` | **no** |
+| `lightning.blitzortung` | `wss://ws*.blitzortung.org/` | streaming | `weather.lightning` | yes — [read this](#a-word-about-blitzortung) |
 | `earthquake.usgs` | earthquake.usgs.gov GeoJSON feed | 600 s | `geophysics.earthquake` | yes |
 | `orbital.celestrak` | celestrak.org `gp.php` TLEs, SGP4-propagated locally | TLE refresh 6 h, positions 10 s | `orbital.position` | yes |
 | `aviation.adsb` | adsb.lol `/v2/point/<lat>/<lon>/<nm>` | 60 s, global 4 s request gate | `aviation.aircraft` | yes (one example circle) |
 | `aviation.opensky` | opensky-network.org `/api/states/all` | 1800 s anonymous | `aviation.aircraft` | yes |
 | `hamradio.rbn` | telnet `telnet.reversebeacon.net` | streaming | `hamradio` spots | **no** (needs your callsign) |
 | `wsjtx.udp` | local UDP listener | streaming | `hamradio` | no |
+
+## A word about Blitzortung
+
+The lightning layer is **on by default**, and you should know what that means
+before you leave it on.
+
+Blitzortung.org is not a company. It is a network of volunteers who each bought
+and maintain a detector, and who share the result for free. Their terms are
+explicit:
+
+- **Private and entertainment use only. Commercial use is prohibited.**
+- **Raw data access is intended for people who operate a station** and
+  contribute data back to the network.
+- It is **not an official information service and not a warning system.** Never
+  use it for any safety-relevant decision.
+
+ION COMMAND consumes the raw stream. If you are not running a detector, you are
+taking from that network without giving back. That is tolerated, not invited.
+
+So please, one of these:
+
+- **[Run a station](https://www.blitzortung.org/en/cover_your_area.php)** if you
+  can — that is what keeps the network alive; or
+- **turn the layer off** if you do not need it: set
+  `"enabled": false` on the `lightning.blitzortung` source in
+  `collector/configs/live.json`, or simply hide `WEATHER MARKERS` in the
+  overlay menu (that only stops the drawing — set `enabled: false` to stop the
+  connection).
+
+If you redistribute a build of ION COMMAND commercially, you **must** disable
+this source: the MIT licence on this project's code does not, and cannot, grant
+you commercial rights to Blitzortung's data.
 
 ### How ION COMMAND tries to be a good citizen
 

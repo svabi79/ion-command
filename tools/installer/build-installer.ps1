@@ -62,14 +62,28 @@ foreach ($doc in @('CONFIGURATION.md','DATA-SOURCES.md','BUILDING.md','TROUBLESH
 @"
 ION COMMAND $Version
 
-This installs a live geospatial situation display and the local data collector
-that feeds it. On first start the collector connects to public data services
-(PSKReporter, OpenSky, adsb.lol, Blitzortung, NOAA SWPC, USGS, CelesTrak,
-EUMETSAT and others) over the internet.
+This installs a live situation display and the local data collector that feeds
+it. On first start the collector connects over the internet to public data
+services: PSKReporter, OpenSky, adsb.lol, Blitzortung, NOAA SWPC, USGS,
+CelesTrak, GIRO/KC2G and EUMETSAT.
 
-Nothing is uploaded about you. Set your callsign and grid locator in the
-in-app SETTINGS panel; see docs\DATA-SOURCES.md for the services used and
-their attribution.
+Nothing about you is uploaded. Set your callsign and grid locator in the in-app
+SETTINGS panel.
+
+PLEASE NOTE - the data is not ours, and some of it is restricted:
+
+ * Several services allow NON-COMMERCIAL USE ONLY (Blitzortung, OpenSky,
+   GIRO/KC2G). The MIT licence on ION COMMAND's own code does not grant you
+   any rights to the data it fetches.
+ * The lightning layer streams from Blitzortung.org, a network of volunteers
+   who each run their own detector at their own expense. It is enabled by
+   default. If you use it, please consider running a station yourself
+   (https://www.blitzortung.org/en/cover_your_area.php), and switch the source
+   off in any commercial deployment.
+ * Blitzortung is NOT a warning system. Nothing shown here may be used for
+   safety-relevant decisions.
+
+Full attribution and terms: docs\DATA-SOURCES.md
 "@ | Set-Content -Path (Join-Path $stage 'BEFORE-INSTALL.txt') -Encoding UTF8
 
 $stageBytes = (Get-ChildItem $stage -Recurse -File | Measure-Object -Property Length -Sum).Sum

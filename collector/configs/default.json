@@ -51,7 +51,7 @@
     {
       "id": "blitzortung-primary",
       "type": "lightning.blitzortung",
-      "enabled": false
+      "enabled": true
     },
     {
       "id": "usgs-primary",
