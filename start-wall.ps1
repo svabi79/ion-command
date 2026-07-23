@@ -41,23 +41,53 @@ if ($Callsign -and $Locator) {
     Write-Host "Own station set to $Callsign / $Locator"
 }
 
-$up = $false
-try { $up = (Invoke-RestMethod -Uri 'http://127.0.0.1:7810/api/health' -TimeoutSec 3).status -eq 'ok' } catch { }
-if (-not $up) {
-    Write-Host "Starting collector ($configName)..."
-    Start-Process -FilePath $collector -ArgumentList '-config', $configName `
-        -WorkingDirectory (Join-Path $repo 'collector') -WindowStyle Hidden `
-        -RedirectStandardOutput (Join-Path $repo 'collector\collector-stdout.log') `
-        -RedirectStandardError  (Join-Path $repo 'collector\collector-stderr.log')
-    $deadline = (Get-Date).AddSeconds(20)
-    do {
-        Start-Sleep -Milliseconds 500
-        try { $up = (Invoke-RestMethod -Uri 'http://127.0.0.1:7810/api/health' -TimeoutSec 2).status -eq 'ok' } catch { }
-    } while (-not $up -and (Get-Date) -lt $deadline)
-}
-Write-Host ("Collector: " + $(if ($up) { 'running' } else { 'NOT REACHABLE' }))
+# 7810 is the canonical port, but Windows reserves whole port ranges for
+# Hyper-V/WSL NAT ("excluded port ranges"), and on some machines 7810 falls
+# inside one - the collector then dies instantly with WSAEACCES. The fallbacks
+# are far apart so at least one lands outside whatever block was reserved.
+$candidatePorts = @(7810, 17810, 27810)
 
-$clientArgs = @('-windowed', "-ResX=$ResX", "-ResY=$ResY", '-IonCollectorUrl=ws://127.0.0.1:7810/ws/live')
+function Test-CollectorHealth([int]$Port) {
+    try { return (Invoke-RestMethod -Uri "http://127.0.0.1:$Port/api/health" -TimeoutSec 2).status -eq 'ok' } catch { return $false }
+}
+function Test-PortBindable([int]$Port) {
+    # A bind probe catches both "in use" and "reserved range" (WSAEACCES).
+    $listener = New-Object System.Net.Sockets.TcpListener([System.Net.IPAddress]::Loopback, $Port)
+    try { $listener.Start(); $listener.Stop(); return $true } catch { return $false }
+}
+
+# Attach to a running collector first (it may sit on a fallback port from an
+# earlier launch), so a second launch never fights over the port.
+$activePort = 0
+foreach ($port in $candidatePorts) {
+    if (Test-CollectorHealth $port) { $activePort = $port; break }
+}
+if (-not $activePort) {
+    foreach ($port in $candidatePorts) {
+        if (-not (Test-PortBindable $port)) {
+            Write-Host "Port $port is unavailable (in use or reserved by Windows) - trying the next one."
+            continue
+        }
+        Write-Host "Starting collector ($configName) on 127.0.0.1:$port..."
+        $process = Start-Process -FilePath $collector -ArgumentList '-config', $configName, '-listen', "127.0.0.1:$port" `
+            -WorkingDirectory (Join-Path $repo 'collector') -WindowStyle Hidden -PassThru `
+            -RedirectStandardOutput (Join-Path $repo 'collector\collector-stdout.log') `
+            -RedirectStandardError  (Join-Path $repo 'collector\collector-stderr.log')
+        $deadline = (Get-Date).AddSeconds(20)
+        do {
+            Start-Sleep -Milliseconds 500
+            if (Test-CollectorHealth $port) { $activePort = $port; break }
+        } while (-not $process.HasExited -and (Get-Date) -lt $deadline)
+        if ($activePort) { break }
+        if ($process.HasExited) {
+            Write-Host "Collector exited immediately (code $($process.ExitCode)) - see collector\collector-stderr.log."
+        }
+    }
+}
+Write-Host ("Collector: " + $(if ($activePort) { "running on port $activePort" } else { 'NOT REACHABLE' }))
+
+$collectorPort = if ($activePort) { $activePort } else { 7810 }
+$clientArgs = @('-windowed', "-ResX=$ResX", "-ResY=$ResY", "-IonCollectorUrl=ws://127.0.0.1:$collectorPort/ws/live")
 if ($ShowDeck) { $clientArgs += '-IonShowDeck' }
 Write-Host "Starting client ($ResX x $ResY)..."
 Start-Process -FilePath $client -ArgumentList $clientArgs

@@ -42,18 +42,22 @@ import (
 
 func main() {
 	configPath := flag.String("config", "configs/development.json", "path to collector JSON configuration")
+	listenAddress := flag.String("listen", "", "override server.listenAddress from the configuration (e.g. 127.0.0.1:17810)")
 	flag.Parse()
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
-	if err := run(*configPath, logger); err != nil {
+	if err := run(*configPath, *listenAddress, logger); err != nil {
 		logger.Error("collector stopped", "error", err)
 		os.Exit(1)
 	}
 }
 
-func run(configPath string, logger *slog.Logger) error {
+func run(configPath, listenAddress string, logger *slog.Logger) error {
 	cfg, err := config.Load(configPath)
 	if err != nil {
 		return err
+	}
+	if listenAddress != "" {
+		cfg.Server.ListenAddress = listenAddress
 	}
 	registry := plugins.NewRegistry()
 	for _, domain := range []plugins.Domain{hamradio.New(), weather.New(), spaceweather.New(), ionosphere.New(), geophysics.New(), orbital.New(), aviation.New()} {
