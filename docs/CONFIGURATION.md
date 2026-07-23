@@ -23,12 +23,14 @@ Press **O** to open the overlay menu, then click **SETTINGS >**.
 | **MARKER LIFETIME** | How long a marker stays after its last sighting (60 / 120 / 300 / 600 / 1200 s). Lower = tidier globe, higher = longer trails of activity. |
 | **MIN FLIGHT LEVEL** | Hides aircraft below this level (OFF / FL050 / FL100 / FL200 / FL300). The quickest way to thin out dense airspace — at FL100 the airport clutter disappears and only cruising traffic remains. |
 | **SHOW GROUND A/C** | Show or hide aircraft reported as on the ground. |
+| **INVERT ORBIT Y** | Flip the vertical orbit direction of a right-mouse drag. OFF matches the horizontal drag convention; ON restores the pre-0.9.1 direction. |
 
 While a text field is focused all hotkeys are suspended, so typing a callsign
 cannot toggle layers.
 
-Values persist to `Game.ini` under `[IonCommand.Station]` (callsign, locator)
-and `[IonCommand.Display]` (`MarkerLifetime`, `MinFlightLevelFt`, `ShowGround`).
+Values persist to `Game.ini` under `[IonCommand.Station]` (callsign, locator),
+`[IonCommand.Display]` (`MarkerLifetime`, `MinFlightLevelFt`, `ShowGround`) and
+`[IonCommand.Input]` (`InvertOrbitY`).
 
 ## Client: overlay menu
 
@@ -166,6 +168,19 @@ credit budget.
 for later replay. Mind the volume — the live feeds produce several GB per hour;
 `maxTotalGigabytes` deletes the oldest hourly files once the cap is reached.
 
+### Command-line flags
+
+| Flag | Effect |
+| --- | --- |
+| `-config <path>` | path to the JSON configuration |
+| `-listen <addr>` | override `server.listenAddress`, e.g. `-listen 127.0.0.1:17810` |
+
+The launchers use `-listen` automatically: if the canonical port 7810 is in use
+or reserved by Windows, they fall back to 17810, then 27810, and point the
+client at whichever port the collector actually got (via `-IonCollectorUrl`).
+See [TROUBLESHOOTING.md](TROUBLESHOOTING.md#the-globe-is-empty) for the
+reserved-port background.
+
 ### Checking the collector
 
 ```
@@ -173,6 +188,8 @@ http://127.0.0.1:7810/api/health      status
 http://127.0.0.1:7810/api/status      sources and their state
 http://127.0.0.1:7810/api/statistics  accepted / dropped / evicted counters
 ```
+
+(Substitute the port if the launcher fell back to 17810 or 27810.)
 
 Installed builds write collector logs to
 `%LOCALAPPDATA%\IonCommand\logs\collector-out.log`.
