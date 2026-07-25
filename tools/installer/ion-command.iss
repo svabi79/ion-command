@@ -81,7 +81,8 @@ Name: "{group}\{cm:UninstallProgram,ION COMMAND}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\ION COMMAND";      Filename: "{app}\launch.cmd"; WorkingDir: "{app}"; IconFilename: "{app}\client\IonCommand.exe"; Tasks: desktopicon
 
 [Run]
-; Loopback-only rule: the collector serves 127.0.0.1:7810 for the local client.
+; Loopback-only rule for the local client. Scoped to the program rather than a
+; port, so it still applies when the launcher falls back off the canonical 7810.
 Filename: "netsh"; Parameters: "advfirewall firewall add rule name=""ION COMMAND collector (loopback)"" dir=in action=allow program=""{app}\collector\ion-collector.exe"" enable=yes profile=any localip=127.0.0.1 remoteip=127.0.0.1"; Flags: runhidden; Tasks: firewall; StatusMsg: "Adding firewall rule..."
 Filename: "{app}\launch.cmd"; Description: "{cm:LaunchProgram,ION COMMAND}"; WorkingDir: "{app}"; Flags: nowait postinstall skipifsilent shellexec
 
