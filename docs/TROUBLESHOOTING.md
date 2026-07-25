@@ -13,6 +13,27 @@ http://127.0.0.1:7810/api/status      -> per-source state
   through the Start Menu shortcut (it starts the collector), or run
   `collector\ion-collector.exe -config collector\configs\live.json`.
   Installed builds log to `%LOCALAPPDATA%\IonCommand\logs\collector-err.log`.
+- **The launcher may have used a fallback port.** If 7810 was unavailable it
+  tries 17810, then 27810 — check those before concluding the collector is
+  down. The client is pointed at the right port automatically.
+
+## The collector exits immediately: `bind: An attempt was made to access a socket…`
+
+Windows reserves whole TCP port ranges for Hyper-V/WSL NAT, and on some
+machines the canonical port 7810 falls inside such a range — binding it then
+fails with `WSAEACCES` even though nothing is listening. Check with:
+
+```
+netsh interface ipv4 show excludedportrange protocol=tcp
+```
+
+The launcher detects this and falls back to 17810, then 27810, passing the
+actual port to the client. If you start the pieces by hand, do the same:
+
+```
+collector\ion-collector.exe -config collector\configs\live.json -listen 127.0.0.1:17810
+client\IonCommand.exe -IonCollectorUrl=ws://127.0.0.1:17810/ws/live
+```
 - **Health is fine but nothing renders** — check the HUD status bar: `LINK`
   should read `CONNECTED`. If it says `OFFLINE`, the client is pointed at a
   different address; the default is `ws://127.0.0.1:7810/ws/live`.

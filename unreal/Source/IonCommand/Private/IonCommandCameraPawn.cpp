@@ -7,6 +7,7 @@
 #include "GeoMathLibrary.h"
 #include "GeoReplaySubsystem.h"
 #include "Misc/CommandLine.h"
+#include "Misc/ConfigCacheIni.h"
 #include "Misc/Parse.h"
 #include "GeoSelectionSubsystem.h"
 #include "GeoTimelineSubsystem.h"
@@ -141,7 +142,18 @@ void AIonCommandCameraPawn::HandleSelectionChanged()
 void AIonCommandCameraPawn::BeginOrbit() { bOrbiting = true; bFocusInterpolating = false; }
 void AIonCommandCameraPawn::EndOrbit() { bOrbiting = false; }
 void AIonCommandCameraPawn::OrbitYaw(float Value) { if (bOrbiting && !FMath::IsNearlyZero(Value)) AddActorWorldRotation(FRotator(0, Value * 0.25f, 0)); }
-void AIonCommandCameraPawn::OrbitPitch(float Value) { if (bOrbiting && !FMath::IsNearlyZero(Value)) { FRotator Rotation = SpringArm->GetRelativeRotation(); Rotation.Pitch = FMath::Clamp(Rotation.Pitch + Value * 0.20f, -75.0f, 65.0f); SpringArm->SetRelativeRotation(Rotation); } }
+void AIonCommandCameraPawn::OrbitPitch(float Value)
+{
+    if (!bOrbiting || FMath::IsNearlyZero(Value)) return;
+    // Vertical matches the horizontal drag convention by default; INVERT
+    // ORBIT Y in the settings panel restores the old direction. Re-read per
+    // event, like the own-station ini reads, so the toggle applies live.
+    bool bInvert = false;
+    GConfig->GetBool(TEXT("IonCommand.Input"), TEXT("InvertOrbitY"), bInvert, GGameIni);
+    FRotator Rotation = SpringArm->GetRelativeRotation();
+    Rotation.Pitch = FMath::Clamp(Rotation.Pitch + Value * (bInvert ? -0.20f : 0.20f), -75.0f, 65.0f);
+    SpringArm->SetRelativeRotation(Rotation);
+}
 void AIonCommandCameraPawn::Zoom(float Value) { if (!FMath::IsNearlyZero(Value)) SpringArm->TargetArmLength = FMath::Clamp(SpringArm->TargetArmLength - Value * 220.0f, 1450.0f, 6500.0f); }
 void AIonCommandCameraPawn::TogglePause() { if (UGeoTimelineSubsystem* Timeline = GetGameInstance()->GetSubsystem<UGeoTimelineSubsystem>()) Timeline->SetPaused(!Timeline->IsPaused()); }
 void AIonCommandCameraPawn::ReturnToLive()

@@ -856,6 +856,15 @@ void AIonCockpitHudActor::LoadAndApplySettings()
 
 void AIonCockpitHudActor::CycleSetting(const FString& Key)
 {
+    if (Key == TEXT("invertY"))
+    {
+        // The camera pawn re-reads this on every orbit input, so the flip
+        // applies immediately; no layer actor involved.
+        bool bInvert = false;
+        GConfig->GetBool(TEXT("IonCommand.Input"), TEXT("InvertOrbitY"), bInvert, GGameIni);
+        PersistSetting(TEXT("IonCommand.Input"), TEXT("InvertOrbitY"), bInvert ? TEXT("False") : TEXT("True"));
+        return;
+    }
     AGeoPointLayerActor* PointLayer = FindPointLayer();
     if (!PointLayer) return;
     if (Key == TEXT("lifetime"))
@@ -958,6 +967,8 @@ void AIonCockpitHudActor::DrawSettings(float Scale, float Alpha)
     const double LifetimeS = PointLayer ? PointLayer->GetMarkerLifetimeSeconds() : 300.0;
     const double MinFt = PointLayer ? PointLayer->GetMinAircraftAltitudeMeters() / 0.3048 : 0.0;
     const bool bGround = PointLayer ? PointLayer->GetShowGroundAircraft() : true;
+    bool bInvertY = false;
+    GConfig->GetBool(TEXT("IonCommand.Input"), TEXT("InvertOrbitY"), bInvertY, GGameIni);
 
     SettingsRows.Reset();
     SettingsRows.Add({TEXT("CALLSIGN"), TEXT("callsign"), Callsign, true});
@@ -965,6 +976,7 @@ void AIonCockpitHudActor::DrawSettings(float Scale, float Alpha)
     SettingsRows.Add({TEXT("MARKER LIFETIME"), TEXT("lifetime"), FString::Printf(TEXT("%.0f s"), LifetimeS), false});
     SettingsRows.Add({TEXT("MIN FLIGHT LEVEL"), TEXT("minfl"), MinFt <= 0.0 ? FString(TEXT("OFF")) : FString::Printf(TEXT("FL%03.0f"), MinFt / 100.0), false});
     SettingsRows.Add({TEXT("SHOW GROUND A/C"), TEXT("ground"), bGround ? FString(TEXT("ON")) : FString(TEXT("OFF")), false});
+    SettingsRows.Add({TEXT("INVERT ORBIT Y"), TEXT("invertY"), bInvertY ? FString(TEXT("ON")) : FString(TEXT("OFF")), false});
     SettingsRows.Add({TEXT("CLOSE"), TEXT("close"), FString(), false});
 
     const float RowHeight = 30.0f * Scale;

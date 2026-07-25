@@ -10,7 +10,31 @@ superseded configurations, is in
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+
+- **INVERT ORBIT Y** settings row: optionally flip the vertical orbit
+  direction of a right-mouse drag. Persisted to `Game.ini` under
+  `[IonCommand.Input]`, applied live.
+- Collector `-listen` flag to override `server.listenAddress` from the command
+  line, so launchers can move to a fallback port without editing the config.
+
+### Changed
+
+- Vertical orbit now follows the same convention as horizontal orbit by
+  default; the previous direction is available via **INVERT ORBIT Y**.
+
+### Fixed
+
+- **Installed builds could start with a dead collector.** Windows reserves TCP
+  port ranges for Hyper-V/WSL NAT; when 7810 fell inside one, the collector
+  exited instantly (`bind: WSAEACCES`) and the launcher started the client
+  anyway, with the only warning hidden in an invisible console. The launchers
+  now probe the port first, fall back to 17810/27810, detect an early collector
+  exit, stop a candidate that never becomes healthy before trying the next port,
+  point the client at the working port, and raise a visible message when the
+  collector really cannot start.
+- Replay honours the `-IonCollectorUrl=` override like the live stream does,
+  so **R**/**L** keep working when the collector runs on a fallback port.
 
 ## [0.9.0] — 2026-07-21
 
