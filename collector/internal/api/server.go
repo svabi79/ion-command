@@ -16,7 +16,7 @@ import (
 	"github.com/ion-command/ion-command/collector/internal/telemetry"
 )
 
-const BuildVersion = "0.1.0-bootstrap"
+const BuildVersion = "0.9.1"
 
 type Server struct {
 	config   config.Config

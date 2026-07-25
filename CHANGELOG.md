@@ -10,6 +10,14 @@ superseded configurations, is in
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.9.1] — 2026-07-25
+
+A maintenance release, driven by what actually broke for people who installed
+0.9.0. Thanks to [@die-Anna](https://github.com/die-Anna) for finding and fixing
+the startup failure.
+
 ### Added
 
 - **INVERT ORBIT Y** settings row: optionally flip the vertical orbit
@@ -35,6 +43,8 @@ superseded configurations, is in
   collector really cannot start.
 - Replay honours the `-IonCollectorUrl=` override like the live stream does,
   so **R**/**L** keep working when the collector runs on a fallback port.
+- The collector reported its version as `0.1.0-bootstrap` in the startup log
+  and on `/api/status`; it now reports the release version.
 
 ## [0.9.0] — 2026-07-21
 
@@ -115,5 +125,6 @@ First packaged and published release. Windows x64, pre-1.0.
   documented rather than assumed.
 - Maintainer callsign and home locator removed from tracked configuration.
 
-[Unreleased]: https://github.com/svabi79/ion-command/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/svabi79/ion-command/compare/v0.9.1...HEAD
+[0.9.1]: https://github.com/svabi79/ion-command/releases/tag/v0.9.1
 [0.9.0]: https://github.com/svabi79/ion-command/releases/tag/v0.9.0
