@@ -30,8 +30,9 @@ superseded configurations, is in
   exited instantly (`bind: WSAEACCES`) and the launcher started the client
   anyway, with the only warning hidden in an invisible console. The launchers
   now probe the port first, fall back to 17810/27810, detect an early collector
-  exit, point the client at the working port, and raise a visible message when
-  the collector really cannot start.
+  exit, stop a candidate that never becomes healthy before trying the next port,
+  point the client at the working port, and raise a visible message when the
+  collector really cannot start.
 - Replay honours the `-IonCollectorUrl=` override like the live stream does,
   so **R**/**L** keep working when the collector runs on a fallback port.
 

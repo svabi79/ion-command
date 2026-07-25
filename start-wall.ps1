@@ -82,6 +82,17 @@ if (-not $activePort) {
         if ($process.HasExited) {
             Write-Host "Collector exited immediately (code $($process.ExitCode)) - see collector\collector-stderr.log."
         }
+        else {
+            # Timed out while still alive. Moving on without stopping it would
+            # leave a second collector running on the next port - two processes
+            # on the same sources, log files and recording directory.
+            Write-Host "Collector on port $port did not become healthy in time - stopping it before trying the next port."
+            try { $process.Kill() } catch { }
+            if (-not $process.WaitForExit(10000)) {
+                Write-Host "Collector on port $port did not stop - not starting another one."
+                break
+            }
+        }
     }
 }
 Write-Host ("Collector: " + $(if ($activePort) { "running on port $activePort" } else { 'NOT REACHABLE' }))
