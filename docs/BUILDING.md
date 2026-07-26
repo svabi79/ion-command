@@ -86,7 +86,7 @@ Release package (Shipping, what ships in the installer):
 ## 4. Installer
 
 ```powershell
-# Shipping build archived to dist\release first:
+# Requires the Shipping package from step 3 (archived to dist\windows):
 powershell -ExecutionPolicy Bypass -File tools\installer\build-installer.ps1 -Version 1.0.0
 ```
 
