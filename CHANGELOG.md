@@ -12,6 +12,35 @@ superseded configurations, is in
 
 Nothing yet.
 
+## [0.9.2] — 2026-07-26
+
+**The installer published with 0.9.1 was defective and should not be used.** It
+contained the 0.9.0 client, so none of the 0.9.1 client-side changes were in it.
+The collector and launchers in it were correct. This release ships the payload
+0.9.1 was meant to ship, plus the fix below.
+
+### Fixed
+
+- **Settings and overlay rows stayed clickable while the HUD was hidden.**
+  `DrawHUD` returns early when the HUD is hidden or still fading in, and those
+  paths left the panel's hit rectangles in place while clicks were still routed
+  to them. A click near the middle of the screen with the HUD switched off could
+  silently change a setting — hide most aircraft, flip the orbit axis, or enter
+  text-entry mode — with nothing on screen to explain it, and the change
+  persisted. Hit rectangles are now dropped whenever the HUD does not draw, and
+  clicks fall through to the world instead. ([#2](https://github.com/svabi79/ion-command/issues/2))
+
+### Build
+
+- `tools\installer\build-installer.ps1` staged the client from `dist\release`,
+  while `tools\package.ps1` archives to `dist\windows`. The stale directory
+  passed the existence check, which is how 0.9.1 shipped the wrong client. The
+  paths now match, and the script prints both binary timestamps and refuses a
+  client older than the collector it is packaged with.
+- `tools\package.ps1` empties the archive directory first. BuildCookRun adds to
+  it rather than replacing it, so a 340 MB Development binary from an earlier
+  build was being carried into the installer.
+
 ## [0.9.1] — 2026-07-25
 
 A maintenance release, driven by what actually broke for people who installed
@@ -125,6 +154,7 @@ First packaged and published release. Windows x64, pre-1.0.
   documented rather than assumed.
 - Maintainer callsign and home locator removed from tracked configuration.
 
-[Unreleased]: https://github.com/svabi79/ion-command/compare/v0.9.1...HEAD
+[Unreleased]: https://github.com/svabi79/ion-command/compare/v0.9.2...HEAD
+[0.9.2]: https://github.com/svabi79/ion-command/releases/tag/v0.9.2
 [0.9.1]: https://github.com/svabi79/ion-command/releases/tag/v0.9.1
 [0.9.0]: https://github.com/svabi79/ion-command/releases/tag/v0.9.0

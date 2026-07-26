@@ -151,6 +151,11 @@ private:
     bool bOverlayMenuOpen = false;
     void ApplyMenuToggle(const FMenuRow& Row);
 
+    // False whenever DrawHUD bailed out before drawing anything. Clicks must
+    // not be answered by hit-rects the user cannot see.
+    bool bHudDrawn = false;
+    void ForgetHitRects();
+
     // Settings panel state.
     struct FSettingsRow
     {

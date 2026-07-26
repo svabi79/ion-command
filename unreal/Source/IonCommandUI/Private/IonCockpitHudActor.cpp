@@ -304,13 +304,24 @@ void AIonCockpitHudActor::RefreshAggregates(double NowSeconds)
     }
 }
 
+// Drop every hit-rect the HUD published, so a click cannot land on a row that
+// is no longer on screen. Both the overlay menu and the settings panel rebuild
+// their rows from scratch each time they draw.
+void AIonCockpitHudActor::ForgetHitRects()
+{
+    MenuRows.Reset();
+    SettingsRows.Reset();
+    EditingRow = -1;
+    bHudDrawn = false;
+}
+
 void AIonCockpitHudActor::DrawHUD()
 {
     Super::DrawHUD();
-    // Clear the menu hit-rects on every path that skips drawing the menu, so
-    // a click never lands on a stale invisible row and silently toggles a
-    // layer (audit finding #5).
-    if (!Canvas || Mode == EIonCockpitMode::Hidden) { MenuRows.Reset(); return; }
+    // Clear the hit-rects on every path that skips drawing, so a click never
+    // lands on a stale invisible row and silently toggles a layer or changes a
+    // setting (audit finding #5, issue #2).
+    if (!Canvas || Mode == EIonCockpitMode::Hidden) { ForgetHitRects(); return; }
     const double NowSeconds = FPlatformTime::Seconds();
     AdvanceRateBuckets(static_cast<int64>(NowSeconds));
     if (NowSeconds - LastAggregateSeconds > 0.5)
@@ -322,7 +333,8 @@ void AIonCockpitHudActor::DrawHUD()
     // Match the boot camera fade so the cockpit materialises with the scene.
     const double WorldSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : 10.0;
     const float Alpha = FMath::Clamp((static_cast<float>(WorldSeconds) - 2.5f) / 2.5f, 0.0f, 1.0f);
-    if (Alpha <= 0.0f) { MenuRows.Reset(); return; }
+    if (Alpha <= 0.0f) { ForgetHitRects(); return; }
+    bHudDrawn = true;
 
     DrawStatusBar(Scale, Alpha);
     if (Mode == EIonCockpitMode::Full)
@@ -761,6 +773,10 @@ void AIonCockpitHudActor::DrawOverlayMenu(float Scale, float Alpha)
 
 bool AIonCockpitHudActor::HandleClick(const FVector2D& ScreenPosition)
 {
+    // Nothing was drawn this frame, so nothing on screen can have been aimed
+    // at. Let the click through to the world instead of answering it with
+    // invisible rows.
+    if (!bHudDrawn) return false;
     if (bSettingsOpen) return HandleSettingsClick(ScreenPosition);
     if (!bOverlayMenuOpen) return false;
     for (const FMenuRow& Row : MenuRows)

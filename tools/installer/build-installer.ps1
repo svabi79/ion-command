@@ -3,8 +3,7 @@
 #   powershell -ExecutionPolicy Bypass -File tools\installer\build-installer.ps1 -Version 1.0.0
 #
 # Prerequisites:
-#   - Shipping client archived to dist\release  (tools\package.ps1 -Config Shipping,
-#     or RunUAT BuildCookRun ... -archivedirectory=dist\release)
+#   - Shipping client archived to dist\windows  (tools\package.ps1 -Config Shipping)
 #   - Collector built to collector\bin\ion-collector.exe (tools\build.ps1)
 #   - Inno Setup 6 (winget install JRSoftware.InnoSetup)
 param(
@@ -14,7 +13,9 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $repo    = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
-$client  = Join-Path $repo 'dist\release\Windows'
+# Must match the archive directory in tools\package.ps1. These drifted apart
+# once and the installer silently shipped the previous release's client.
+$client  = Join-Path $repo 'dist\windows'
 $stage   = Join-Path $repo 'dist\installer-stage'
 $outDir  = Join-Path $repo 'dist\installer'
 
@@ -23,6 +24,19 @@ if (-not (Test-Path (Join-Path $client 'IonCommand.exe'))) {
 }
 $collectorExe = Join-Path $repo 'collector\bin\ion-collector.exe'
 if (-not (Test-Path $collectorExe)) { throw "Collector missing at $collectorExe - run tools\build.ps1." }
+
+# Existence is not freshness. A leftover client tree from the previous release
+# passes a Test-Path check and ships silently, so state what is being packaged
+# and refuse a client that predates the collector of this same build.
+$clientBinary = Get-Item (Join-Path $client 'IonCommand\Binaries\Win64\IonCommand-Win64-Shipping.exe') -ErrorAction SilentlyContinue
+if (-not $clientBinary) { throw "Shipping binary missing under $client - run tools\package.ps1 -Config Shipping." }
+$collectorBinary = Get-Item $collectorExe
+Write-Host ("Client:    {0:yyyy-MM-dd HH:mm}  {1:N0} bytes" -f $clientBinary.LastWriteTime, $clientBinary.Length)
+Write-Host ("Collector: {0:yyyy-MM-dd HH:mm}  {1:N0} bytes" -f $collectorBinary.LastWriteTime, $collectorBinary.Length)
+if ($clientBinary.LastWriteTime -lt $collectorBinary.LastWriteTime.AddHours(-12)) {
+    throw ("Client binary is from {0:yyyy-MM-dd HH:mm} but the collector is from {1:yyyy-MM-dd HH:mm}. " -f $clientBinary.LastWriteTime, $collectorBinary.LastWriteTime) +
+          "That usually means the Shipping package was not rebuilt for this release. Run tools\package.ps1 -Config Shipping."
+}
 
 if (-not $ISCC) {
     $candidates = @(
