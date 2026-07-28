@@ -23,6 +23,14 @@ superseded configurations, is in
   and the own-station reticle keep a constant screen size through the whole
   range, so individual aircraft separate cleanly on an approach.
 
+### Fixed
+
+- **A transport blip no longer stalls route lookups for five minutes.** The
+  single route-lookup worker treated any fetch error like a rate limit; a DNS
+  hiccup or dropped connection now pauses it only 15 seconds, while a real
+  429/420 honours the server's `Retry-After` (five-minute fallback), as the
+  data-sources documentation promises. ([#5](https://github.com/svabi79/ion-command/issues/5))
+
 ## [0.9.2] — 2026-07-26
 
 **The installer published with 0.9.1 was defective and should not be used.** It

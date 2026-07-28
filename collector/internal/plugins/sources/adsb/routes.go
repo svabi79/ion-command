@@ -8,6 +8,8 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -25,7 +27,11 @@ const (
 	routeNegativeTTL = time.Hour
 	routeQueueCap    = 512
 	routeCacheCap    = 4096
-	routeBackoff     = 5 * time.Minute
+	// A rate limit pauses the single worker for this long when the response
+	// carries no Retry-After; a mere transport blip only for the short pause,
+	// so one DNS hiccup does not stall every lookup for minutes.
+	routeRateLimitPause = 5 * time.Minute
+	routeErrorPause     = 15 * time.Second
 )
 
 // routeGate spaces lookups across every source instance, mirroring the
@@ -62,6 +68,14 @@ type routeInfo struct {
 	fetchedAt  time.Time
 }
 
+type routeFetchResult struct {
+	body   []byte
+	status int
+	// retryAfter carries a server-requested pause (Retry-After header) on
+	// rate-limit responses; zero when absent.
+	retryAfter time.Duration
+}
+
 type routeResolver struct {
 	mu      sync.Mutex
 	cache   map[string]routeInfo
@@ -69,17 +83,22 @@ type routeResolver struct {
 	queue   chan string
 	client  *http.Client
 	logger  *slog.Logger
-	// fetch is swappable for tests; returns body and HTTP status.
-	fetch func(ctx context.Context, callsign string) ([]byte, int, error)
+	// Pauses are fields so tests do not have to wait real minutes.
+	rateLimitPause time.Duration
+	errorPause     time.Duration
+	// fetch is swappable for tests.
+	fetch func(ctx context.Context, callsign string) (routeFetchResult, error)
 }
 
 func newRouteResolver(logger *slog.Logger) *routeResolver {
 	resolver := &routeResolver{
-		cache:   make(map[string]routeInfo),
-		pending: make(map[string]struct{}),
-		queue:   make(chan string, routeQueueCap),
-		client:  &http.Client{Timeout: 30 * time.Second},
-		logger:  logger,
+		cache:          make(map[string]routeInfo),
+		pending:        make(map[string]struct{}),
+		queue:          make(chan string, routeQueueCap),
+		client:         &http.Client{Timeout: 30 * time.Second},
+		logger:         logger,
+		rateLimitPause: routeRateLimitPause,
+		errorPause:     routeErrorPause,
 	}
 	resolver.fetch = resolver.httpFetch
 	return resolver
@@ -122,31 +141,38 @@ func (r *routeResolver) run(ctx context.Context) {
 			if err := waitForRouteSlot(ctx); err != nil {
 				return
 			}
-			body, status, err := r.fetch(ctx, callsign)
+			result, err := r.fetch(ctx, callsign)
 			if ctx.Err() != nil {
 				return
 			}
-			if err != nil || status == http.StatusTooManyRequests || status == 420 {
-				// Transient: leave the callsign uncached so a later poll
-				// re-queues it, and give the service room to breathe.
-				if err != nil {
-					r.logger.Warn("route lookup failed", "callsign", callsign, "error", err)
-				} else {
-					r.logger.Warn("route lookup rate limited; pausing", "status", status)
-				}
-				r.mu.Lock()
-				delete(r.pending, callsign)
-				r.mu.Unlock()
-				select {
-				case <-ctx.Done():
+			if err != nil {
+				// Transport blip (DNS, dropped connection): leave the
+				// callsign uncached so a later poll re-queues it, and retry
+				// soon - a single failure must not stall every lookup for
+				// the full rate-limit pause.
+				r.logger.Warn("route lookup failed", "callsign", callsign, "error", err)
+				r.unpend(callsign)
+				if !r.pause(ctx, r.errorPause) {
 					return
-				case <-time.After(routeBackoff):
+				}
+				continue
+			}
+			if result.status == http.StatusTooManyRequests || result.status == 420 {
+				// Rate limited: honour the server's Retry-After when given.
+				pause := r.rateLimitPause
+				if result.retryAfter > 0 {
+					pause = result.retryAfter
+				}
+				r.logger.Warn("route lookup rate limited; pausing", "status", result.status, "pause", pause.String())
+				r.unpend(callsign)
+				if !r.pause(ctx, pause) {
+					return
 				}
 				continue
 			}
 			info := routeInfo{fetchedAt: time.Now()}
-			if status == http.StatusOK {
-				if parsed, parseErr := parseRoute(body); parseErr == nil {
+			if result.status == http.StatusOK {
+				if parsed, parseErr := parseRoute(result.body); parseErr == nil {
 					info = parsed
 					info.fetchedAt = time.Now()
 				}
@@ -164,6 +190,22 @@ func (r *routeResolver) run(ctx context.Context) {
 	}
 }
 
+func (r *routeResolver) unpend(callsign string) {
+	r.mu.Lock()
+	delete(r.pending, callsign)
+	r.mu.Unlock()
+}
+
+// pause waits the given duration; false means the context ended first.
+func (r *routeResolver) pause(ctx context.Context, duration time.Duration) bool {
+	select {
+	case <-ctx.Done():
+		return false
+	case <-time.After(duration):
+		return true
+	}
+}
+
 // evictOldestLocked keeps the cache bounded; called with the mutex held.
 func (r *routeResolver) evictOldestLocked() {
 	oldestKey := ""
@@ -178,19 +220,25 @@ func (r *routeResolver) evictOldestLocked() {
 	}
 }
 
-func (r *routeResolver) httpFetch(ctx context.Context, callsign string) ([]byte, int, error) {
+func (r *routeResolver) httpFetch(ctx context.Context, callsign string) (routeFetchResult, error) {
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, routeBase+url.PathEscape(callsign), nil)
 	if err != nil {
-		return nil, 0, err
+		return routeFetchResult{}, err
 	}
 	request.Header.Set("User-Agent", "ion-command-collector/0.1 (+https://github.com/svabi79/ion-command)")
 	response, err := r.client.Do(request)
 	if err != nil {
-		return nil, 0, err
+		return routeFetchResult{}, err
 	}
 	defer response.Body.Close()
-	body, err := io.ReadAll(io.LimitReader(response.Body, 1<<20))
-	return body, response.StatusCode, err
+	result := routeFetchResult{status: response.StatusCode}
+	if header := response.Header.Get("Retry-After"); header != "" {
+		if seconds, parseErr := strconv.Atoi(strings.TrimSpace(header)); parseErr == nil && seconds > 0 {
+			result.retryAfter = time.Duration(seconds) * time.Second
+		}
+	}
+	result.body, err = io.ReadAll(io.LimitReader(response.Body, 1<<20))
+	return result, err
 }
 
 // parseRoute extracts the two route endpoints from an adsbdb flightroute
