@@ -53,7 +53,7 @@ Press **O**. Every row is clickable and shows its state:
 | --- | --- |
 | **Left mouse** | select a path / click menu rows |
 | **Right mouse** (drag) | orbit the globe |
-| **Mouse wheel** | zoom |
+| **Mouse wheel** | zoom — steps scale with distance, down to ~255 km above the surface |
 | **Hover a marker** | tooltip with callsign/flight level/type/… |
 | **Tab** | cycle HUD: full → minimal → hidden |
 | **O** | overlay menu |

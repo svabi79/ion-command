@@ -46,7 +46,7 @@ void AIonCommandCameraPawn::BeginPlay()
     double CameraDistance = 0.0;
     if (FParse::Value(FCommandLine::Get(), TEXT("IonCameraDistance="), CameraDistance) && CameraDistance > 0.0)
     {
-        SpringArm->TargetArmLength = FMath::Clamp(static_cast<float>(CameraDistance), 1450.0f, 6500.0f);
+        SpringArm->TargetArmLength = FMath::Clamp(static_cast<float>(CameraDistance), 1040.0f, 6500.0f);
     }
     // -IonCameraLongitude=<deg> centers the given longitude for captures.
     // The camera looks along the pawn's negative forward axis (the spring arm
@@ -154,7 +154,17 @@ void AIonCommandCameraPawn::OrbitPitch(float Value)
     Rotation.Pitch = FMath::Clamp(Rotation.Pitch + Value * (bInvert ? -0.20f : 0.20f), -75.0f, 65.0f);
     SpringArm->SetRelativeRotation(Rotation);
 }
-void AIonCommandCameraPawn::Zoom(float Value) { if (!FMath::IsNearlyZero(Value)) SpringArm->TargetArmLength = FMath::Clamp(SpringArm->TargetArmLength - Value * 220.0f, 1450.0f, 6500.0f); }
+void AIonCommandCameraPawn::Zoom(float Value)
+{
+    if (FMath::IsNearlyZero(Value)) return;
+    // Distance-proportional steps: coarse with the whole globe framed, fine
+    // near the surface, so one wheel notch never overshoots the last few
+    // hundred kilometres. 1040 puts the camera ~255 km up - close enough to
+    // separate individual aircraft on an approach. At the default orbit the
+    // step matches the old fixed 220 units.
+    const float Step = FMath::Clamp((SpringArm->TargetArmLength - 1000.0f) * 0.09f, 4.0f, 500.0f);
+    SpringArm->TargetArmLength = FMath::Clamp(SpringArm->TargetArmLength - Value * Step, 1040.0f, 6500.0f);
+}
 void AIonCommandCameraPawn::TogglePause() { if (UGeoTimelineSubsystem* Timeline = GetGameInstance()->GetSubsystem<UGeoTimelineSubsystem>()) Timeline->SetPaused(!Timeline->IsPaused()); }
 void AIonCommandCameraPawn::ReturnToLive()
 {
