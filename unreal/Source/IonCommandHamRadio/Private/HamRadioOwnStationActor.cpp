@@ -92,7 +92,8 @@ void AHamRadioOwnStationActor::Tick(float DeltaSeconds)
         {
             const double CameraDistance = Player->PlayerCameraManager->GetCameraLocation().Length();
             // Same floor as the point layer so the reticle keeps shrinking
-            // through the new close-orbit zoom range.
+            // through the close-orbit zoom range (effective minimum 0.0167 at
+            // arm 1040; 0.012 is a safety margin below it, not a target).
             ZoomFactor = FMath::Clamp((CameraDistance - 1000.0) / 2400.0, 0.012, 1.15);
         }
     }

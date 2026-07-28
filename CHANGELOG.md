@@ -17,11 +17,11 @@ superseded configurations, is in
   words (`CDG Paris  >  TUN Tunis`), resolved per callsign via adsbdb.com —
   cached, globally rate-gated, and switchable off with `routeLookup: false`
   on the source.
-- **Close-range zoom.** The orbit camera now goes down to ~250 km above the
+- **Close-range zoom.** The orbit camera now goes down to ~255 km above the
   surface (previously ~2900 km), with wheel steps that scale with distance so
   the last stretch is fine-grained instead of one overshooting notch. Markers
-  keep a constant screen size through the whole range, so individual aircraft
-  separate cleanly on an approach.
+  and the own-station reticle keep a constant screen size through the whole
+  range, so individual aircraft separate cleanly on an approach.
 
 ## [0.9.2] — 2026-07-26
 
