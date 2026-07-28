@@ -53,8 +53,8 @@ Press **O**. Every row is clickable and shows its state:
 | --- | --- |
 | **Left mouse** | select a path / click menu rows |
 | **Right mouse** (drag) | orbit the globe |
-| **Mouse wheel** | zoom |
-| **Hover a marker** | tooltip with callsign/flight level/type/… |
+| **Mouse wheel** | zoom — steps scale with distance, down to ~250 km above the surface |
+| **Hover a marker** | tooltip with callsign/flight level/type/…; aircraft seen by an `aviation.adsb` circle also show their filed route (`CDG Paris  >  TUN Tunis`) once resolved |
 | **Tab** | cycle HUD: full → minimal → hidden |
 | **O** | overlay menu |
 | **V** | show/hide paths |
@@ -135,7 +135,7 @@ Additional fields by type:
 | `lightning.blitzortung` | — | WebSocket stream of strikes. Enabled by default; read the [terms](DATA-SOURCES.md#a-word-about-blitzortung). |
 | `earthquake.usgs` | `pollSeconds` | Recent quakes. |
 | `orbital.celestrak` | `pollSeconds` | TLEs, propagated with SGP4. |
-| `aviation.adsb` | `latitude`, `longitude`, `radiusNm`, `pollSeconds` | Regional circle around a point (max 250 nm). Add one entry per area you care about. |
+| `aviation.adsb` | `latitude`, `longitude`, `radiusNm`, `pollSeconds`, `routeLookup` | Regional circle around a point (max 250 nm). Add one entry per area you care about. `routeLookup: false` turns off the callsign → origin/destination enrichment (adsbdb.com); it is on by default. |
 | `aviation.opensky` | `pollSeconds`, `login` (see note) | One global snapshot per request. Anonymous access is credit-limited; the shipped default is 1800 s. |
 | `hamradio.rbn` | `login` | Reverse Beacon Network telnet; **requires a real callsign**. Disabled by default. |
 | `wsjtx.udp` | `broker` (listen address) | Local WSJT-X UDP feed. |
