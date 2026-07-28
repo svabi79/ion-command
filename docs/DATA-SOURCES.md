@@ -88,8 +88,9 @@ you commercial rights to Blitzortung's data.
   regions can never burst the aggregator.
 - Route lookups (adsbdb.com) run on **one worker with a global 2-second gate**,
   every answer — including "unknown callsign" — is **cached for hours**, and a
-  429 pauses the worker for five minutes. A callsign is asked about at most
-  once per TTL, however many aircraft are in view.
+  429 pauses the worker honouring `Retry-After` (five minutes when absent);
+  transient transport errors only pause it briefly. A callsign is asked about
+  at most once per TTL, however many aircraft are in view.
 - HTTP **429** and adsb.lol's **420 "Enhance Your Calm"** trigger exponential
   backoff honouring `Retry-After`.
 - CelesTrak failures back off from 5 minutes to 2 hours and **stop entirely**
