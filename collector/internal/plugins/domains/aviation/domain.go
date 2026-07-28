@@ -31,6 +31,11 @@ type rawAircraft struct {
 	Track         float64 `json:"track"`
 	OnGround      bool    `json:"onGround"`
 	ValidSeconds  int     `json:"validSeconds"`
+	// Filed route, when the source resolved one for the callsign.
+	RouteOriginCode string `json:"routeOriginCode"`
+	RouteOriginCity string `json:"routeOriginCity"`
+	RouteDestCode   string `json:"routeDestCode"`
+	RouteDestCity   string `json:"routeDestCity"`
 }
 
 // emergencySquawks flag hijack (7500), radio failure (7600), and general
@@ -130,6 +135,13 @@ func (d *Domain) Normalize(_ context.Context, record plugins.RawRecord) ([]event
 	}
 	if len(details) > 0 {
 		event.Properties["display.secondary"] = strings.Join(details, "  //  ")
+	}
+	// Filed route as its own tooltip line, human readable: "CDG Paris > TUN
+	// Tunis". Codes alone still beat nothing when a city is missing.
+	if raw.RouteOriginCode != "" && raw.RouteDestCode != "" {
+		origin := strings.TrimSpace(raw.RouteOriginCode + " " + raw.RouteOriginCity)
+		destination := strings.TrimSpace(raw.RouteDestCode + " " + raw.RouteDestCity)
+		event.Properties["display.tertiary"] = origin + "  >  " + destination
 	}
 	measured := true
 	event.Quality.Measured = &measured

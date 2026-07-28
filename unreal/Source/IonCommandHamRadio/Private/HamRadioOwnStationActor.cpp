@@ -91,7 +91,9 @@ void AHamRadioOwnStationActor::Tick(float DeltaSeconds)
         if (Player->PlayerCameraManager)
         {
             const double CameraDistance = Player->PlayerCameraManager->GetCameraLocation().Length();
-            ZoomFactor = FMath::Clamp((CameraDistance - 1000.0) / 2400.0, 0.22, 1.15);
+            // Same floor as the point layer so the reticle keeps shrinking
+            // through the new close-orbit zoom range.
+            ZoomFactor = FMath::Clamp((CameraDistance - 1000.0) / 2400.0, 0.012, 1.15);
         }
     }
     const double Pulse = 0.6 + 0.4 * (0.5 + 0.5 * FMath::Sin(PulsePhase * 2.4));

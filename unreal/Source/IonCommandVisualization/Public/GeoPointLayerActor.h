@@ -50,6 +50,7 @@ struct FRenderedGeoPoint
     FString Title;
     FString Primary;
     FString Secondary;
+    FString Tertiary;
     // Sticky emergency state: once an aircraft squawks 7500/7600/7700 the red
     // tint, enlarged scale, and alarm title survive later non-emergency
     // sightings from another source until the marker expires.

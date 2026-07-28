@@ -1076,6 +1076,7 @@ void AIonCockpitHudActor::DrawHoverTooltip(float Scale, float Alpha)
                     HoverTitle = Point->Title;
                     HoverPrimary = Point->Primary;
                     HoverSecondary = Point->Secondary;
+                    HoverTertiary = Point->Tertiary;
                     HoverDomain = Point->Domain.ToUpper();
                     LastHoverPickX = MouseX;
                     LastHoverPickY = MouseY;
@@ -1091,6 +1092,7 @@ void AIonCockpitHudActor::DrawHoverTooltip(float Scale, float Alpha)
     if (!HoverTitle.IsEmpty()) Lines.Add(HoverTitle);
     if (!HoverPrimary.IsEmpty()) Lines.Add(HoverPrimary);
     if (!HoverSecondary.IsEmpty()) Lines.Add(HoverSecondary);
+    if (!HoverTertiary.IsEmpty()) Lines.Add(HoverTertiary);
     if (!HoverDomain.IsEmpty()) Lines.Add(HoverDomain);
     if (Lines.IsEmpty()) return;
     const UFont* Font = GEngine->GetMediumFont();

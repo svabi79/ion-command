@@ -25,7 +25,7 @@ messages itself — that is the domain's job.
 | `lightning.blitzortung` | Blitzortung strike stream | WebSocket | **on** | no | non-commercial; participant-oriented; not a warning system |
 | `earthquake.usgs` | USGS earthquake feed | HTTP poll | **on** | no | public domain |
 | `orbital.celestrak` | CelesTrak TLEs (SGP4 locally) | HTTP poll | **on** | no | usage policy: stop on non-200 |
-| `aviation.adsb` | adsb.lol point query | HTTP poll | **on** (one example region) | no | ODbL 1.0 |
+| `aviation.adsb` | adsb.lol point query; callsign→route enrichment via adsbdb.com (`routeLookup`) | HTTP poll | **on** (one example region) | no | ODbL 1.0 |
 | `aviation.opensky` | OpenSky global state snapshot | HTTP poll | **on** | optional | non-profit research/education only |
 | `hamradio.rbn` | Reverse Beacon Network | telnet | off | **yes** (your callsign) | no published licence |
 | `mock.*` | deterministic synthetic traffic | in-process | off | no | development and tests only |
