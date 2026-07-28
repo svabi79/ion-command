@@ -111,6 +111,9 @@ type Source struct {
 	interval time.Duration
 	client   *http.Client
 	logger   *slog.Logger
+	// routes resolves callsigns to origin/destination airports; nil when the
+	// enrichment is disabled (routeLookup: false).
+	routes *routeResolver
 	// fetch is swappable for tests.
 	fetch func(ctx context.Context) ([]byte, error)
 }
@@ -147,6 +150,9 @@ func New(sourceConfig config.Source, logger *slog.Logger) (*Source, error) {
 	}
 	if sourceConfig.RadiusNm > 0 {
 		source.radius = sourceConfig.RadiusNm
+	}
+	if sourceConfig.RouteLookup == nil || *sourceConfig.RouteLookup {
+		source.routes = newRouteResolver(logger)
 	}
 	source.fetch = source.httpFetch
 	return source, nil
@@ -212,9 +218,10 @@ func (s *Source) sample(ctx context.Context) ([]plugins.RawRecord, error) {
 				onGround = true
 			}
 		}
-		payload, err := json.Marshal(map[string]any{
+		callsign := strings.TrimSpace(aircraft.Flight)
+		fields := map[string]any{
 			"hex":          aircraft.Hex,
-			"callsign":     strings.TrimSpace(aircraft.Flight),
+			"callsign":     callsign,
 			"acType":       aircraft.Type,
 			"registration": aircraft.Registration,
 			"kind":         kindForReadsbCategory(aircraft.Category),
@@ -226,7 +233,16 @@ func (s *Source) sample(ctx context.Context) ([]plugins.RawRecord, error) {
 			"gsKt":         aircraft.GsKt,
 			"track":        aircraft.Track,
 			"onGround":     onGround,
-		})
+		}
+		if s.routes != nil && callsign != "" {
+			if route, known := s.routes.routeFor(callsign); known {
+				fields["routeOriginCode"] = route.originCode
+				fields["routeOriginCity"] = route.originCity
+				fields["routeDestCode"] = route.destCode
+				fields["routeDestCity"] = route.destCity
+			}
+		}
+		payload, err := json.Marshal(fields)
 		if err != nil {
 			continue
 		}
@@ -243,6 +259,9 @@ func (s *Source) sample(ctx context.Context) ([]plugins.RawRecord, error) {
 }
 
 func (s *Source) Start(ctx context.Context, output chan<- plugins.RawRecord) error {
+	if s.routes != nil {
+		go s.routes.run(ctx)
+	}
 	// Plain sleep instead of a ticker: when the aggregator answers slower
 	// than the interval, an already-fired ticker would trigger the next
 	// request back-to-back and feed the very rate limit that slowed us down.

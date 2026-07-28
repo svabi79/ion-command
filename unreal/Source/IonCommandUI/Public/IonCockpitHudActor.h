@@ -183,6 +183,7 @@ private:
     FString HoverTitle;
     FString HoverPrimary;
     FString HoverSecondary;
+    FString HoverTertiary;
     FString HoverDomain;
     double LastHoverPickSeconds = 0.0;
     // Screen position the cached pick was taken at, so the tooltip anchors to

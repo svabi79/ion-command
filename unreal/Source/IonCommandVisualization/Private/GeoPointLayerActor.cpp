@@ -279,6 +279,8 @@ void AGeoPointLayerActor::Submit(const FGeoMessageEnvelope& Message)
         if (!NewPrimary.IsEmpty()) Point.Primary = NewPrimary;
         const FString NewSecondary = Message.Properties.FindRef(TEXT("display.secondary"));
         if (!NewSecondary.IsEmpty()) Point.Secondary = NewSecondary;
+        const FString NewTertiary = Message.Properties.FindRef(TEXT("display.tertiary"));
+        if (!NewTertiary.IsEmpty()) Point.Tertiary = NewTertiary;
         return;
     }
     if (ActivePoints.Num() >= MaxVisiblePoints)
@@ -341,6 +343,7 @@ void AGeoPointLayerActor::Submit(const FGeoMessageEnvelope& Message)
     if (Point.Title.IsEmpty()) Point.Title = Message.SemanticType;
     Point.Primary = Message.Properties.FindRef(TEXT("display.primary"));
     Point.Secondary = Message.Properties.FindRef(TEXT("display.secondary"));
+    Point.Tertiary = Message.Properties.FindRef(TEXT("display.tertiary"));
     EntityToPoint.Add(EntityKey, ActivePoints.Num() - 1);
     if (!bNeedsRebuild && IsDomainVisible(Point.Domain))
     {
@@ -478,8 +481,10 @@ void AGeoPointLayerActor::Tick(float DeltaSeconds)
     if (!Player || !Player->PlayerCameraManager) return;
     const double CameraDistance = Player->PlayerCameraManager->GetCameraLocation().Length();
     // Screen size tracks the distance to the near surface; 2400 is the span
-    // from closest approach to the default orbit, where markers are 1:1.
-    const double Target = FMath::Clamp((CameraDistance - GlobeRadius) / 2400.0, 0.22, 1.15);
+    // from closest approach to the default orbit, where markers are 1:1. The
+    // floor keeps shrinking down to the close-orbit range so markers stop
+    // ballooning when the camera drops to a few hundred kilometres.
+    const double Target = FMath::Clamp((CameraDistance - GlobeRadius) / 2400.0, 0.012, 1.15);
     if (FMath::Abs(Target - CurrentZoomFactor) / CurrentZoomFactor < 0.08) return;
     CurrentZoomFactor = Target;
     RebuildInstances();

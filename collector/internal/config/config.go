@@ -57,6 +57,9 @@ type Source struct {
 	Latitude  float64 `json:"latitude,omitempty"`
 	Longitude float64 `json:"longitude,omitempty"`
 	RadiusNm  float64 `json:"radiusNm,omitempty"`
+	// RouteLookup toggles the callsign → origin/destination enrichment on
+	// aviation.adsb sources (adsbdb.com). Unset means enabled.
+	RouteLookup *bool `json:"routeLookup,omitempty"`
 }
 
 type Config struct {
