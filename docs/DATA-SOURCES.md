@@ -16,6 +16,8 @@ non-commercial only.
 | --- | --- | --- |
 | **PSKReporter** | Spot data by PSKReporter (Philip Gladstone, N1DQ). The MQTT feed is operated by Tom M0LTE on donated hosting. No formal terms published. | [pskreporter.info](https://pskreporter.info) |
 | **Reverse Beacon Network** | Data courtesy of the Reverse Beacon Network and its skimmer operators. Requires **your own** amateur callsign as login. No formal data licence published; contact RBN before non-hobby use. | [reversebeacon.net](https://reversebeacon.net) |
+| **DX cluster network** | Spot data from the classic DX cluster network - DXSpider, AR-Cluster and CC Cluster software running on independently operated, mostly volunteer-run nodes. There is no single publisher and no formal data licence published by any of the node software projects; most nodes' banners state they are for use by **licensed amateur radio operators only**, and require **your own** callsign as login. Configure your own node (there is no single canonical address, unlike RBN). | [dxcluster.org](https://www.dxcluster.org) |
+| **WSPRnet / wspr.live** | Weak-signal beacon reception reports originally from WSPRnet.org, republished free of charge as a ClickHouse mirror by wspr.live. Read-only, no credentials needed. Usage must **remain free of charge for everyone** and **commercial or profit-oriented use is not allowed**. Published with **no guarantee of correctness, availability or stability**: "raw data as reported, saved and published by wsprnet.org" and "may contain duplicates, false spots and other errors," maintained by volunteers. | [wspr.live](https://wspr.live) |
 | **NOAA / NWS SWPC** | Space-weather data from the NOAA Space Weather Prediction Center (public domain, US Government work). NOAA does not endorse this project. ION COMMAND's HF-conditions verdict is a **derived heuristic, not an official NOAA forecast**. | [swpc.noaa.gov](https://www.swpc.noaa.gov) |
 | **U.S. Geological Survey** | Earthquake data from the U.S. Geological Survey (public domain). | [earthquake.usgs.gov](https://earthquake.usgs.gov/earthquakes/feed/) |
 | **CelesTrak** | Orbital elements courtesy of CelesTrak (Dr. T.S. Kelso). Users must observe the CelesTrak usage policy; the collector backs off and stops on repeated non-200 responses. | [celestrak.org](https://celestrak.org/usage-policy.php) |
@@ -49,6 +51,8 @@ What each source actually does, in the order it appears in `live.json`:
 | `aviation.opensky` | opensky-network.org `/api/states/all` | 1800 s anonymous | `aviation.aircraft` | yes |
 | `hamradio.rbn` | telnet `telnet.reversebeacon.net` | streaming | `hamradio` spots | **no** (needs your callsign) |
 | `wsjtx.udp` | local UDP listener | streaming | `hamradio` | no |
+| `hamradio.dxcluster` | telnet, node address configured per install (no default; example `dxc.nc7j.com:7373`) | streaming | `hamradio` spots | **no** (needs your callsign and a chosen node) |
+| `hamradio.wspr` | `db1.wspr.live` HTTP/ClickHouse `?query=` interface | 300 s (floor 120 s) | `hamradio` spots | yes |
 
 ## A word about Blitzortung
 
@@ -98,8 +102,16 @@ you commercial rights to Blitzortung's data.
 - OpenSky is polled every 30 minutes anonymously to stay inside the credit
   budget; the last snapshot is retained and replayed to new clients instead of
   re-fetching.
-- Sources that need an identity (RBN) ship **disabled** rather than with a
-  placeholder callsign.
+- Sources that need an identity (RBN, the DX cluster) ship **disabled** rather
+  than with a placeholder callsign.
+- WSPR queries wspr.live for only the columns actually needed, filtered by
+  time, at a default of every 5 minutes (floor 2 minutes) — well under its
+  published 20-requests/minute limit and its own guidance to filter by time.
+  A response is capped at 30,000 rows as a safety valve; a fetch failure
+  backs off from 2 to 30 minutes and the source **stops entirely** after 8
+  consecutive failures.
+- The DX cluster source reconnects on a flat 10-second pause after any
+  disconnect, the same discipline as RBN and the Blitzortung stream.
 
 Please keep it that way if you change the configuration. These services are
 free because people pay for them with their own time and hardware.
@@ -109,6 +121,18 @@ free because people pay for them with their own time and hardware.
 - **OpenSky authentication**: the `login`/`password` fields use HTTP basic
   auth, which OpenSky has retired in favour of OAuth2 client credentials.
   Anonymous access still works; authenticated access currently does not.
-- PSKReporter, prop.kc2g.com and the RBN publish no formal data licence. Usage
-  here is hobby-scale and attributed; contact them before any larger or
-  commercial use.
+- PSKReporter, prop.kc2g.com, the RBN and the DX cluster network publish no
+  formal data licence. Usage here is hobby-scale and attributed; contact them
+  before any larger or commercial use.
+- **WSPR mode disambiguation**: wspr.live's `code` column distinguishes
+  WSPR-2/WSPR-15/FST4W variants, but no verified, authoritative mapping for
+  its integer values could be found (secondary sources disagreed with each
+  other and with the values actually observed live). Rather than risk
+  mislabelling a spot, every reception report from this source is reported
+  under the umbrella mode `"WSPR"`, which is accurate for the large majority
+  (over 95% of sampled traffic) and a defensible approximation for the rest.
+- **DX cluster mode and signal report**: unlike RBN's fixed skimmer format, a
+  human-typed DX cluster comment is free text. Mode and signal report are
+  recovered best-effort (a leading recognised mode token; a space-delimited
+  "N dB") and are frequently absent - this is expected, not a bug, and is
+  never backfilled with an invented value.

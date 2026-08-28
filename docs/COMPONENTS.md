@@ -28,6 +28,8 @@ messages itself — that is the domain's job.
 | `aviation.adsb` | adsb.lol point query; callsign→route enrichment via adsbdb.com (`routeLookup`) | HTTP poll | **on** (one example region) | no | ODbL 1.0 |
 | `aviation.opensky` | OpenSky global state snapshot | HTTP poll | **on** | optional | non-profit research/education only |
 | `hamradio.rbn` | Reverse Beacon Network | telnet | off | **yes** (your callsign) | no published licence |
+| `hamradio.dxcluster` | DX cluster spots (DXSpider / AR-Cluster / CC Cluster) | telnet | off | **yes** (your callsign) | no published licence; no single canonical node - address is configured |
+| `hamradio.wspr` | WSPR reception reports via wspr.live | HTTP poll | **on** | no | non-commercial use only; 20 req/min |
 | `mock.*` | deterministic synthetic traffic | in-process | off | no | development and tests only |
 
 Terms and attribution in full: [DATA-SOURCES.md](DATA-SOURCES.md).
@@ -40,7 +42,7 @@ envelope. Domains own the vocabulary; nothing above them does.
 
 | Domain | Emits (`semanticType`) | Fed by |
 | --- | --- | --- |
-| `hamradio` | `radio.reception`, `radio.station` | `pskreporter.mqtt`, `hamradio.rbn`, `wsjtx.udp` |
+| `hamradio` | `radio.reception`, `radio.station` | `pskreporter.mqtt`, `hamradio.rbn`, `wsjtx.udp`, `hamradio.dxcluster`, `hamradio.wspr` |
 | `aviation` | `aviation.aircraft` | `aviation.adsb`, `aviation.opensky` |
 | `weather` | `weather.lightning` | `lightning.blitzortung` |
 | `spaceweather` | `spaceweather.state` | `spaceweather.swpc` |
