@@ -185,6 +185,56 @@ def _icon_earthquake(draw, pt, size):
     draw.line(trace, fill=255, width=stroke, joint="curve")
 
 
+def _icon_vessel(draw, pt, size):
+    # Top view, bow up: hull outline with a deckhouse block, so a ship reads
+    # as a ship at marker size instead of as a generic blob.
+    draw.polygon(
+        [
+            pt(0.50, 0.06), pt(0.68, 0.30), pt(0.72, 0.62),
+            pt(0.66, 0.92), pt(0.34, 0.92), pt(0.28, 0.62),
+            pt(0.32, 0.30),
+        ],
+        fill=255,
+    )
+    draw.rectangle([pt(0.41, 0.52), pt(0.59, 0.76)], fill=0)
+
+
+def _icon_wildfire(draw, pt, size):
+    # Flame: a broad base tapering to a tip, with an inner void so the
+    # silhouette stays legible against a bright surface.
+    draw.polygon(
+        [
+            pt(0.50, 0.05), pt(0.66, 0.30), pt(0.62, 0.42),
+            pt(0.74, 0.38), pt(0.80, 0.62), pt(0.68, 0.88),
+            pt(0.32, 0.88), pt(0.20, 0.62), pt(0.26, 0.38),
+            pt(0.38, 0.42), pt(0.34, 0.30),
+        ],
+        fill=255,
+    )
+    draw.polygon([pt(0.50, 0.44), pt(0.60, 0.66), pt(0.50, 0.82), pt(0.40, 0.66)], fill=0)
+
+
+def _icon_station(draw, pt, size):
+    # Mast with guy lines and radiating arcs: a fixed reporting station.
+    stroke = int(size * 0.05)
+    draw.line([pt(0.50, 0.30), pt(0.50, 0.92)], fill=255, width=stroke)
+    draw.line([pt(0.28, 0.92), pt(0.50, 0.44)], fill=255, width=int(size * 0.035))
+    draw.line([pt(0.72, 0.92), pt(0.50, 0.44)], fill=255, width=int(size * 0.035))
+    for radius in (0.16, 0.28):
+        draw.arc([pt(0.50 - radius, 0.24 - radius), pt(0.50 + radius, 0.24 + radius)],
+                 200, 340, fill=255, width=stroke)
+    draw.ellipse([pt(0.455, 0.20), pt(0.545, 0.29)], fill=255)
+
+
+def _icon_vehicle(draw, pt, size):
+    # Top view: body with a cabin band and wheels, for a moving APRS station.
+    draw.rounded_rectangle([pt(0.30, 0.12), pt(0.70, 0.88)], radius=int(size * 0.10), fill=255)
+    draw.rectangle([pt(0.36, 0.34), pt(0.64, 0.50)], fill=0)
+    for y in (0.24, 0.72):
+        draw.rectangle([pt(0.20, y), pt(0.30, y + 0.14)], fill=255)
+        draw.rectangle([pt(0.70, y), pt(0.80, y + 0.14)], fill=255)
+
+
 def _icon_spare(draw, pt, size):
     draw.polygon([pt(0.5, 0.14), pt(0.80, 0.5), pt(0.5, 0.86), pt(0.20, 0.5)], fill=255)
 
@@ -235,12 +285,13 @@ def generate_marker_icons() -> None:
     """Marker pictogram atlas: 4x4 grid of white-on-black silhouettes. Tile
     order is the client's icon index contract (GeoPointLayerActor):
     0 dot, 1 signal, 2 aircraft, 3 satellite, 4 lightning, 5 sounding,
-    6 earthquake, 7 spare, 8 helicopter, 9 balloon, 10 drone, 11 glider;
-    12-15 reserved."""
+    6 earthquake, 7 spare, 8 helicopter, 9 balloon, 10 drone, 11 glider,
+    12 vessel, 13 wildfire, 14 station, 15 vehicle."""
     tiles = [
         _icon_dot, _icon_signal, _icon_aircraft, _icon_satellite,
         _icon_lightning, _icon_sounding, _icon_earthquake, _icon_spare,
         _icon_helicopter, _icon_balloon, _icon_drone, _icon_glider,
+        _icon_vessel, _icon_wildfire, _icon_station, _icon_vehicle,
     ]
     atlas = Image.new("RGB", (ICON_TILE * ICON_COLS, ICON_TILE * ICON_ROWS), (0, 0, 0))
     for index, draw_fn in enumerate(tiles):

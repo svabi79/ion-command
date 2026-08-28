@@ -44,8 +44,36 @@ namespace
             {TEXT("balloon"),    {9.0f, FLinearColor(1.00f, 0.60f, 0.25f)}},
             {TEXT("drone"),      {10.0f, FLinearColor(1.00f, 0.45f, 0.20f)}},
             {TEXT("glider"),     {11.0f, FLinearColor(1.00f, 0.85f, 0.35f)}},
+            {TEXT("vessel"),     {12.0f, FLinearColor(0.20f, 1.00f, 0.80f)}},
+            {TEXT("wildfire"),   {13.0f, FLinearColor(1.00f, 0.42f, 0.08f)}},
+            {TEXT("station"),    {14.0f, FLinearColor(0.55f, 0.90f, 1.00f)}},
+            {TEXT("vehicle"),    {15.0f, FLinearColor(0.95f, 0.80f, 0.45f)}},
         };
         return Styles;
+    }
+
+    // Sub-typed glyphs fall back to their family: a domain may declare a
+    // precise kind ("vessel-tanker", "vessel-tug") without every variant
+    // needing its own atlas tile. Purely a string rule on the generic
+    // pictogram vocabulary - the renderer still learns nothing about what a
+    // given family means.
+    const FMarkerIconStyle* FindIconStyle(const FString& IconName)
+    {
+        if (IconName.IsEmpty())
+        {
+            return nullptr;
+        }
+        const TMap<FString, FMarkerIconStyle>& Styles = IconStyles();
+        if (const FMarkerIconStyle* Exact = Styles.Find(IconName))
+        {
+            return Exact;
+        }
+        int32 Separator = INDEX_NONE;
+        if (IconName.FindChar(TEXT('-'), Separator))
+        {
+            return Styles.Find(IconName.Left(Separator));
+        }
+        return nullptr;
     }
 
     // Replay compatibility only: recordings made before domains declared
@@ -254,7 +282,7 @@ void AGeoPointLayerActor::Submit(const FGeoMessageEnvelope& Message)
         const FString FreshTint = Message.Properties.FindRef(TEXT("visual.tint"));
         FString FreshIcon = Message.Properties.FindRef(TEXT("visual.icon"));
         if (FreshIcon.IsEmpty()) FreshIcon = DomainIconFallback().FindRef(Message.Domain);
-        if (const FMarkerIconStyle* FreshStyle = IconStyles().Find(FreshIcon))
+        if (const FMarkerIconStyle* FreshStyle = FindIconStyle(FreshIcon))
         {
             if (!FMath::IsNearlyEqual(Point.IconIndex, FreshStyle->AtlasIndex))
             {
@@ -329,7 +357,7 @@ void AGeoPointLayerActor::Submit(const FGeoMessageEnvelope& Message)
     // domain name, else the plain dot in the classic entity/observation hue.
     FString IconName = Message.Properties.FindRef(TEXT("visual.icon"));
     if (IconName.IsEmpty()) IconName = DomainIconFallback().FindRef(Message.Domain);
-    if (const FMarkerIconStyle* Style = IconStyles().Find(IconName))
+    if (const FMarkerIconStyle* Style = FindIconStyle(IconName))
     {
         Point.IconIndex = Style->AtlasIndex;
         Point.Color = Style->Color;

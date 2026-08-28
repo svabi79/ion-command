@@ -25,7 +25,7 @@ Priorities for the platform as a whole are in
 | Layer | Feed | Geometry | Credentials | Status |
 | --- | --- | --- | --- | --- |
 | **APRS-IS** — vehicles, balloons, digipeaters, weather stations | APRS-IS TCP stream | Point + Track | Callsign; read-only login works with passcode `-1` | `in progress` |
-| **AIS ships** — global maritime traffic | `aisstream.io` WebSocket | Point + Track | Free API key required | `shipped` — disabled by default (no key in this environment; live connection unverified, see [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md)) |
+| **AIS ships** — global maritime traffic | `aisstream.io` WebSocket | Point + Track | Free API key required | `shipped` — live-verified 2026-08-28 against European waters; disabled by default (needs an operator key) |
 | **Wildfires** — active fire detections | NASA FIRMS | Point | Free MAP_KEY may be required | `in progress` |
 | **DX cluster + WSPR** — announced DX and weak-signal propagation reports | DX cluster telnet, `wspr.live` | GreatCircle, Point | Callsign for the cluster login | `in progress` |
 
