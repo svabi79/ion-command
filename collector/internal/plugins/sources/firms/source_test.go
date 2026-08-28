@@ -3,7 +3,10 @@ package firms
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
@@ -360,6 +363,91 @@ func TestRequestURLWithMapKeyUsesAreaAPIAndRedacts(t *testing.T) {
 	}
 	if strings.Contains(source.redact(got), "SECRETKEY123") {
 		t.Fatal("the MAP_KEY must never appear in redacted (loggable) text")
+	}
+}
+
+func TestHandleResponseParsesRetryAfterOn429(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Retry-After", "120")
+		w.WriteHeader(http.StatusTooManyRequests)
+	}))
+	defer server.Close()
+
+	response, err := http.Get(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+
+	_, err = handleResponse(response, "redacted-url")
+	var limited errRateLimited
+	if !errors.As(err, &limited) {
+		t.Fatalf("expected errRateLimited, got %v", err)
+	}
+	if limited.retryAfter != 120*time.Second {
+		t.Fatalf("expected Retry-After to parse as 120s, got %v", limited.retryAfter)
+	}
+}
+
+func TestHandleResponseDefaultsRetryAfterWhenHeaderMissing(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusTooManyRequests)
+	}))
+	defer server.Close()
+
+	response, err := http.Get(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+
+	_, err = handleResponse(response, "redacted-url")
+	var limited errRateLimited
+	if !errors.As(err, &limited) {
+		t.Fatalf("expected errRateLimited, got %v", err)
+	}
+	if limited.retryAfter != 5*time.Minute {
+		t.Fatalf("expected the 5-minute default when Retry-After is absent, got %v", limited.retryAfter)
+	}
+}
+
+func TestHandleResponseReturnsBodyOn200(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("latitude,longitude\n1,2\n"))
+	}))
+	defer server.Close()
+
+	response, err := http.Get(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+
+	body, err := handleResponse(response, "redacted-url")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(body) != "latitude,longitude\n1,2\n" {
+		t.Fatalf("unexpected body: %q", body)
+	}
+}
+
+func TestHandleResponseErrorNamesRedactedURLNotRealOne(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	response, err := http.Get(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+
+	_, err = handleResponse(response, "https://firms.modaps.eosdis.nasa.gov/api/area/csv/REDACTED/...")
+	if err == nil || !strings.Contains(err.Error(), "REDACTED") || strings.Contains(err.Error(), server.URL) {
+		t.Fatalf("error must report the caller-supplied (redacted) URL, not leak the real one: %v", err)
 	}
 }
 

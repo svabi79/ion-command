@@ -390,6 +390,15 @@ func (s *Source) httpFetch(ctx context.Context) ([]byte, error) {
 		return nil, fmt.Errorf("%s: %w", s.redact(requestURL), err)
 	}
 	defer response.Body.Close()
+	return handleResponse(response, s.redact(requestURL))
+}
+
+// handleResponse decides what httpFetch returns for a given HTTP response:
+// the body on 200, a typed rate-limit error (honouring Retry-After) on 429,
+// or a plain error naming the (redacted) URL for anything else. Split out
+// from httpFetch so this decision can be unit-tested against hand-built
+// responses without a real round trip or a live MAP_KEY.
+func handleResponse(response *http.Response, redactedURL string) ([]byte, error) {
 	if response.StatusCode == http.StatusTooManyRequests {
 		retryAfter := 5 * time.Minute
 		if header := response.Header.Get("Retry-After"); header != "" {
@@ -400,7 +409,7 @@ func (s *Source) httpFetch(ctx context.Context) ([]byte, error) {
 		return nil, errRateLimited{retryAfter: retryAfter}
 	}
 	if response.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("%s returned %s", s.redact(requestURL), response.Status)
+		return nil, fmt.Errorf("%s returned %s", redactedURL, response.Status)
 	}
 	return io.ReadAll(io.LimitReader(response.Body, maxBodyBytes))
 }
