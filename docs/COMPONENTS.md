@@ -32,6 +32,7 @@ messages itself — that is the domain's job.
 | `hamradio.dxcluster` | DX cluster spots (DXSpider / AR-Cluster / CC Cluster) | telnet | off | **yes** (your callsign) | no published licence; no single canonical node - address is configured |
 | `hamradio.wspr` | WSPR reception reports via wspr.live | HTTP poll | **on** | no | non-commercial use only; 20 req/min |
 | `ais.aisstream` | aisstream.io global AIS vessel stream | WebSocket | **off** (needs a free key) | **yes** (free API key) | no explicit commercial/redistribution restriction found; hobby-scale posture applied anyway |
+| `aprs.is` | APRS-IS packet stream | TCP | off | **yes** (callsign; passcode fixed at read-only `-1`) | no published data licence; be a good citizen (see below) |
 | `mock.*` | deterministic synthetic traffic | in-process | off | no | development and tests only |
 
 Terms and attribution in full: [DATA-SOURCES.md](DATA-SOURCES.md).
@@ -45,6 +46,7 @@ envelope. Domains own the vocabulary; nothing above them does.
 | Domain | Emits (`semanticType`) | Fed by |
 | --- | --- | --- |
 | `hamradio` | `radio.reception`, `radio.station` | `pskreporter.mqtt`, `hamradio.rbn`, `wsjtx.udp`, `hamradio.dxcluster`, `hamradio.wspr` |
+| `aprs` | `aprs.station`, `aprs.object` | `aprs.is` |
 | `aviation` | `aviation.aircraft` | `aviation.adsb`, `aviation.opensky` |
 | `weather` | `weather.lightning` | `lightning.blitzortung` |
 | `spaceweather` | `spaceweather.state` | `spaceweather.swpc` |

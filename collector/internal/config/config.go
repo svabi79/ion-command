@@ -53,6 +53,11 @@ type Source struct {
 	Login string `json:"login,omitempty"`
 	// Password pairs with Login for HTTP basic-auth sources (OpenSky).
 	Password string `json:"password,omitempty"`
+	// Filter is a server-side subscription filter for streaming sources that
+	// support one (e.g. APRS-IS "filter" spec syntax, such as
+	// "r/50.0/8.0/300"). Empty means the source's own sane default; the
+	// sentinel "world" requests no filter at all.
+	Filter string `json:"filter,omitempty"`
 	// Geographic scope for area-query sources (e.g. ADS-B around a point).
 	Latitude  float64 `json:"latitude,omitempty"`
 	Longitude float64 `json:"longitude,omitempty"`

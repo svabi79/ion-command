@@ -501,12 +501,13 @@ void AGeoPointLayerActor::Tick(float DeltaSeconds)
     const double CameraDistance = Player->PlayerCameraManager->GetCameraLocation().Length();
     // Screen size tracks the distance to the near surface; 2400 is the span
     // from closest approach to the default orbit, where markers are 1:1. The
-    // old 0.22 floor was tuned for a closest approach of 450 units; the camera
-    // now comes down to 40, so the factor keeps shrinking through that range
-    // (effective minimum 0.0167 at arm 1040 - the 0.012 floor is a safety
-    // margin below it, not a target) and markers hold their screen size
-    // instead of ballooning.
-    const double Target = FMath::Clamp((CameraDistance - GlobeRadius) / 2400.0, 0.012, 1.15);
+    // floor must stay below the effective factor at the camera's closest
+    // approach, or markers stop shrinking and balloon over the last stretch of
+    // the zoom. Closest approach is 1005 units (5 units of altitude), giving
+    // 0.0021, so the floor sits a little under that as a safety margin rather
+    // than a target. AHamRadioOwnStationActor uses the identical expression
+    // for the own-station reticle and must be changed together with this one.
+    const double Target = FMath::Clamp((CameraDistance - GlobeRadius) / 2400.0, 0.0015, 1.15);
     if (FMath::Abs(Target - CurrentZoomFactor) / CurrentZoomFactor < 0.08) return;
     CurrentZoomFactor = Target;
     // Zoom changes every rendered marker's scale, so this pass necessarily

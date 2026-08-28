@@ -18,6 +18,7 @@ non-commercial only.
 | **Reverse Beacon Network** | Data courtesy of the Reverse Beacon Network and its skimmer operators. Requires **your own** amateur callsign as login. No formal data licence published; contact RBN before non-hobby use. | [reversebeacon.net](https://reversebeacon.net) |
 | **DX cluster network** | Spot data from the classic DX cluster network - DXSpider, AR-Cluster and CC Cluster software running on independently operated, mostly volunteer-run nodes. There is no single publisher and no formal data licence published by any of the node software projects; most nodes' banners state they are for use by **licensed amateur radio operators only**, and require **your own** callsign as login. Configure your own node (there is no single canonical address, unlike RBN). | [dxcluster.org](https://www.dxcluster.org) |
 | **WSPRnet / wspr.live** | Weak-signal beacon reception reports originally from WSPRnet.org, republished free of charge as a ClickHouse mirror by wspr.live. Read-only, no credentials needed. Usage must **remain free of charge for everyone** and **commercial or profit-oriented use is not allowed**. Published with **no guarantee of correctness, availability or stability**: "raw data as reported, saved and published by wsprnet.org" and "may contain duplicates, false spots and other errors," maintained by volunteers. | [wspr.live](https://wspr.live) |
+| **APRS-IS** | Data courtesy of APRS-IS and the amateur radio operators whose stations, digipeaters and IGates feed it. APRS-IS is maintained and operated by volunteer amateur radio operators to support Amateur Radio APRS on RF; "APRS" is a trademark of Tucson Amateur Packet Radio (TAPR). No formal data licence is published, and the network's own maintainers have publicly discouraged commercial harvesting of the feed. Requires **your own** amateur callsign as login (the read-only passcode `-1` needs no verification, but ION COMMAND still asks for a real callsign rather than a shared placeholder). Contact the APRS-IS maintainers before any commercial or bulk-redistribution use. | [aprs-is.net](https://www.aprs-is.net) |
 | **NOAA / NWS SWPC** | Space-weather data from the NOAA Space Weather Prediction Center (public domain, US Government work). NOAA does not endorse this project. ION COMMAND's HF-conditions verdict is a **derived heuristic, not an official NOAA forecast**. | [swpc.noaa.gov](https://www.swpc.noaa.gov) |
 | **U.S. Geological Survey** | Earthquake data from the U.S. Geological Survey (public domain). | [earthquake.usgs.gov](https://earthquake.usgs.gov/earthquakes/feed/) |
 | **NASA FIRMS** | Active-fire thermal-anomaly detections from NASA's Fire Information for Resource Management System (FIRMS): VIIRS (S-NPP, NOAA-20, NOAA-21) and MODIS (Terra/Aqua), distributed through LANCE. This is near-real-time data — generated fast rather than fully quality-checked like the standard science product — provided "as is"; NASA does not endorse this project, and a detection is a thermal anomaly, not a confirmed fire (ION COMMAND's own display text says so). Cite: NASA VIIRS Land Science Team, *VIIRS Active Fire Product NRT* (S-NPP), DOI [10.5067/FIRMS/VIIRS/VNP14IMGT_NRT.002](https://doi.org/10.5067/FIRMS/VIIRS/VNP14IMGT_NRT.002); *MODIS Collection 6.1 NRT Hotspot/Active Fire Detections MCD14DL*, DOI [10.5067/FIRMS/MODIS/MCD14DL.NRT.006](https://doi.org/10.5067/FIRMS/MODIS/MCD14DL.NRT.006). | [firms.modaps.eosdis.nasa.gov](https://firms.modaps.eosdis.nasa.gov) |
@@ -53,6 +54,7 @@ What each source actually does, in the order it appears in `live.json`:
 | `aviation.adsb` | adsb.lol `/v2/point/<lat>/<lon>/<nm>`; route lookups via api.adsbdb.com (cached, global 2 s gate, `routeLookup: false` disables) | 60 s, global 4 s request gate | `aviation.aircraft` | yes (one example circle) |
 | `aviation.opensky` | opensky-network.org `/api/states/all` | 1800 s anonymous | `aviation.aircraft` | yes |
 | `hamradio.rbn` | telnet `telnet.reversebeacon.net` | streaming | `hamradio` spots | **no** (needs your callsign) |
+| `aprs.is` | TCP `rotate.aprs2.net:14580`, read-only login (passcode `-1`) | streaming | `aprs` → `aprs.station`, `aprs.object` | **no** (needs your callsign) |
 | `wsjtx.udp` | local UDP listener | streaming | `hamradio` | no |
 | `ais.aisstream` | `wss://stream.aisstream.io/v0/stream` | streaming | `maritime.vessel` | **no** (needs a free API key) |
 | `hamradio.dxcluster` | telnet, node address configured per install (no default; example `dxc.nc7j.com:7373`) | streaming | `hamradio` spots | **no** (needs your callsign and a chosen node) |
@@ -230,6 +232,44 @@ these wrong silently produces a globe full of wrong ships:
 Please keep it that way if you change the configuration. These services are
 free because people pay for them with their own time and hardware.
 
+## A word about APRS-IS
+
+The APRS-IS layer is **off by default**, for the same reason as the RBN: it
+needs your own amateur callsign, so it cannot ship pre-configured.
+
+APRS-IS exists to support Amateur Radio APRS on RF. Its own maintainers ask
+that:
+
+- Traffic on APRS-IS stay suitable for gating to and from real RF networks -
+  ION COMMAND's use is receive-only, so this does not apply to it directly,
+  but it is why the collector always logs in with the documented **read-only
+  passcode (`-1`)**: it can never inject anything onto the network.
+- Client software identify itself properly rather than impersonating another
+  tool - the collector's `vers` login field says `ion-command-collector 0.1`.
+- Nobody use the public servers to **harvest data for commercial purposes**;
+  the network's maintainers have said in public discussion that they do not
+  consider themselves able to grant that, even though the data itself is not
+  formally copyrighted.
+
+So please, if you turn this source on:
+
+- Use **your own** licensed amateur callsign in `login`, not a shared
+  placeholder - a real callsign costs nothing to use for a read-only
+  connection and is how the network expects clients to identify themselves.
+- Keep the shipped default (or your own) **filter** narrow rather than
+  subscribing to the entire world: see [CONFIGURATION.md](CONFIGURATION.md).
+- Do not use this source for commercial data harvesting.
+
+### How the collector tries to be a good citizen
+
+- Always logs in with passcode `-1` (read-only); it has no code path that
+  could transmit a packet onto the network.
+- Ships with a bounded server-side filter by default - an example 300 km
+  circle plus position-bearing packet types only - instead of the full
+  firehose, and documents how to point it at your own area.
+- Reconnects with exponential backoff (5 s up to 5 min) rather than
+  hammering a server that drops the connection.
+
 ## Known gaps
 
 - **OpenSky authentication**: the `login`/`password` fields use HTTP basic
@@ -267,3 +307,9 @@ free because people pay for them with their own time and hardware.
   recovered best-effort (a leading recognised mode token; a space-delimited
   "N dB") and are frequently absent - this is expected, not a bug, and is
   never backfilled with an invented value.
+- PSKReporter, prop.kc2g.com, the RBN and APRS-IS publish no formal data
+  licence. Usage here is hobby-scale and attributed; contact them before any
+  larger or commercial use.
+- **APRS-IS Mic-E course/speed** is intentionally not decoded (position and
+  symbol are); see the collector's `aprs` domain package comment for why the
+  published algorithm could not be verified against its own worked example.

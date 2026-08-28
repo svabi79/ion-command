@@ -118,6 +118,12 @@
       "type": "hamradio.wspr",
       "enabled": true,
       "pollSeconds": 300
+    },
+    {
+      "id": "aprsis-primary",
+      "type": "aprs.is",
+      "enabled": false,
+      "login": "NOCALL"
     }
   ]
 }
