@@ -59,6 +59,18 @@
       "enabled": true
     },
     {
+      "id": "firms-westus-example",
+      "type": "wildfire.firms",
+      "enabled": true,
+      "satellite": "VIIRS_SNPP",
+      "boxWest": -124.5,
+      "boxSouth": 32.5,
+      "boxEast": -114.0,
+      "boxNorth": 42.0,
+      "lookBackHours": 24,
+      "pollSeconds": 10800
+    },
+    {
       "id": "celestrak-amateur",
       "type": "orbital.celestrak",
       "enabled": true
