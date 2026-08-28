@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/HUD.h"
 #include "GeoArcLayerActor.h"
+#include "GeoSearchTypes.h"
 #include "GeoTypes.h"
 #include "IonCockpitPanelSubsystem.h"
 #include "IonCockpitHudActor.generated.h"
@@ -56,16 +57,35 @@ public:
     // Overlay menu: O toggles it; clicks on its rows toggle layers. Returns
     // true when the click was consumed (the controller then skips path
     // selection).
-    void ToggleOverlayMenu() { bOverlayMenuOpen = !bOverlayMenuOpen; }
+    void ToggleOverlayMenu() { bOverlayMenuOpen = !bOverlayMenuOpen; bSearchOpen = false; bWatchPanelOpen = false; }
     bool HandleClick(const FVector2D& ScreenPosition);
 
     // Settings panel (opened from the overlay menu's SETTINGS row). While a
     // text field is focused the player controller routes typed characters
     // here; Control: 0 = backspace, 1 = commit, 2 = cancel.
     void OpenSettings();
-    bool IsCapturingText() const { return bSettingsOpen && EditingRow >= 0; }
+    // True whenever any text-capture surface (settings field or search
+    // query) has focus. The player controller checks this single flag before
+    // letting a keypress reach any camera/layer/band/timeline hotkey, and
+    // routes the character on to whichever surface is actually active -
+    // one shared input-routing state for both panels, not two.
+    bool IsCapturingText() const { return (bSettingsOpen && EditingRow >= 0) || bSearchOpen; }
     void SettingsTextChar(TCHAR Character);
     void SettingsTextControl(int32 Control);
+
+    // Search overlay ("/" or "S"): keyboard-first, incremental results from
+    // UGeoSearchSubsystem. Control: 0 = backspace, 1 = enter (focus
+    // highlighted result), 2 = escape (close).
+    void OpenSearch();
+    void CloseSearch();
+    bool IsSearchActive() const { return bSearchOpen; }
+    void SearchTextChar(TCHAR Character);
+    void SearchTextControl(int32 Control);
+    void SearchMoveHighlight(int32 Delta);
+
+    // Watch/alert panel ("W"): saved watches and recent matches from
+    // UGeoWatchSubsystem.
+    void ToggleWatchPanel();
 
 private:
     void OnMessageAccepted(const FGeoMessageEnvelope& Message);
@@ -87,6 +107,16 @@ private:
     void DrawOverlayMenu(float Scale, float Alpha);
     void DrawHoverTooltip(float Scale, float Alpha);
     void DrawModeHint(float Scale, float Alpha);
+    // Always-on-top focus ring for the current selection (Part A): projects
+    // a Point position, or a GreatCircle's midpoint, to screen space exactly
+    // like the own-station reticle does, so a search/alert-focused object
+    // stays visually prioritised regardless of 3D aggregation or render
+    // budget - the one guarantee the point layer cannot give it directly
+    // (unlike paths, it has no dedicated 3D selection highlight).
+    void DrawSelectionReticle(float Scale, float Alpha);
+    // Small always-visible unseen-alert badge, legible at a glance on a wall
+    // display even while the watch panel itself is closed.
+    void DrawAlertIndicator(float Scale, float Alpha);
 
     void DrawPanelFrame(float X, float Y, float Width, float Height, const FString& Title, float Scale, float Alpha);
     bool DrawRegionFlag(const FString& RegionName, float X, float Y, float Width, float Height, float Alpha);
@@ -155,6 +185,51 @@ private:
     // not be answered by hit-rects the user cannot see.
     bool bHudDrawn = false;
     void ForgetHitRects();
+
+    // Search overlay state (Part A). The whole panel is one text field: it
+    // captures input for as long as it is open, unlike the settings panel's
+    // per-row editing.
+    bool bSearchOpen = false;
+    FString SearchQuery;
+    int32 SearchHighlightIndex = 0;
+    TArray<FGeoSearchResult> CachedSearchResults;
+    FString LastScannedQuery;
+    double LastSearchRefreshSeconds = -1000.0;
+    struct FSearchResultRow
+    {
+        FVector2D Min = FVector2D::ZeroVector;
+        FVector2D Max = FVector2D::ZeroVector;
+        int32 ResultIndex = INDEX_NONE;
+    };
+    TArray<FSearchResultRow> SearchResultRows;
+    FVector2D SearchWatchButtonMin = FVector2D::ZeroVector;
+    FVector2D SearchWatchButtonMax = FVector2D::ZeroVector;
+    bool bSearchWatchButtonEnabled = false;
+    void RefreshSearchResults(bool bForceRescan);
+    void DrawSearchOverlay(float Scale, float Alpha);
+    bool HandleSearchClick(const FVector2D& ScreenPosition);
+    void FocusSearchResult(int32 Index);
+    void AddCurrentQueryAsWatch();
+
+    // Watch/alert panel state (Part B).
+    bool bWatchPanelOpen = false;
+    struct FWatchHitRow
+    {
+        FVector2D Min = FVector2D::ZeroVector;
+        FVector2D Max = FVector2D::ZeroVector;
+        FString Query;
+    };
+    TArray<FWatchHitRow> WatchRemoveRows;
+    struct FAlertHitRow
+    {
+        FVector2D Min = FVector2D::ZeroVector;
+        FVector2D Max = FVector2D::ZeroVector;
+        int32 AlertIndex = INDEX_NONE;
+    };
+    TArray<FAlertHitRow> AlertHitRows;
+    void DrawWatchPanel(float Scale, float Alpha);
+    bool HandleWatchClick(const FVector2D& ScreenPosition);
+    void FocusAlert(int32 Index);
 
     // Settings panel state.
     struct FSettingsRow

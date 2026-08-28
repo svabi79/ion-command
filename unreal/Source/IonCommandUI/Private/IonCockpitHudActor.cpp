@@ -8,9 +8,11 @@
 #include "GeoDataSubsystem.h"
 #include "GeoMathLibrary.h"
 #include "GeoPointLayerActor.h"
+#include "GeoSearchSubsystem.h"
 #include "GeoSelectionSubsystem.h"
 #include "GeoStreamSubsystem.h"
 #include "GeoTimelineSubsystem.h"
+#include "GeoWatchSubsystem.h"
 #include "HAL/PlatformTime.h"
 #include "IonActivityHeatmapActor.h"
 #include "IonIonosphereActor.h"
@@ -57,6 +59,20 @@ FLinearColor WithAlpha(const FLinearColor& Color, float Alpha)
     FLinearColor Result = Color;
     Result.A = Alpha;
     return Result;
+}
+
+// Short relative age against the current timeline clock (never wall-clock
+// UTC directly - see AIonCockpitHudActor::DrawSearchOverlay/DrawWatchPanel),
+// so search-result and alert ages read correctly in live, paused, and
+// replay modes alike.
+FString FormatAgeShort(const FDateTime& ObservedUtc, const FDateTime& NowUtc)
+{
+    if (ObservedUtc.GetTicks() == 0) return TEXT("--");
+    const double Seconds = (NowUtc - ObservedUtc).GetTotalSeconds();
+    if (Seconds < 0.0) return TEXT("0S AGO");
+    if (Seconds < 60.0) return FString::Printf(TEXT("%.0fS AGO"), Seconds);
+    if (Seconds < 3600.0) return FString::Printf(TEXT("%.0fM AGO"), Seconds / 60.0);
+    return FString::Printf(TEXT("%.1fH AGO"), Seconds / 3600.0);
 }
 
 // Simplified region flags for the top-regions panel: stripes, Nordic or
@@ -312,6 +328,14 @@ void AIonCockpitHudActor::ForgetHitRects()
     MenuRows.Reset();
     SettingsRows.Reset();
     EditingRow = -1;
+    SearchResultRows.Reset();
+    // The search panel has no per-row editing state to fall back to (unlike
+    // settings), so forgetting its hit-rects closes it outright rather than
+    // leaving it invisibly "open" and still swallowing keystrokes.
+    bSearchOpen = false;
+    WatchRemoveRows.Reset();
+    AlertHitRows.Reset();
+    bWatchPanelOpen = false;
     bHudDrawn = false;
 }
 
@@ -337,6 +361,7 @@ void AIonCockpitHudActor::DrawHUD()
     bHudDrawn = true;
 
     DrawStatusBar(Scale, Alpha);
+    DrawAlertIndicator(Scale, Alpha);
     if (Mode == EIonCockpitMode::Full)
     {
         DrawTrafficPanel(Scale, Alpha);
@@ -353,9 +378,12 @@ void AIonCockpitHudActor::DrawHUD()
         LoadAndApplySettings();
     }
     DrawOwnStationReticle(Scale, Alpha);
+    DrawSelectionReticle(Scale, Alpha);
     if (bSettingsOpen) DrawSettings(Scale, Alpha);
+    else if (bSearchOpen) DrawSearchOverlay(Scale, Alpha);
+    else if (bWatchPanelOpen) DrawWatchPanel(Scale, Alpha);
     else if (bOverlayMenuOpen) DrawOverlayMenu(Scale, Alpha);
-    if (!bSettingsOpen) DrawHoverTooltip(Scale, Alpha);
+    if (!bSettingsOpen && !bSearchOpen) DrawHoverTooltip(Scale, Alpha);
     DrawModeHint(Scale, Alpha);
 }
 
@@ -778,6 +806,8 @@ bool AIonCockpitHudActor::HandleClick(const FVector2D& ScreenPosition)
     // invisible rows.
     if (!bHudDrawn) return false;
     if (bSettingsOpen) return HandleSettingsClick(ScreenPosition);
+    if (bSearchOpen) return HandleSearchClick(ScreenPosition);
+    if (bWatchPanelOpen) return HandleWatchClick(ScreenPosition);
     if (!bOverlayMenuOpen) return false;
     for (const FMenuRow& Row : MenuRows)
     {
@@ -840,6 +870,8 @@ void AIonCockpitHudActor::OpenSettings()
 {
     bSettingsOpen = true;
     bOverlayMenuOpen = false;
+    bSearchOpen = false;
+    bWatchPanelOpen = false;
     EditingRow = -1;
 }
 
@@ -1127,7 +1159,452 @@ void AIonCockpitHudActor::DrawHoverTooltip(float Scale, float Alpha)
 void AIonCockpitHudActor::DrawModeHint(float Scale, float Alpha)
 {
     const TCHAR* ModeName = Mode == EIonCockpitMode::Full ? TEXT("FULL") : TEXT("MIN");
-    DrawTextAt(FString::Printf(TEXT("HUD %s // TAB   OVERLAYS // O"), ModeName), Canvas->SizeX - 18.0f * Scale, Canvas->SizeY - 26.0f * Scale, WithAlpha(CockpitDim, Alpha), 1.0f * Scale, true);
+    DrawTextAt(FString::Printf(TEXT("HUD %s // TAB   OVERLAYS // O   SEARCH // /   ALERTS // W"), ModeName), Canvas->SizeX - 18.0f * Scale, Canvas->SizeY - 26.0f * Scale, WithAlpha(CockpitDim, Alpha), 1.0f * Scale, true);
+}
+
+// ---------------------------------------------------------------------
+// Search overlay (Part A) and watchlist/alerts (Part B).
+//
+// Both read only stable canonical identifiers and generic display.*
+// metadata through UGeoSearchSubsystem/UGeoWatchSubsystem; nothing below
+// hard-codes a domain-specific field name.
+// ---------------------------------------------------------------------
+
+void AIonCockpitHudActor::OpenSearch()
+{
+    bSearchOpen = true;
+    bSettingsOpen = false;
+    bOverlayMenuOpen = false;
+    bWatchPanelOpen = false;
+    EditingRow = -1;
+    SearchQuery.Reset();
+    SearchHighlightIndex = 0;
+    CachedSearchResults.Reset();
+    LastScannedQuery.Reset();
+    LastSearchRefreshSeconds = -1000.0;
+}
+
+void AIonCockpitHudActor::CloseSearch()
+{
+    bSearchOpen = false;
+    SearchResultRows.Reset();
+}
+
+void AIonCockpitHudActor::SearchTextChar(TCHAR Character)
+{
+    // A slightly wider charset than the callsign/grid settings fields: search
+    // terms also need to cover hyphenated registrations and multi-word
+    // display titles.
+    const TCHAR Up = FChar::ToUpper(Character);
+    if ((Up >= 'A' && Up <= 'Z') || (Up >= '0' && Up <= '9') || Up == '/' || Up == '-' || Up == ' ')
+    {
+        if (SearchQuery.Len() < 32) SearchQuery.AppendChar(Up);
+    }
+}
+
+void AIonCockpitHudActor::SearchTextControl(int32 Control)
+{
+    if (Control == 0) // backspace
+    {
+        if (SearchQuery.Len() > 0) SearchQuery.LeftChopInline(1);
+    }
+    else if (Control == 1) // enter: focus the highlighted result
+    {
+        RefreshSearchResults(false);
+        FocusSearchResult(SearchHighlightIndex);
+    }
+    else // escape
+    {
+        CloseSearch();
+    }
+}
+
+void AIonCockpitHudActor::SearchMoveHighlight(int32 Delta)
+{
+    if (CachedSearchResults.IsEmpty())
+    {
+        SearchHighlightIndex = 0;
+        return;
+    }
+    SearchHighlightIndex = (SearchHighlightIndex + Delta + CachedSearchResults.Num()) % CachedSearchResults.Num();
+}
+
+void AIonCockpitHudActor::RefreshSearchResults(bool bForceRescan)
+{
+    const UGameInstance* GameInstance = GetGameInstance();
+    const UGeoSearchSubsystem* Search = GameInstance ? GameInstance->GetSubsystem<UGeoSearchSubsystem>() : nullptr;
+    if (!Search) return;
+
+    const double NowSeconds = FPlatformTime::Seconds();
+    const bool bQueryChanged = SearchQuery != LastScannedQuery;
+    // Re-scan on every query edit immediately, and otherwise on a slow
+    // throttle so newly accepted traffic eventually surfaces while the
+    // operator is looking at the panel without re-scanning every frame.
+    const bool bDue = NowSeconds - LastSearchRefreshSeconds > 0.5;
+    if (!bForceRescan && !bQueryChanged && !bDue) return;
+
+    LastScannedQuery = SearchQuery;
+    LastSearchRefreshSeconds = NowSeconds;
+    CachedSearchResults = Search->Search(SearchQuery, 8);
+    if (SearchHighlightIndex >= CachedSearchResults.Num())
+    {
+        SearchHighlightIndex = FMath::Max(0, CachedSearchResults.Num() - 1);
+    }
+}
+
+void AIonCockpitHudActor::FocusSearchResult(int32 Index)
+{
+    if (!CachedSearchResults.IsValidIndex(Index)) return;
+    if (UGameInstance* GameInstance = GetGameInstance())
+    {
+        if (UGeoSelectionSubsystem* Selection = GameInstance->GetSubsystem<UGeoSelectionSubsystem>())
+        {
+            // Works identically for a Point or a GreatCircle result: the
+            // selection subsystem and the camera pawn's focus easing are
+            // already geometry-neutral.
+            Selection->SelectMessage(CachedSearchResults[Index].Envelope);
+        }
+    }
+    CloseSearch();
+}
+
+void AIonCockpitHudActor::AddCurrentQueryAsWatch()
+{
+    if (UGameInstance* GameInstance = GetGameInstance())
+    {
+        if (UGeoWatchSubsystem* Watch = GameInstance->GetSubsystem<UGeoWatchSubsystem>())
+        {
+            Watch->AddWatch(SearchQuery);
+        }
+    }
+}
+
+bool AIonCockpitHudActor::HandleSearchClick(const FVector2D& ScreenPosition)
+{
+    if (ScreenPosition.X >= SearchWatchButtonMin.X && ScreenPosition.X <= SearchWatchButtonMax.X &&
+        ScreenPosition.Y >= SearchWatchButtonMin.Y && ScreenPosition.Y <= SearchWatchButtonMax.Y)
+    {
+        if (bSearchWatchButtonEnabled) AddCurrentQueryAsWatch();
+        return true;
+    }
+    for (const FSearchResultRow& Row : SearchResultRows)
+    {
+        if (ScreenPosition.X >= Row.Min.X && ScreenPosition.X <= Row.Max.X && ScreenPosition.Y >= Row.Min.Y && ScreenPosition.Y <= Row.Max.Y)
+        {
+            FocusSearchResult(Row.ResultIndex);
+            return true;
+        }
+    }
+    // Click outside any row or button closes the panel, like settings does.
+    CloseSearch();
+    return true;
+}
+
+void AIonCockpitHudActor::DrawSearchOverlay(float Scale, float Alpha)
+{
+    RefreshSearchResults(false);
+    const UGameInstance* GameInstance = GetGameInstance();
+    const UGeoTimelineSubsystem* Timeline = GameInstance ? GameInstance->GetSubsystem<UGeoTimelineSubsystem>() : nullptr;
+    const FDateTime NowUtc = Timeline ? Timeline->GetTimelineUtc() : FDateTime::UtcNow();
+
+    const float PanelWidth = 560.0f * Scale;
+    const float HeaderHeight = 46.0f * Scale;
+    const float RowHeight = 44.0f * Scale;
+    const float FooterHeight = 24.0f * Scale;
+    const int32 RowCount = FMath::Max(CachedSearchResults.Num(), 1);
+    const float PanelHeight = HeaderHeight + RowCount * RowHeight + FooterHeight;
+    const float PanelX = (Canvas->SizeX - PanelWidth) * 0.5f;
+    const float PanelY = Canvas->SizeY * 0.16f;
+
+    DrawRect(PanelX, PanelY, PanelWidth, PanelHeight, WithAlpha(FLinearColor(0.02f, 0.05f, 0.09f), 0.94f * Alpha));
+    DrawPanelFrame(PanelX, PanelY, PanelWidth, PanelHeight, TEXT("SEARCH"), Scale, Alpha);
+
+    const double WorldSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+    const bool bCaretOn = FMath::Fmod(WorldSeconds, 1.0) < 0.6;
+    const FString QueryLine = SearchQuery.IsEmpty() ? FString(TEXT("TYPE TO SEARCH")) : (SearchQuery + (bCaretOn ? TEXT("_") : TEXT(" ")));
+    DrawTextAt(QueryLine, PanelX + 16.0f * Scale, PanelY + 10.0f * Scale, SearchQuery.IsEmpty() ? WithAlpha(CockpitDim, Alpha) : WithAlpha(CockpitGreen, Alpha), 1.35f * Scale);
+
+    // "+ ADD WATCH" affordance, enabled once something has been typed. Saves
+    // the exact query text as a watch (Part B), reusing this same matcher.
+    bSearchWatchButtonEnabled = !SearchQuery.TrimStartAndEnd().IsEmpty();
+    const FString WatchButtonText = TEXT("[ + ADD WATCH ]");
+    float ButtonWidth = 0.0f, ButtonHeight = 0.0f;
+    Canvas->TextSize(GEngine->GetMediumFont(), WatchButtonText, ButtonWidth, ButtonHeight, 1.05f * Scale, 1.05f * Scale);
+    SearchWatchButtonMin = FVector2D(PanelX + PanelWidth - ButtonWidth - 30.0f * Scale, PanelY + 12.0f * Scale);
+    SearchWatchButtonMax = SearchWatchButtonMin + FVector2D(ButtonWidth + 14.0f * Scale, ButtonHeight + 8.0f * Scale);
+    DrawTextAt(WatchButtonText, SearchWatchButtonMin.X + 7.0f * Scale, SearchWatchButtonMin.Y + 4.0f * Scale, WithAlpha(bSearchWatchButtonEnabled ? CockpitAmber : CockpitDim, Alpha), 1.05f * Scale);
+
+    SearchResultRows.Reset();
+    FVector2D Mouse(-1, -1);
+    if (const APlayerController* Player = PlayerOwner.Get())
+    {
+        float Mx = 0, My = 0;
+        if (Player->GetMousePosition(Mx, My)) Mouse = FVector2D(Mx, My);
+    }
+
+    float RowY = PanelY + HeaderHeight;
+    if (CachedSearchResults.IsEmpty())
+    {
+        const FString EmptyText = SearchQuery.IsEmpty()
+            ? TEXT("Type an entity id or label to search current traffic.")
+            : TEXT("NO MATCHES");
+        DrawTextAt(EmptyText, PanelX + PanelWidth * 0.5f, RowY + 12.0f * Scale, WithAlpha(CockpitDim, Alpha), 1.0f * Scale, true);
+    }
+    else
+    {
+        for (int32 Index = 0; Index < CachedSearchResults.Num(); ++Index)
+        {
+            const FGeoSearchResult& Result = CachedSearchResults[Index];
+            const FVector2D RowMin(PanelX, RowY);
+            const FVector2D RowMax(PanelX + PanelWidth, RowY + RowHeight);
+            SearchResultRows.Add({RowMin, RowMax, Index});
+
+            const bool bHighlighted = Index == SearchHighlightIndex;
+            const bool bHovered = Mouse.X >= RowMin.X && Mouse.X <= RowMax.X && Mouse.Y >= RowMin.Y && Mouse.Y <= RowMax.Y;
+            if (bHighlighted || bHovered)
+            {
+                DrawRect(RowMin.X + 2.0f * Scale, RowMin.Y + 1.0f * Scale, PanelWidth - 4.0f * Scale, RowHeight - 2.0f * Scale, WithAlpha(CockpitCyan, (bHighlighted ? 0.20f : 0.10f) * Alpha));
+            }
+            FString Label = Result.DisplayLabel;
+            if (Result.bIsGrouped && Result.ObservationCount > 1)
+            {
+                Label += FString::Printf(TEXT("  (x%d)"), Result.ObservationCount);
+            }
+            DrawTextAt(Label, RowMin.X + 14.0f * Scale, RowMin.Y + 4.0f * Scale, WithAlpha(CockpitWhite, Alpha), 1.1f * Scale);
+            FString Detail = Result.Domain.ToUpper();
+            if (!Result.DisplaySubtitle.IsEmpty()) Detail += TEXT("  //  ") + Result.DisplaySubtitle;
+            Detail += TEXT("  //  ") + FormatAgeShort(Result.ObservedUtc, NowUtc);
+            DrawTextAt(Detail, RowMin.X + 14.0f * Scale, RowMin.Y + 22.0f * Scale, WithAlpha(CockpitDim, Alpha), 0.9f * Scale);
+            RowY += RowHeight;
+        }
+    }
+
+    DrawTextAt(TEXT("UP/DOWN SELECT  //  ENTER FOCUS  //  ESC CLOSE"), PanelX + PanelWidth * 0.5f, PanelY + PanelHeight - 20.0f * Scale, WithAlpha(CockpitDim, Alpha), 0.85f * Scale, true);
+}
+
+void AIonCockpitHudActor::ToggleWatchPanel()
+{
+    bWatchPanelOpen = !bWatchPanelOpen;
+    if (bWatchPanelOpen)
+    {
+        bSettingsOpen = false;
+        bOverlayMenuOpen = false;
+        bSearchOpen = false;
+        EditingRow = -1;
+        // Opening the panel is the operator looking at the alerts: clear the
+        // at-a-glance unseen badge the same way a notification tray would.
+        // Individual rows stay visually distinguished (dot color) so nothing
+        // already-read-vs-unread is lost even though the aggregate count
+        // resets immediately.
+        if (UGameInstance* GameInstance = GetGameInstance())
+        {
+            if (UGeoWatchSubsystem* Watch = GameInstance->GetSubsystem<UGeoWatchSubsystem>())
+            {
+                Watch->MarkAllSeen();
+            }
+        }
+    }
+    else
+    {
+        WatchRemoveRows.Reset();
+        AlertHitRows.Reset();
+    }
+}
+
+bool AIonCockpitHudActor::HandleWatchClick(const FVector2D& ScreenPosition)
+{
+    for (const FAlertHitRow& Row : AlertHitRows)
+    {
+        if (ScreenPosition.X >= Row.Min.X && ScreenPosition.X <= Row.Max.X && ScreenPosition.Y >= Row.Min.Y && ScreenPosition.Y <= Row.Max.Y)
+        {
+            FocusAlert(Row.AlertIndex);
+            return true;
+        }
+    }
+    for (const FWatchHitRow& Row : WatchRemoveRows)
+    {
+        if (ScreenPosition.X >= Row.Min.X && ScreenPosition.X <= Row.Max.X && ScreenPosition.Y >= Row.Min.Y && ScreenPosition.Y <= Row.Max.Y)
+        {
+            if (UGameInstance* GameInstance = GetGameInstance())
+            {
+                if (UGeoWatchSubsystem* Watch = GameInstance->GetSubsystem<UGeoWatchSubsystem>())
+                {
+                    Watch->RemoveWatch(Row.Query);
+                }
+            }
+            return true;
+        }
+    }
+    // Click outside any row closes the panel, like settings/search do.
+    bWatchPanelOpen = false;
+    return true;
+}
+
+void AIonCockpitHudActor::FocusAlert(int32 Index)
+{
+    UGameInstance* GameInstance = GetGameInstance();
+    if (!GameInstance) return;
+    UGeoWatchSubsystem* Watch = GameInstance->GetSubsystem<UGeoWatchSubsystem>();
+    if (!Watch || !Watch->GetAlerts().IsValidIndex(Index)) return;
+    if (UGeoSelectionSubsystem* Selection = GameInstance->GetSubsystem<UGeoSelectionSubsystem>())
+    {
+        Selection->SelectMessage(Watch->GetAlerts()[Index].Envelope);
+    }
+    Watch->MarkAlertSeen(Index);
+}
+
+void AIonCockpitHudActor::DrawWatchPanel(float Scale, float Alpha)
+{
+    const UGameInstance* GameInstance = GetGameInstance();
+    const UGeoWatchSubsystem* Watch = GameInstance ? GameInstance->GetSubsystem<UGeoWatchSubsystem>() : nullptr;
+    const UGeoTimelineSubsystem* Timeline = GameInstance ? GameInstance->GetSubsystem<UGeoTimelineSubsystem>() : nullptr;
+    const FDateTime NowUtc = Timeline ? Timeline->GetTimelineUtc() : FDateTime::UtcNow();
+
+    static const TArray<FGeoWatchEntry> EmptyWatches;
+    static const TArray<FGeoAlertEntry> EmptyAlerts;
+    const TArray<FGeoWatchEntry>& Watches = Watch ? Watch->GetWatches() : EmptyWatches;
+    const TArray<FGeoAlertEntry>& Alerts = Watch ? Watch->GetAlerts() : EmptyAlerts;
+
+    const float PanelWidth = 460.0f * Scale;
+    const float HeaderHeight = 40.0f * Scale;
+    const float WatchRowHeight = 26.0f * Scale;
+    const float AlertRowHeight = 38.0f * Scale;
+    const int32 MaxVisibleAlerts = 10;
+    const int32 VisibleAlerts = FMath::Min(Alerts.Num(), MaxVisibleAlerts);
+    const float WatchSectionHeight = FMath::Max(Watches.Num(), 1) * WatchRowHeight + 26.0f * Scale;
+    const float AlertSectionHeight = FMath::Max(VisibleAlerts, 1) * AlertRowHeight + 26.0f * Scale;
+    const float PanelHeight = HeaderHeight + WatchSectionHeight + AlertSectionHeight + 20.0f * Scale;
+    const float PanelX = Canvas->SizeX - PanelWidth - 24.0f * Scale;
+    const float PanelY = 60.0f * Scale;
+
+    DrawRect(PanelX, PanelY, PanelWidth, PanelHeight, WithAlpha(FLinearColor(0.02f, 0.05f, 0.09f), 0.94f * Alpha));
+    DrawPanelFrame(PanelX, PanelY, PanelWidth, PanelHeight, TEXT("WATCHLIST // ALERTS"), Scale, Alpha);
+
+    WatchRemoveRows.Reset();
+    AlertHitRows.Reset();
+    FVector2D Mouse(-1, -1);
+    if (const APlayerController* Player = PlayerOwner.Get())
+    {
+        float Mx = 0, My = 0;
+        if (Player->GetMousePosition(Mx, My)) Mouse = FVector2D(Mx, My);
+    }
+
+    float RowY = PanelY + HeaderHeight;
+    DrawTextAt(TEXT("WATCHES"), PanelX + 14.0f * Scale, RowY, WithAlpha(CockpitCyan, Alpha), 1.0f * Scale);
+    RowY += 20.0f * Scale;
+    if (Watches.IsEmpty())
+    {
+        DrawTextAt(TEXT("No saved watches - search, then ADD WATCH."), PanelX + 14.0f * Scale, RowY, WithAlpha(CockpitDim, Alpha), 0.9f * Scale);
+        RowY += WatchRowHeight;
+    }
+    else
+    {
+        for (const FGeoWatchEntry& Entry : Watches)
+        {
+            const FVector2D RowMin(PanelX, RowY);
+            const FVector2D RowMax(PanelX + PanelWidth, RowY + WatchRowHeight);
+            const bool bHovered = Mouse.X >= RowMin.X && Mouse.X <= RowMax.X && Mouse.Y >= RowMin.Y && Mouse.Y <= RowMax.Y;
+            if (bHovered) DrawRect(RowMin.X + 2.0f * Scale, RowMin.Y, PanelWidth - 4.0f * Scale, WatchRowHeight, WithAlpha(CockpitRed, 0.10f * Alpha));
+            DrawTextAt(Entry.Query, PanelX + 14.0f * Scale, RowY + 4.0f * Scale, WithAlpha(CockpitWhite, Alpha), 1.0f * Scale);
+            DrawTextAt(TEXT("[ x ]"), PanelX + PanelWidth - 44.0f * Scale, RowY + 4.0f * Scale, WithAlpha(bHovered ? CockpitRed : CockpitDim, Alpha), 1.0f * Scale);
+            WatchRemoveRows.Add({RowMin, RowMax, Entry.Query});
+            RowY += WatchRowHeight;
+        }
+    }
+
+    RowY += 10.0f * Scale;
+    DrawTextAt(FString::Printf(TEXT("RECENT ALERTS (%d)"), Alerts.Num()), PanelX + 14.0f * Scale, RowY, WithAlpha(CockpitCyan, Alpha), 1.0f * Scale);
+    RowY += 20.0f * Scale;
+    if (Alerts.IsEmpty())
+    {
+        DrawTextAt(TEXT("No alerts yet."), PanelX + 14.0f * Scale, RowY, WithAlpha(CockpitDim, Alpha), 0.9f * Scale);
+    }
+    else
+    {
+        for (int32 Index = 0; Index < VisibleAlerts; ++Index)
+        {
+            const FGeoAlertEntry& Alert = Alerts[Index];
+            const FVector2D RowMin(PanelX, RowY);
+            const FVector2D RowMax(PanelX + PanelWidth, RowY + AlertRowHeight);
+            const bool bHovered = Mouse.X >= RowMin.X && Mouse.X <= RowMax.X && Mouse.Y >= RowMin.Y && Mouse.Y <= RowMax.Y;
+            if (bHovered) DrawRect(RowMin.X + 2.0f * Scale, RowMin.Y + 1.0f * Scale, PanelWidth - 4.0f * Scale, AlertRowHeight - 2.0f * Scale, WithAlpha(CockpitCyan, 0.10f * Alpha));
+            const FLinearColor Dot = Alert.bSeen ? CockpitDim : CockpitRed;
+            DrawTextAt(TEXT("*"), PanelX + 10.0f * Scale, RowY + 8.0f * Scale, WithAlpha(Dot, Alpha), 1.1f * Scale);
+            DrawTextAt(Alert.DisplayLabel, PanelX + 26.0f * Scale, RowY + 2.0f * Scale, WithAlpha(Alert.bSeen ? CockpitDim : CockpitWhite, Alpha), 1.0f * Scale);
+            const FString Detail = FString::Printf(TEXT("%s // matched \"%s\" // %s"), *Alert.Domain.ToUpper(), *Alert.WatchQuery, *FormatAgeShort(Alert.ObservedUtc, NowUtc));
+            DrawTextAt(Detail, PanelX + 26.0f * Scale, RowY + 18.0f * Scale, WithAlpha(CockpitDim, Alpha), 0.85f * Scale);
+            AlertHitRows.Add({RowMin, RowMax, Index});
+            RowY += AlertRowHeight;
+        }
+    }
+
+    DrawTextAt(TEXT("CLICK ALERT FOCUS  //  CLICK x REMOVE WATCH  //  W CLOSE"), PanelX + PanelWidth * 0.5f, PanelY + PanelHeight - 20.0f * Scale, WithAlpha(CockpitDim, Alpha), 0.8f * Scale, true);
+}
+
+void AIonCockpitHudActor::DrawSelectionReticle(float Scale, float Alpha)
+{
+    APlayerController* Player = PlayerOwner.Get();
+    if (!Player || !Player->PlayerCameraManager || !Canvas) return;
+    const UGameInstance* GameInstance = GetGameInstance();
+    const UGeoSelectionSubsystem* Selection = GameInstance ? GameInstance->GetSubsystem<UGeoSelectionSubsystem>() : nullptr;
+    if (!Selection || !Selection->HasSelection()) return;
+    const FGeoMessageEnvelope Selected = Selection->GetSelection();
+    if (Selected.Geometry.Positions.IsEmpty()) return;
+
+    // Same geometry rule the camera pawn uses to frame a selection: a Point
+    // is its own position, a GreatCircle's focus is its midpoint. Keeping
+    // the two in step means the reticle always sits where the camera eased
+    // to.
+    const FGeoPosition Focus = Selected.Geometry.Positions.Num() >= 2
+        ? UGeoMathLibrary::GreatCircleInterpolation(Selected.Geometry.Positions[0], Selected.Geometry.Positions.Last(), 0.5)
+        : Selected.Geometry.Positions[0];
+    const FVector Unit = UGeoMathLibrary::LatitudeLongitudeToUnitSphere(Focus.Latitude, Focus.Longitude);
+    const FVector WorldPosition = Unit * (GlobeRadiusUnits + 14.0);
+    const FVector CameraLocation = Player->PlayerCameraManager->GetCameraLocation();
+    if (FVector::DotProduct(Unit, (CameraLocation - WorldPosition).GetSafeNormal()) < 0.02) return; // behind the globe
+    const FVector Screen = Canvas->Project(WorldPosition);
+    if (Screen.Z <= 0.0f) return;
+
+    const double WorldSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+    const float Pulse = 0.5f + 0.5f * FMath::Sin(static_cast<float>(WorldSeconds) * 3.4f);
+    const float Radius = (20.0f + 7.0f * Pulse) * Scale;
+    const FLinearColor Ring = WithAlpha(CockpitAmber, (0.65f + 0.35f * Pulse) * Alpha);
+    constexpr int32 Segments = 24;
+    FVector2D Previous;
+    for (int32 Index = 0; Index <= Segments; ++Index)
+    {
+        const float Angle = 2.0f * PI * Index / Segments;
+        const FVector2D Point(Screen.X + Radius * FMath::Cos(Angle), Screen.Y + Radius * FMath::Sin(Angle));
+        if (Index > 0) DrawLineSegment(Previous, Point, Ring, FMath::Max(1.0f, 2.0f * Scale));
+        Previous = Point;
+    }
+    FString Label = Selected.Properties.FindRef(TEXT("display.title"));
+    if (Label.IsEmpty()) Label = !Selected.EntityId.IsEmpty() ? Selected.EntityId : Selected.SemanticType;
+    DrawTextAt(Label, Screen.X, Screen.Y - Radius - 18.0f * Scale, WithAlpha(CockpitAmber, Alpha), 1.05f * Scale, true);
+}
+
+void AIonCockpitHudActor::DrawAlertIndicator(float Scale, float Alpha)
+{
+    const UGameInstance* GameInstance = GetGameInstance();
+    const UGeoWatchSubsystem* Watch = GameInstance ? GameInstance->GetSubsystem<UGeoWatchSubsystem>() : nullptr;
+    if (!Watch) return;
+    const int32 Unseen = Watch->GetUnseenCount();
+    FString Text = TEXT("ALERTS");
+    if (Unseen > 0) Text = FString::Printf(TEXT("ALERTS %d"), Unseen);
+    const FLinearColor Color = Unseen > 0 ? CockpitRed : CockpitDim;
+    float TextWidth = 0.0f, TextHeight = 0.0f;
+    Canvas->TextSize(GEngine->GetMediumFont(), Text, TextWidth, TextHeight, 1.15f * Scale, 1.15f * Scale);
+    const float BadgeX = Canvas->SizeX - TextWidth - 30.0f * Scale;
+    const float BadgeY = 12.0f * Scale;
+    if (Unseen > 0)
+    {
+        // Pulses so a wall display draws the eye to it without reading the
+        // number, exactly the point of an at-a-glance indicator.
+        const double WorldSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+        const float Pulse = 0.5f + 0.5f * FMath::Sin(static_cast<float>(WorldSeconds) * 5.0f);
+        DrawRect(BadgeX - 8.0f * Scale, BadgeY - 3.0f * Scale, TextWidth + 16.0f * Scale, TextHeight + 6.0f * Scale, WithAlpha(CockpitRed, (0.18f + 0.22f * Pulse) * Alpha));
+    }
+    DrawTextAt(Text, BadgeX, BadgeY, WithAlpha(Color, Alpha), 1.15f * Scale);
 }
 
 bool AIonCockpitHudActor::DrawRegionFlag(const FString& RegionName, float X, float Y, float Width, float Height, float Alpha)
