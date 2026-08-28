@@ -21,12 +21,25 @@
 
 ## Known bootstrap compromise
 
-Great-circle arcs are currently represented by twelve instanced cylinder
-segments. This proves batching and composition without binary Niagara assets,
-but rebuilding instances during expiry is not the final high-density path. The
-production renderer should consume compact render items through Niagara Data
-Channels or a custom GPU buffer, retain stable IDs, fade on GPU, and aggregate
-by screen-space density.
+Great-circle arcs are currently represented by instanced cylinder segments
+(`SegmentsPerArc`, default 16) rather than a compact per-arc GPU record. This
+proves batching and composition without binary Niagara assets, but every
+segment is still a CPU-owned instance. The production renderer should consume
+compact render items through Niagara Data Channels or a custom GPU buffer,
+retain stable IDs, fade on GPU, and aggregate by screen-space density.
+
+Expiry, the capacity trim, and moving-marker dead reckoning no longer rebuild
+their instanced components: `AGeoArcLayerActor` and `AGeoPointLayerActor` both
+give each item a stable render slot (a fixed-size instance block for arcs, a
+single instance for points) tracked in a dense, hole-free run per component,
+and insert/update/remove touch only the affected slot plus, on removal, the
+one slot swapped in to keep the run dense (see `GeoRenderSlotMath.h`).
+Removing N items now costs O(N), not O(surviving population). Both actors
+expose `GetRenderStatistics()` (full rebuilds, incremental inserts/removals/
+updates, capacity/expiry evictions, tracked/rendered counts) so this can be
+watched at runtime instead of assumed. What remains unmoved to the GPU is the
+per-segment CPU representation itself and the age/fade animation driving it -
+that is the Niagara/custom-buffer migration described above, not yet started.
 
 Quality presets will tune visible counts, segment resolution, volumetrics,
 atmosphere, clouds, field resolution, and aggregation thresholds. Actual values
