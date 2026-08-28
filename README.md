@@ -156,6 +156,7 @@ Full instructions, including the installer, in [docs/BUILDING.md](docs/BUILDING.
 | [COMPONENTS.md](docs/COMPONENTS.md) | Canonical list of sources, domains, contexts and modules |
 | [ARCHITECTURE.md](docs/ARCHITECTURE.md) | Boundaries, canonical model, retained state, rendering path |
 | [IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md) | What works, what is rough, what is missing |
+| [USER_VALUE_ROADMAP.md](docs/USER_VALUE_ROADMAP.md) | Open work ranked by expected benefit to the operator |
 | [CHANGELOG.md](CHANGELOG.md) | Released changes |
 | [DATA_CONTRACT.md](docs/DATA_CONTRACT.md) | The canonical envelope |
 
