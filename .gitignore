@@ -28,9 +28,14 @@ Desktop.ini
 # Packaged builds
 dist/
 
-# Cached raw NASA downloads (tools/fetch-earth-textures.py rebuilds them)
-unreal/SourceAssets/NASA/download-*.jpg
-unreal/SourceAssets/NASA/starmap_2020_*.exr
+# Cached raw and converted NASA downloads (tools/fetch-earth-textures.py
+# rebuilds all of it; the day/night textures alone can be several hundred MB
+# at full resolution and must never enter the repository). Only the hand
+# written attribution file in this directory is tracked.
+unreal/SourceAssets/NASA/*.jpg
+unreal/SourceAssets/NASA/*.png
+unreal/SourceAssets/NASA/*.exr
+unreal/SourceAssets/NASA/*.tif
 
 # Personal collector setup (callsign, home QTH) - never published
 collector/configs/local.json
