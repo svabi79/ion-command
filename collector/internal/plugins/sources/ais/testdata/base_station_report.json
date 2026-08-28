@@ -1,0 +1,31 @@
+{
+  "MessageType": "BaseStationReport",
+  "MetaData": {
+    "MMSI": 2241023,
+    "ShipName": "",
+    "Latitude": 51.9,
+    "Longitude": 4.5
+  },
+  "Message": {
+    "BaseStationReport": {
+      "MessageID": 4,
+      "RepeatIndicator": 0,
+      "UserID": 2241023,
+      "Valid": true,
+      "UtcYear": 2026,
+      "UtcMonth": 8,
+      "UtcDay": 28,
+      "UtcHour": 12,
+      "UtcMinute": 0,
+      "UtcSecond": 0,
+      "PositionAccuracy": true,
+      "Longitude": 4.5,
+      "Latitude": 51.9,
+      "FixType": 1,
+      "LongRangeEnable": false,
+      "Spare": 0,
+      "Raim": false,
+      "CommunicationState": 0
+    }
+  }
+}

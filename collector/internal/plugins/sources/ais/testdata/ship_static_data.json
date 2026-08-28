@@ -1,0 +1,27 @@
+{
+  "MessageType": "ShipStaticData",
+  "MetaData": {
+    "MMSI": 368207620,
+    "ShipName": "EXAMPLE VESSEL"
+  },
+  "Message": {
+    "ShipStaticData": {
+      "MessageID": 5,
+      "RepeatIndicator": 0,
+      "UserID": 368207620,
+      "Valid": true,
+      "AisVersion": 0,
+      "ImoNumber": 9234567,
+      "CallSign": "WDF1234",
+      "Name": "EXAMPLE VESSEL",
+      "Type": 70,
+      "Dimension": { "A": 100, "B": 20, "C": 10, "D": 10 },
+      "FixType": 1,
+      "Eta": { "Month": 8, "Day": 30, "Hour": 14, "Minute": 30 },
+      "MaximumStaticDraught": 8.5,
+      "Destination": "ROTTERDAM",
+      "Dte": false,
+      "Spare": false
+    }
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "MessageType": "PositionReport",
+  "MetaData": {
+    "MMSI": 366999999,
+    "ShipName": "EXAMPLE NOFIX",
+    "Latitude": 91,
+    "Longitude": 181
+  },
+  "Message": {
+    "PositionReport": {
+      "MessageID": 1,
+      "RepeatIndicator": 0,
+      "UserID": 366999999,
+      "Valid": true,
+      "NavigationalStatus": 15,
+      "RateOfTurn": -128,
+      "Sog": 102.3,
+      "PositionAccuracy": false,
+      "Longitude": 181,
+      "Latitude": 91,
+      "Cog": 360.0,
+      "TrueHeading": 511,
+      "Timestamp": 60,
+      "SpecialManoeuvreIndicator": 0,
+      "Spare": 0,
+      "Raim": false,
+      "CommunicationState": 0
+    }
+  }
+}

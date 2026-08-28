@@ -1,0 +1,29 @@
+{
+  "MessageType": "StaticDataReport",
+  "MetaData": {
+    "MMSI": 235012345,
+    "ShipName": "EXAMPLE YACHT"
+  },
+  "Message": {
+    "StaticDataReport": {
+      "MessageID": 24,
+      "RepeatIndicator": 0,
+      "UserID": 235012345,
+      "Valid": true,
+      "Reserved": 0,
+      "PartNumber": true,
+      "ReportA": { "Valid": false, "Name": "" },
+      "ReportB": {
+        "Valid": true,
+        "ShipType": 37,
+        "VendorIDName": "ACME",
+        "VenderIDModel": 1,
+        "VenderIDSerial": 42,
+        "CallSign": "2ABC3",
+        "Dimension": { "A": 8, "B": 2, "C": 2, "D": 2 },
+        "FixType": 1,
+        "Spare": 0
+      }
+    }
+  }
+}
