@@ -141,7 +141,7 @@ private:
     struct FMenuRow
     {
         FString Label;
-        FString Kind;   // "paths", "heatmap", "ionosphere", or "domain"
+        FString Kind;   // "paths", "heatmap", "ionosphere", "trails", or "domain"
         FString Domain; // set for kind == "domain"
         bool bVisible = true;
         FVector2D Min = FVector2D::ZeroVector;

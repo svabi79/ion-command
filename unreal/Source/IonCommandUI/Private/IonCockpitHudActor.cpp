@@ -11,6 +11,7 @@
 #include "GeoSelectionSubsystem.h"
 #include "GeoStreamSubsystem.h"
 #include "GeoTimelineSubsystem.h"
+#include "GeoTrackLayerActor.h"
 #include "HAL/PlatformTime.h"
 #include "IonActivityHeatmapActor.h"
 #include "IonIonosphereActor.h"
@@ -729,6 +730,11 @@ void AIonCockpitHudActor::DrawOverlayMenu(float Scale, float Alpha)
         MenuRows.Add({TEXT("IONOSPHERE SHELLS"), TEXT("ionosphere"), FString(), !It->IsHidden()});
         break;
     }
+    for (TActorIterator<AGeoTrackLayerActor> It(GetWorld()); It; ++It)
+    {
+        MenuRows.Add({TEXT("TRAILS"), TEXT("trails"), FString(), !It->IsHidden()});
+        break;
+    }
     if (PointLayer)
     {
         MenuRows.Add({TEXT("ALT EXAGGERATION 12X"), TEXT("altscale"), FString(), PointLayer->IsAltitudeExaggerationEnabled()});
@@ -807,6 +813,10 @@ void AIonCockpitHudActor::ApplyMenuToggle(const FMenuRow& Row)
     else if (Row.Kind == TEXT("ionosphere"))
     {
         for (TActorIterator<AIonIonosphereActor> It(GetWorld()); It; ++It) It->SetActorHiddenInGame(!It->IsHidden());
+    }
+    else if (Row.Kind == TEXT("trails"))
+    {
+        for (TActorIterator<AGeoTrackLayerActor> It(GetWorld()); It; ++It) It->SetActorHiddenInGame(!It->IsHidden());
     }
     else if (Row.Kind == TEXT("altscale"))
     {
