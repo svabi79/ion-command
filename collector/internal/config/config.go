@@ -60,6 +60,26 @@ type Source struct {
 	// RouteLookup toggles the callsign → origin/destination enrichment on
 	// aviation.adsb sources (adsbdb.com). Unset means enabled.
 	RouteLookup *bool `json:"routeLookup,omitempty"`
+	// Bounding box (WGS84) for area-query sources that filter a rectangle
+	// rather than a point + radius (e.g. NASA FIRMS fire detections).
+	// BoxWest/BoxSouth is the lower-left corner, BoxEast/BoxNorth the
+	// upper-right; the box does not wrap the antimeridian. All four zero
+	// means "unset, use the source's default".
+	BoxWest  float64 `json:"boxWest,omitempty"`
+	BoxSouth float64 `json:"boxSouth,omitempty"`
+	BoxEast  float64 `json:"boxEast,omitempty"`
+	BoxNorth float64 `json:"boxNorth,omitempty"`
+	// LookBackHours bounds how far back a snapshot-style source considers a
+	// record current (e.g. FIRMS fire detections have no push/update model,
+	// only a rolling window of recent satellite passes).
+	LookBackHours float64 `json:"lookBackHours,omitempty"`
+	// Satellite selects among several instruments/platforms a source can
+	// poll (e.g. FIRMS: VIIRS_SNPP, VIIRS_NOAA20, VIIRS_NOAA21, MODIS).
+	Satellite string `json:"satellite,omitempty"`
+	// MapKey is a provider API key from configuration (e.g. NASA FIRMS
+	// MAP_KEY). Never committed with a real value; sources that can also
+	// work without one should treat this as optional.
+	MapKey string `json:"mapKey,omitempty"`
 }
 
 type Config struct {
