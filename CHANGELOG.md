@@ -19,6 +19,19 @@ superseded configurations, is in
   busiest 300 currently-updating entities and 12 points each, thin and
   quick to fade by default so it stays a subtle wake rather than turning a
   busy globe into spaghetti. Toggle with `T` or the overlay menu's TRAILS row.
+- **AIS ships (`ais.aisstream` + `maritime` domain).** Global vessel traffic
+  from aisstream.io's free WebSocket feed joins static/voyage data (name,
+  type, call sign, destination, ETA) onto each vessel's position stream from
+  a bounded per-MMSI cache, classifies and excludes non-vessel AIS
+  participants (base stations, aids to navigation, SAR aircraft), and
+  recognises every AIS "not available" sentinel (position, speed, course,
+  heading, rate of turn) instead of rendering them as real values. Ships
+  **disabled by default** — it needs a free API key the operator must obtain
+  themselves; see
+  [DATA-SOURCES.md](docs/DATA-SOURCES.md#enabling-ais-ships-aisstreamio).
+  **The live connection is unverified**: built and unit-tested entirely
+  against fixtures from aisstream.io's published documentation and schema,
+  with no API key available in the environment this was built in.
 - **Flight routes in the aircraft tooltip.** Aircraft seen by an
   `aviation.adsb` circle show their filed origin and destination in plain
   words (`CDG Paris  >  TUN Tunis`), resolved per callsign via adsbdb.com —

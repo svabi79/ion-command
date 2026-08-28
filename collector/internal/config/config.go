@@ -80,6 +80,22 @@ type Source struct {
 	// MAP_KEY). Never committed with a real value; sources that can also
 	// work without one should treat this as optional.
 	MapKey string `json:"mapKey,omitempty"`
+	// ApiKey authenticates sources that require one (e.g. ais.aisstream).
+	// Always supplied by the operator's own configuration file, never
+	// committed.
+	ApiKey string `json:"apiKey,omitempty"`
+	// BoundingBoxes limits an area-subscription source (ais.aisstream) to the
+	// regions the operator cares about. The provider requires at least one.
+	BoundingBoxes []BoundingBox `json:"boundingBoxes,omitempty"`
+}
+
+// BoundingBox is a WGS84 latitude/longitude rectangle used by sources that
+// accept more than one region of interest per subscription.
+type BoundingBox struct {
+	MinLatitude  float64 `json:"minLatitude"`
+	MaxLatitude  float64 `json:"maxLatitude"`
+	MinLongitude float64 `json:"minLongitude"`
+	MaxLongitude float64 `json:"maxLongitude"`
 }
 
 type Config struct {

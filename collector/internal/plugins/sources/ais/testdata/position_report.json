@@ -1,0 +1,30 @@
+{
+  "MessageType": "PositionReport",
+  "MetaData": {
+    "MMSI": 368207620,
+    "ShipName": "EXAMPLE VESSEL",
+    "Latitude": 25.7617,
+    "Longitude": -80.1918
+  },
+  "Message": {
+    "PositionReport": {
+      "MessageID": 1,
+      "RepeatIndicator": 0,
+      "UserID": 368207620,
+      "Valid": true,
+      "NavigationalStatus": 0,
+      "RateOfTurn": 0,
+      "Sog": 12.4,
+      "PositionAccuracy": true,
+      "Longitude": -80.1918,
+      "Latitude": 25.7617,
+      "Cog": 86.7,
+      "TrueHeading": 87,
+      "Timestamp": 32,
+      "SpecialManoeuvreIndicator": 0,
+      "Spare": 0,
+      "Raim": false,
+      "CommunicationState": 0
+    }
+  }
+}

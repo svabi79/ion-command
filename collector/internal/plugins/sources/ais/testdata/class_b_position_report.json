@@ -1,0 +1,35 @@
+{
+  "MessageType": "StandardClassBPositionReport",
+  "MetaData": {
+    "MMSI": 235012345,
+    "ShipName": "EXAMPLE YACHT",
+    "Latitude": 50.9,
+    "Longitude": -1.4
+  },
+  "Message": {
+    "StandardClassBPositionReport": {
+      "MessageID": 18,
+      "RepeatIndicator": 0,
+      "UserID": 235012345,
+      "Valid": true,
+      "Spare1": 0,
+      "Sog": 0.1,
+      "PositionAccuracy": true,
+      "Longitude": -1.4,
+      "Latitude": 50.9,
+      "Cog": 360.0,
+      "TrueHeading": 511,
+      "Timestamp": 40,
+      "Spare2": 0,
+      "ClassBUnit": true,
+      "ClassBDisplay": false,
+      "ClassBDsc": false,
+      "ClassBBand": true,
+      "ClassBMsg22": true,
+      "AssignedMode": false,
+      "Raim": false,
+      "CommunicationStateIsItdma": true,
+      "CommunicationState": 0
+    }
+  }
+}
