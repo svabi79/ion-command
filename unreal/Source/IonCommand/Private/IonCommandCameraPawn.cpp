@@ -8,6 +8,7 @@
 #include "GeoMathLibrary.h"
 #include "GeoReplaySubsystem.h"
 #include "Misc/CommandLine.h"
+#include "IonOperatorConfig.h"
 #include "Misc/ConfigCacheIni.h"
 #include "Misc/Parse.h"
 #include "GeoSelectionSubsystem.h"
@@ -178,7 +179,7 @@ void AIonCommandCameraPawn::OrbitPitch(float Value)
     // ORBIT Y in the settings panel restores the old direction. Re-read per
     // event, like the own-station ini reads, so the toggle applies live.
     bool bInvert = false;
-    GConfig->GetBool(TEXT("IonCommand.Input"), TEXT("InvertOrbitY"), bInvert, GGameIni);
+    IonOperatorConfig::GetBool(TEXT("IonCommand.Input"), TEXT("InvertOrbitY"), bInvert);
     FRotator Rotation = SpringArm->GetRelativeRotation();
     Rotation.Pitch = FMath::Clamp(Rotation.Pitch + Value * (bInvert ? -0.20f : 0.20f), -75.0f, 65.0f);
     SpringArm->SetRelativeRotation(Rotation);

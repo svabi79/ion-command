@@ -3,6 +3,7 @@
 #include "Components/StaticMeshComponent.h"
 #include "GeoMathLibrary.h"
 #include "Materials/MaterialInterface.h"
+#include "IonOperatorConfig.h"
 #include "Misc/ConfigCacheIni.h"
 #include "UObject/ConstructorHelpers.h"
 
@@ -37,7 +38,7 @@ AHamRadioOwnStationActor::AHamRadioOwnStationActor()
 FString AHamRadioOwnStationActor::ConfiguredCallsign()
 {
     FString Callsign = TEXT("N0CALL");
-    GConfig->GetString(TEXT("IonCommand.Station"), TEXT("Callsign"), Callsign, GGameIni);
+    IonOperatorConfig::GetString(TEXT("IonCommand.Station"), TEXT("Callsign"), Callsign);
     return Callsign;
 }
 
@@ -50,19 +51,56 @@ TArray<FString> AHamRadioOwnStationActor::OwnStationEntityIds()
 FString AHamRadioOwnStationActor::ConfiguredLocator()
 {
     FString Locator = TEXT("JN00AA");
-    GConfig->GetString(TEXT("IonCommand.Station"), TEXT("Locator"), Locator, GGameIni);
+    IonOperatorConfig::GetString(TEXT("IonCommand.Station"), TEXT("Locator"), Locator);
     return Locator;
+}
+
+bool AHamRadioOwnStationActor::IsStationConfigured()
+{
+    // The shipped defaults are a placeholder, not a location: N0CALL is the
+    // reserved "no callsign" token and JN00AA is a real grid square on the
+    // Spanish coast. Drawing a marker there would assert an operator position
+    // that is simply wrong, so an unconfigured station shows nothing at all.
+    return ConfiguredCallsign() != TEXT("N0CALL") && ConfiguredLocator() != TEXT("JN00AA");
 }
 
 void AHamRadioOwnStationActor::BeginPlay()
 {
     Super::BeginPlay();
+    if (!IsStationConfigured())
+    {
+        SetActorHiddenInGame(true);
+        UE_LOG(LogTemp, Warning, TEXT("ION COMMAND own station: not configured (callsign=%s locator=%s); marker hidden. Set it in the settings panel."),
+            *ConfiguredCallsign(), *ConfiguredLocator());
+        return;
+    }
     AppliedLocator = ConfiguredLocator();
     FGeoPosition Position;
     if (UGeoMathLibrary::MaidenheadToLatLon(AppliedLocator, Position))
     {
         const FVector Location = UGeoMathLibrary::LatitudeLongitudeToUnitSphere(Position.Latitude, Position.Longitude) * (GlobeRadius + 12.0);
         SetActorLocation(Location);
+        SetActorHiddenInGame(false);
+        // Anchor the station in the saved config. A hand-written Game.ini does
+        // NOT survive a run: Unreal rewrites the saved hierarchy on shutdown
+        // and keeps only values that went through GConfig, so the file is
+        // deleted and the next start silently falls back to the placeholder.
+        // Writing the values back once makes an externally provisioned station
+        // stick.
+        // Anchor the station in the operator ini. A station provisioned in
+        // the engine's own Game ini (by hand, or by an installer) would be
+        // dropped on shutdown; copying it here once makes it permanent.
+        IonOperatorConfig::SetString(TEXT("IonCommand.Station"), TEXT("Callsign"), ConfiguredCallsign());
+        IonOperatorConfig::SetString(TEXT("IonCommand.Station"), TEXT("Locator"), AppliedLocator);
+        // One line at startup so "my station sits in the wrong place" can be
+        // diagnosed from a log instead of by eye on a cluttered globe.
+        UE_LOG(LogTemp, Display, TEXT("ION COMMAND own station: callsign=%s locator=%s -> lat=%.4f lon=%.4f world=(%.1f, %.1f, %.1f)"),
+            *ConfiguredCallsign(), *AppliedLocator, Position.Latitude, Position.Longitude, Location.X, Location.Y, Location.Z);
+    }
+    else
+    {
+        SetActorHiddenInGame(true);
+        UE_LOG(LogTemp, Warning, TEXT("ION COMMAND own station: locator %s could not be parsed; marker hidden"), *AppliedLocator);
     }
 }
 
@@ -77,9 +115,10 @@ void AHamRadioOwnStationActor::Tick(float DeltaSeconds)
     if (CurrentLocator != AppliedLocator)
     {
         FGeoPosition Position;
-        if (UGeoMathLibrary::MaidenheadToLatLon(CurrentLocator, Position))
+        if (IsStationConfigured() && UGeoMathLibrary::MaidenheadToLatLon(CurrentLocator, Position))
         {
             SetActorLocation(UGeoMathLibrary::LatitudeLongitudeToUnitSphere(Position.Latitude, Position.Longitude) * (GlobeRadius + 12.0));
+            SetActorHiddenInGame(false);
             AppliedLocator = CurrentLocator;
         }
     }

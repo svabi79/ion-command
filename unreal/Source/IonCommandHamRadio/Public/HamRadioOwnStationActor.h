@@ -25,6 +25,9 @@ public:
     static FString ConfiguredLocator();
     // Entity ids the own station appears under in the canonical model.
     static TArray<FString> OwnStationEntityIds();
+    // False while the shipped placeholder (N0CALL / JN00AA) is still in
+    // place, so nothing claims a position the operator never set.
+    static bool IsStationConfigured();
 
     UPROPERTY(EditAnywhere, Category="ION COMMAND|Station") double GlobeRadius = 1000.0;
 

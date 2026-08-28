@@ -3,6 +3,7 @@
 #include "GeoDataSubsystem.h"
 #include "GeoSearchSubsystem.h"
 #include "GeoTimelineSubsystem.h"
+#include "IonOperatorConfig.h"
 #include "Misc/ConfigCacheIni.h"
 
 void UGeoWatchSubsystem::Initialize(FSubsystemCollectionBase& Collection)
@@ -89,7 +90,7 @@ void UGeoWatchSubsystem::RemoveWatch(const FString& Query)
 void UGeoWatchSubsystem::LoadPersistedWatches()
 {
     TArray<FString> Lines;
-    GConfig->GetArray(TEXT("IonCommand.Watchlist"), TEXT("Query"), Lines, GGameIni);
+    IonOperatorConfig::GetArray(TEXT("IonCommand.Watchlist"), TEXT("Query"), Lines);
     Watches.Reset();
     for (const FString& Line : Lines)
     {
@@ -111,6 +112,9 @@ void UGeoWatchSubsystem::LoadPersistedWatches()
         Entry.CreatedUtc = FDateTime::UtcNow();
         Watches.Add(MoveTemp(Entry));
     }
+    // A watchlist that quietly fails to come back looks exactly like one the
+    // operator never saved, so say what was restored.
+    UE_LOG(LogTemp, Display, TEXT("ION COMMAND watchlist: restored %d of %d persisted entries"), Watches.Num(), Lines.Num());
 }
 
 void UGeoWatchSubsystem::SavePersistedWatches() const
@@ -121,8 +125,7 @@ void UGeoWatchSubsystem::SavePersistedWatches() const
     {
         Lines.Add(Entry.Query);
     }
-    GConfig->SetArray(TEXT("IonCommand.Watchlist"), TEXT("Query"), Lines, GGameIni);
-    GConfig->Flush(false, GGameIni);
+    IonOperatorConfig::SetArray(TEXT("IonCommand.Watchlist"), TEXT("Query"), Lines);
 }
 
 void UGeoWatchSubsystem::IngestMessage(const FGeoMessageEnvelope& Message, bool bTimelineIsLive)

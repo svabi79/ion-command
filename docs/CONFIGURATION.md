@@ -28,9 +28,31 @@ Press **O** to open the overlay menu, then click **SETTINGS >**.
 While a text field is focused all hotkeys are suspended, so typing a callsign
 cannot toggle layers.
 
-Values persist to `Game.ini` under `[IonCommand.Station]` (callsign, locator),
-`[IonCommand.Display]` (`MarkerLifetime`, `MinFlightLevelFt`, `ShowGround`) and
-`[IonCommand.Input]` (`InvertOrbitY`).
+Values persist to `<Saved>/Config/IonOperator.ini` under `[IonCommand.Station]`
+(callsign, locator), `[IonCommand.Display]` (`MarkerLifetime`,
+`MinFlightLevelFt`, `ShowGround`), `[IonCommand.Input]` (`InvertOrbitY`) and
+`[IonCommand.Watchlist]` (`Query`).
+
+That file is the client's own, deliberately outside Unreal's config hierarchy.
+Settings used to be written to the saved `Game.ini`, which does not survive:
+Unreal rewrites the saved hierarchy at shutdown and keeps only what the engine
+itself knows about, so a hand-provisioned station - or one saved from the
+settings panel - was silently gone by the next start, falling back to the
+`N0CALL` / `JN00AA` placeholder. The placeholder is a real grid square on the
+Spanish coast, so the marker did not disappear; it moved. An unconfigured
+station now draws nothing at all rather than asserting a position the operator
+never set.
+
+To provision a station without opening the settings panel, write the file
+directly before first start:
+
+```ini
+[IonCommand.Station]
+Callsign=HB9HSJ
+Locator=JN47om
+```
+
+For a packaged build that is `dist/windows/IonCommand/Saved/Config/IonOperator.ini`.
 
 ## Client: overlay menu
 

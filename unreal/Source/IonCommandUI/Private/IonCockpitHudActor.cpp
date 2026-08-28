@@ -18,6 +18,7 @@
 #include "IonActivityHeatmapActor.h"
 #include "IonIonosphereActor.h"
 #include "Misc/CommandLine.h"
+#include "IonOperatorConfig.h"
 #include "Misc/ConfigCacheIni.h"
 #include "Misc/Parse.h"
 
@@ -693,8 +694,8 @@ void AIonCockpitHudActor::DrawOwnStationReticle(float Scale, float Alpha)
     // aircraft/marker traffic is over the location.
     FString Callsign = TEXT("N0CALL");
     FString Locator = TEXT("JN00AA");
-    GConfig->GetString(TEXT("IonCommand.Station"), TEXT("Callsign"), Callsign, GGameIni);
-    GConfig->GetString(TEXT("IonCommand.Station"), TEXT("Locator"), Locator, GGameIni);
+    IonOperatorConfig::GetString(TEXT("IonCommand.Station"), TEXT("Callsign"), Callsign);
+    IonOperatorConfig::GetString(TEXT("IonCommand.Station"), TEXT("Locator"), Locator);
     if (Callsign == TEXT("N0CALL")) return;
 
     FGeoPosition Position;
@@ -861,7 +862,7 @@ void AIonCockpitHudActor::ApplyMenuToggle(const FMenuRow& Row)
         // Build the own-station entity ids the same way the world station and
         // reticle do, so no cross-module dependency is needed here.
         FString Callsign = TEXT("N0CALL");
-        GConfig->GetString(TEXT("IonCommand.Station"), TEXT("Callsign"), Callsign, GGameIni);
+        IonOperatorConfig::GetString(TEXT("IonCommand.Station"), TEXT("Callsign"), Callsign);
         const TArray<FString> OwnIds = {TEXT("hamradio:station:") + Callsign, TEXT("hamradio:receiver:") + Callsign};
         for (TActorIterator<AGeoArcLayerActor> It(GetWorld()); It; ++It)
         {
@@ -887,8 +888,10 @@ void AIonCockpitHudActor::OpenSettings()
 
 void AIonCockpitHudActor::PersistSetting(const TCHAR* Section, const TCHAR* Field, const FString& Value)
 {
-    GConfig->SetString(Section, Field, *Value, GGameIni);
-    GConfig->Flush(false, GGameIni);
+    // Operator settings go to the operator ini, not the engine's Game
+    // hierarchy: Unreal prunes unknown sections there on shutdown, which
+    // silently reverted everything typed into this panel.
+    IonOperatorConfig::SetString(Section, Field, Value);
 }
 
 void AIonCockpitHudActor::LoadAndApplySettings()
@@ -896,17 +899,17 @@ void AIonCockpitHudActor::LoadAndApplySettings()
     AGeoPointLayerActor* PointLayer = FindPointLayer();
     if (!PointLayer) return;
     double Lifetime = 0.0;
-    if (GConfig->GetDouble(TEXT("IonCommand.Display"), TEXT("MarkerLifetime"), Lifetime, GGameIni) && Lifetime > 0.0)
+    if (IonOperatorConfig::GetDouble(TEXT("IonCommand.Display"), TEXT("MarkerLifetime"), Lifetime) && Lifetime > 0.0)
     {
         PointLayer->SetMarkerLifetimeSeconds(Lifetime);
     }
     double MinFeet = 0.0;
-    if (GConfig->GetDouble(TEXT("IonCommand.Display"), TEXT("MinFlightLevelFt"), MinFeet, GGameIni))
+    if (IonOperatorConfig::GetDouble(TEXT("IonCommand.Display"), TEXT("MinFlightLevelFt"), MinFeet))
     {
         PointLayer->SetMinAircraftAltitudeMeters(MinFeet * 0.3048);
     }
     bool bShowGround = true;
-    if (GConfig->GetBool(TEXT("IonCommand.Display"), TEXT("ShowGround"), bShowGround, GGameIni))
+    if (IonOperatorConfig::GetBool(TEXT("IonCommand.Display"), TEXT("ShowGround"), bShowGround))
     {
         PointLayer->SetShowGroundAircraft(bShowGround);
     }
@@ -919,7 +922,7 @@ void AIonCockpitHudActor::CycleSetting(const FString& Key)
         // The camera pawn re-reads this on every orbit input, so the flip
         // applies immediately; no layer actor involved.
         bool bInvert = false;
-        GConfig->GetBool(TEXT("IonCommand.Input"), TEXT("InvertOrbitY"), bInvert, GGameIni);
+        IonOperatorConfig::GetBool(TEXT("IonCommand.Input"), TEXT("InvertOrbitY"), bInvert);
         PersistSetting(TEXT("IonCommand.Input"), TEXT("InvertOrbitY"), bInvert ? TEXT("False") : TEXT("True"));
         return;
     }
@@ -1020,13 +1023,13 @@ void AIonCockpitHudActor::DrawSettings(float Scale, float Alpha)
 {
     AGeoPointLayerActor* PointLayer = FindPointLayer();
     FString Callsign = TEXT("N0CALL"), Locator = TEXT("JN00AA");
-    GConfig->GetString(TEXT("IonCommand.Station"), TEXT("Callsign"), Callsign, GGameIni);
-    GConfig->GetString(TEXT("IonCommand.Station"), TEXT("Locator"), Locator, GGameIni);
+    IonOperatorConfig::GetString(TEXT("IonCommand.Station"), TEXT("Callsign"), Callsign);
+    IonOperatorConfig::GetString(TEXT("IonCommand.Station"), TEXT("Locator"), Locator);
     const double LifetimeS = PointLayer ? PointLayer->GetMarkerLifetimeSeconds() : 300.0;
     const double MinFt = PointLayer ? PointLayer->GetMinAircraftAltitudeMeters() / 0.3048 : 0.0;
     const bool bGround = PointLayer ? PointLayer->GetShowGroundAircraft() : true;
     bool bInvertY = false;
-    GConfig->GetBool(TEXT("IonCommand.Input"), TEXT("InvertOrbitY"), bInvertY, GGameIni);
+    IonOperatorConfig::GetBool(TEXT("IonCommand.Input"), TEXT("InvertOrbitY"), bInvertY);
 
     SettingsRows.Reset();
     SettingsRows.Add({TEXT("CALLSIGN"), TEXT("callsign"), Callsign, true});
