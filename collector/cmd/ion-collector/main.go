@@ -24,9 +24,11 @@ import (
 	"github.com/ion-command/ion-command/collector/internal/plugins/domains/orbital"
 	"github.com/ion-command/ion-command/collector/internal/plugins/domains/spaceweather"
 	"github.com/ion-command/ion-command/collector/internal/plugins/domains/weather"
+	"github.com/ion-command/ion-command/collector/internal/plugins/domains/wildfire"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/adsb"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/blitzortung"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/celestrak"
+	"github.com/ion-command/ion-command/collector/internal/plugins/sources/firms"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/kc2g"
 	mocksource "github.com/ion-command/ion-command/collector/internal/plugins/sources/mock"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/opensky"
@@ -60,7 +62,7 @@ func run(configPath, listenAddress string, logger *slog.Logger) error {
 		cfg.Server.ListenAddress = listenAddress
 	}
 	registry := plugins.NewRegistry()
-	for _, domain := range []plugins.Domain{hamradio.New(), weather.New(), spaceweather.New(), ionosphere.New(), geophysics.New(), orbital.New(), aviation.New()} {
+	for _, domain := range []plugins.Domain{hamradio.New(), weather.New(), spaceweather.New(), ionosphere.New(), geophysics.New(), orbital.New(), aviation.New(), wildfire.New()} {
 		if err := registry.RegisterDomain(domain); err != nil {
 			return err
 		}
@@ -89,6 +91,8 @@ func run(configPath, listenAddress string, logger *slog.Logger) error {
 			source, err = blitzortung.New(sourceConfig, logger)
 		case sourceConfig.Type == "earthquake.usgs":
 			source, err = usgs.New(sourceConfig, logger)
+		case sourceConfig.Type == "wildfire.firms":
+			source, err = firms.New(sourceConfig, logger)
 		case sourceConfig.Type == "orbital.celestrak":
 			source, err = celestrak.New(sourceConfig, logger)
 		case sourceConfig.Type == "aviation.adsb":
