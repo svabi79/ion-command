@@ -80,16 +80,32 @@ def import_texture(source: Path, asset_name: str, virtual_texture: bool = False)
         # power_of_two_mode must be set explicitly too: without it, VT
         # silently fails to build for a non-power-of-two source and
         # virtual_texture_streaming reads back False after saving, with no
-        # error anywhere (verified: T_EarthDay's 21600x10800 padded to
-        # 32768x16384 and streamed correctly through import alone, but
-        # T_EarthNight's 13500x6750 stayed un-padded and non-VT until this
-        # property was set too - the two sources otherwise went through the
-        # identical code path). Padding is transparent to material UVs -
-        # confirmed for T_EarthDay by rendering the live client and visually
-        # inspecting the result: real, correctly aligned Blue Marble imagery,
-        # not a squashed or letterboxed sub-rectangle.
-        imported.set_editor_property("power_of_two_mode", unreal.TexturePowerOfTwoSetting.PAD_TO_POWER_OF_TWO)
+        # error anywhere (verified: T_EarthNight's 13500x6750 stayed
+        # un-padded and non-VT until this property was set).
+        #
+        # It must be STRETCH, never PAD. Padding is NOT transparent to
+        # material UVs: it leaves the source image in the corner of a larger
+        # power-of-two canvas, so UV 1.0 lands in the empty padding instead
+        # of at longitude +180. The whole map is then stretched east by the
+        # padding ratio - 21600/32768 for the day texture and 13500/16384
+        # for the night one, which is also why the two sides of the
+        # terminator were displaced by different amounts. Measured on the
+        # packaged client: a camera centred on the operator's own station
+        # (47.52 N, 9.21 E) rendered 38 N / 50 E (the Caspian) under the
+        # night texture, and a camera on California rendered Panama under
+        # the day one - both exactly the padding ratio predicts. Stretching
+        # resamples the source to fill the canvas, so UV 0..1 spans the
+        # full map and no material needs to know the source dimensions.
+        imported.set_editor_property("power_of_two_mode", unreal.TexturePowerOfTwoSetting.STRETCH_TO_POWER_OF_TWO)
         imported.set_editor_property("virtual_texture_streaming", True)
+        # Read back rather than trust the setter: a padded texture renders a
+        # plausible-looking Earth in the wrong place, which no amount of
+        # looking at a screenshot reliably catches.
+        mode = imported.get_editor_property("power_of_two_mode")
+        if mode != unreal.TexturePowerOfTwoSetting.STRETCH_TO_POWER_OF_TWO:
+            raise RuntimeError(
+                f"{asset_name}: power_of_two_mode is {mode}; a PAD mode displaces the "
+                f"whole map east by the padding ratio (see the comment above)")
     else:
         imported.set_editor_property("never_stream", True)
     save_asset(asset_path)

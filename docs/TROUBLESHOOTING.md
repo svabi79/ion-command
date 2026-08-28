@@ -110,6 +110,47 @@ A running client locks the packaged files; the archive step can skip them while
 still reporting success. Close the client, repackage, and verify the timestamp
 of `dist\...\IonCommand.exe`.
 
+## Something is drawn in the wrong place on the globe
+
+Two different faults look identical from the operator's chair - the marker sits
+over the wrong country - and they are told apart by asking whether the marker
+moved or the map underneath it did.
+
+**A single marker is wrong, the coastlines are right.** The setting that places
+it was lost. Check the startup log:
+
+```
+ION COMMAND own station: callsign=HB9HSJ locator=JN47om -> lat=47.5208 lon=9.2083
+```
+
+A line reading `not configured` means the client fell back to the placeholder
+and hid the marker; a wrong locator there means the config, not the renderer,
+is at fault. See CONFIGURATION.md for `IonOperator.ini`.
+
+**Everything is wrong together - the marker, the coastlines, the terminator.**
+The Earth texture is misaligned against the geometry. Both markers and the
+camera derive their positions from the same sphere convention, so a marker
+always lands where the camera says it should; only the imagery can slide out
+from under it. Verify with a landmark instead of by eye:
+
+```
+IonCommand.exe -IonCameraLatitude=35 -IonCameraLongitude=-120 -IonCameraDistance=1900 ^
+  -IonCollectorUrl=http://127.0.0.1:1/ -IonScreenshotAfter=40 -IonScreenshotFile=C:\Temp\cal.png ^
+  -IonExitAfterScreenshot
+```
+
+The centre of that frame must be California. If it shows Panama, the day
+texture is displaced by exactly the ratio between its source width and the
+next power of two - the signature of a `PAD_TO_POWER_OF_TWO` import, which
+leaves the map in the corner of a larger canvas so UV 1.0 falls in the padding
+rather than at longitude +180. Day and night textures pad by different ratios,
+so the two sides of the terminator slide by different amounts. The import must
+use `STRETCH_TO_POWER_OF_TWO`; `create_material_instances.py` asserts this.
+
+Note that this class of fault survives a casual look at a screenshot: a
+displaced Earth still renders as a completely convincing Earth. Only a
+named landmark at a known camera position settles it.
+
 ## Performance
 
 The renderer holds ~125 fps with 12 000 arcs on a desktop GPU. If it drags:
