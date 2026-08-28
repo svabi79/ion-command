@@ -14,7 +14,8 @@
     "retainLatest": [
       "spaceweather.state",
       "ionosphere.sounding",
-      "aviation.aircraft"
+      "aviation.aircraft",
+      "maritime.vessel"
     ]
   },
   "recording": {
@@ -83,6 +84,15 @@
       "type": "hamradio.rbn",
       "enabled": false,
       "login": "N0CALL"
+    },
+    {
+      "id": "ais-aisstream-example",
+      "type": "ais.aisstream",
+      "enabled": false,
+      "apiKey": "",
+      "boundingBoxes": [
+        { "minLatitude": 25.603, "maxLatitude": 25.835, "minLongitude": -80.208, "maxLongitude": -79.879 }
+      ]
     }
   ]
 }

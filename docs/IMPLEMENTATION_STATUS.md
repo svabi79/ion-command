@@ -12,7 +12,7 @@ The component list is in [COMPONENTS.md](COMPONENTS.md) — not repeated here.
 
 **Collector**
 
-- Compile-time source/domain/context registries; 10 source types, 7 domains,
+- Compile-time source/domain/context registries; 11 source types, 8 domains,
   1 context (see [COMPONENTS.md](COMPONENTS.md))
 - Bounded queue with parallel domain workers and drop/evict metrics
 - Canonical envelope with Point and GreatCircle geometry, validity windows and
@@ -55,6 +55,21 @@ The component list is in [COMPONENTS.md](COMPONENTS.md) — not repeated here.
   links, not measured ray paths.
 - **WSJT-X source** is implemented and unit-tested against synthetic UDP, but
   has not been validated against a live WSJT-X session.
+- **AIS ships (`ais.aisstream`) is unverified against the live feed.** No
+  aisstream.io API key was available in the environment this was built in.
+  The source and the `maritime` domain are unit-tested against fixtures
+  built from the provider's published documentation and OpenAPI schema (see
+  `collector/internal/plugins/sources/ais/testdata`), covering position
+  decoding, every AIS "not available" sentinel, the static/voyage join,
+  non-vessel MMSI rejection, and bounded-cache eviction. A manual smoke test
+  with a placeholder (non-functional) key confirmed the TLS/WebSocket
+  handshake against the real `wss://stream.aisstream.io/v0/stream` succeeds
+  and the server accepts the subscribe message before closing the connection
+  — but with no real key available, an authenticated session, real traffic
+  reaching `ParseFrame`, sustained reconnect behaviour, and real-world
+  message volume have never been exercised. It ships **disabled by default**
+  for this reason as well as needing a credential; see
+  [DATA-SOURCES.md](DATA-SOURCES.md#enabling-ais-ships-aisstreamio).
 - **OpenSky authentication** is ineffective: the `login`/`password` fields use
   HTTP basic auth, which OpenSky retired in favour of OAuth2. Anonymous access
   works.

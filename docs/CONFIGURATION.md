@@ -139,6 +139,7 @@ Additional fields by type:
 | `aviation.opensky` | `pollSeconds`, `login` (see note) | One global snapshot per request. Anonymous access is credit-limited; the shipped default is 1800 s. |
 | `hamradio.rbn` | `login` | Reverse Beacon Network telnet; **requires a real callsign**. Disabled by default. |
 | `wsjtx.udp` | `broker` (listen address) | Local WSJT-X UDP feed. |
+| `ais.aisstream` | `apiKey`, `boundingBoxes` | aisstream.io global AIS stream; **requires a free API key** (see [DATA-SOURCES.md](DATA-SOURCES.md#enabling-ais-ships-aisstreamio)). Disabled by default. `boundingBoxes` is a list of `{minLatitude, maxLatitude, minLongitude, maxLongitude}` rectangles — at least one is required; add more entries for several regions at once. |
 
 ### Common adjustments
 
@@ -157,6 +158,24 @@ considerate: these are volunteer-run services.
 
 **Enable the Reverse Beacon Network** — set `enabled: true` and put your own
 callsign in `login`.
+
+**Enable AIS ships** — create a free API key at
+[aisstream.io](https://aisstream.io), then set `enabled: true`, paste the key
+into `apiKey`, and replace the example `boundingBoxes` entry with the area(s)
+you actually want to watch:
+
+```json
+{ "id": "ais-home", "type": "ais.aisstream", "enabled": true,
+  "apiKey": "<your key>",
+  "boundingBoxes": [
+    { "minLatitude": 25.6, "maxLatitude": 25.9, "minLongitude": -80.9, "maxLongitude": -79.9 }
+  ] }
+```
+
+The collector refuses to start if `ais.aisstream` is enabled without an
+`apiKey` or without at least one bounding box, rather than connecting with a
+broken subscription. See [DATA-SOURCES.md](DATA-SOURCES.md#enabling-ais-ships-aisstreamio)
+for what the provider's terms expect in return.
 
 **OpenSky authentication does not currently work.** The `login`/`password`
 fields use HTTP basic auth, which OpenSky retired in favour of OAuth2 client

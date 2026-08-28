@@ -28,6 +28,7 @@ messages itself — that is the domain's job.
 | `aviation.adsb` | adsb.lol point query; callsign→route enrichment via adsbdb.com (`routeLookup`) | HTTP poll | **on** (one example region) | no | ODbL 1.0 |
 | `aviation.opensky` | OpenSky global state snapshot | HTTP poll | **on** | optional | non-profit research/education only |
 | `hamradio.rbn` | Reverse Beacon Network | telnet | off | **yes** (your callsign) | no published licence |
+| `ais.aisstream` | aisstream.io global AIS vessel stream | WebSocket | **off** (needs a free key) | **yes** (free API key) | no explicit commercial/redistribution restriction found; hobby-scale posture applied anyway |
 | `mock.*` | deterministic synthetic traffic | in-process | off | no | development and tests only |
 
 Terms and attribution in full: [DATA-SOURCES.md](DATA-SOURCES.md).
@@ -47,6 +48,7 @@ envelope. Domains own the vocabulary; nothing above them does.
 | `ionosphere` | `ionosphere.sounding` | `ionosonde.kc2g` |
 | `geophysics` | `geophysics.earthquake` | `earthquake.usgs` |
 | `orbital` | `orbital.position` | `orbital.celestrak` |
+| `maritime` | `maritime.vessel` | `ais.aisstream` |
 
 ## Context plugins
 
