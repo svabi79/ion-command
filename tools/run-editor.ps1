@@ -11,7 +11,7 @@ if (-not $SkipBootstrap) {
     & python $visualSourceScript
     if ($LASTEXITCODE -ne 0) { throw 'Visual source generation failed' }
 
-    $scripts = 'create_material_instances.py','create_data_assets.py','create_bootstrap_level.py','validate_project.py'
+    $scripts = 'generate_globe_mesh.py','create_material_instances.py','create_data_assets.py','create_bootstrap_level.py','validate_project.py'
     foreach ($scriptName in $scripts) {
         $scriptPath = Join-Path $repositoryRoot "unreal\Scripts\$scriptName"
         $scriptArgument = "-ExecutePythonScript=$scriptPath"
