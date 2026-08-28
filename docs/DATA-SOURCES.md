@@ -18,6 +18,7 @@ non-commercial only.
 | **Reverse Beacon Network** | Data courtesy of the Reverse Beacon Network and its skimmer operators. Requires **your own** amateur callsign as login. No formal data licence published; contact RBN before non-hobby use. | [reversebeacon.net](https://reversebeacon.net) |
 | **NOAA / NWS SWPC** | Space-weather data from the NOAA Space Weather Prediction Center (public domain, US Government work). NOAA does not endorse this project. ION COMMAND's HF-conditions verdict is a **derived heuristic, not an official NOAA forecast**. | [swpc.noaa.gov](https://www.swpc.noaa.gov) |
 | **U.S. Geological Survey** | Earthquake data from the U.S. Geological Survey (public domain). | [earthquake.usgs.gov](https://earthquake.usgs.gov/earthquakes/feed/) |
+| **NASA FIRMS** | Active-fire thermal-anomaly detections from NASA's Fire Information for Resource Management System (FIRMS): VIIRS (S-NPP, NOAA-20, NOAA-21) and MODIS (Terra/Aqua), distributed through LANCE. This is near-real-time data — generated fast rather than fully quality-checked like the standard science product — provided "as is"; NASA does not endorse this project, and a detection is a thermal anomaly, not a confirmed fire (ION COMMAND's own display text says so). Cite: NASA VIIRS Land Science Team, *VIIRS Active Fire Product NRT* (S-NPP), DOI [10.5067/FIRMS/VIIRS/VNP14IMGT_NRT.002](https://doi.org/10.5067/FIRMS/VIIRS/VNP14IMGT_NRT.002); *MODIS Collection 6.1 NRT Hotspot/Active Fire Detections MCD14DL*, DOI [10.5067/FIRMS/MODIS/MCD14DL.NRT.006](https://doi.org/10.5067/FIRMS/MODIS/MCD14DL.NRT.006). | [firms.modaps.eosdis.nasa.gov](https://firms.modaps.eosdis.nasa.gov) |
 | **CelesTrak** | Orbital elements courtesy of CelesTrak (Dr. T.S. Kelso). Users must observe the CelesTrak usage policy; the collector backs off and stops on repeated non-200 responses. | [celestrak.org](https://celestrak.org/usage-policy.php) |
 | **GIRO / prop.kc2g.com** | Ionosonde data distributed through GIRO and INGV, made available via prop.kc2g.com (Ian, KC2G), funded by WWROF. Licensed **CC BY-NC-SA 4.0 — non-commercial, share-alike**; recorded ionosonde data inherits this licence. Cite: Reinisch, B. W., and I. A. Galkin, *Global Ionospheric Radio Observatory (GIRO)*, Earth, Planets and Space, 63, 377–381, doi:10.5047/eps.2011.03.001, 2011. | [GIRO Rules of the Road](https://giro.uml.edu/didbase/RulesOfTheRoad.html) |
 | **Blitzortung.org** | Lightning data courtesy of Blitzortung.org and its volunteer station operators. Private and entertainment use only; **commercial use is prohibited**; raw data access is intended for **participating station operators**. Not an official information service and **not a warning system** — never rely on it for safety decisions. See the note below. | [blitzortung.org](https://www.blitzortung.org) |
@@ -44,6 +45,7 @@ What each source actually does, in the order it appears in `live.json`:
 | `ionosonde.kc2g` | prop.kc2g.com `stations.json` | 600 s (floor 300 s) | `ionosphere.sounding` | yes |
 | `lightning.blitzortung` | `wss://ws*.blitzortung.org/` | streaming | `weather.lightning` | yes — [read this](#a-word-about-blitzortung) |
 | `earthquake.usgs` | earthquake.usgs.gov GeoJSON feed | 600 s | `geophysics.earthquake` | yes |
+| `wildfire.firms` | firms.modaps.eosdis.nasa.gov global per-satellite CSV snapshot (no key), or the MAP_KEY-scoped Area API when `mapKey` is set | 10800 s (floor 1800 s) | `wildfire.detection` | yes — one example area (US West) |
 | `orbital.celestrak` | celestrak.org `gp.php` TLEs, SGP4-propagated locally | TLE refresh 6 h, positions 10 s | `orbital.position` | yes |
 | `aviation.adsb` | adsb.lol `/v2/point/<lat>/<lon>/<nm>`; route lookups via api.adsbdb.com (cached, global 2 s gate, `routeLookup: false` disables) | 60 s, global 4 s request gate | `aviation.aircraft` | yes (one example circle) |
 | `aviation.opensky` | opensky-network.org `/api/states/all` | 1800 s anonymous | `aviation.aircraft` | yes |
@@ -100,6 +102,11 @@ you commercial rights to Blitzortung's data.
   re-fetching.
 - Sources that need an identity (RBN) ship **disabled** rather than with a
   placeholder callsign.
+- FIRMS regenerates its NRT snapshots roughly once an hour; the source polls
+  every **three hours by default** (floor: thirty minutes, enforced whether or
+  not a MAP_KEY is configured) and ships with **one bounded area of interest**
+  rather than pulling the whole-world file and keeping all of it. A poll's
+  fetched/kept/emitted/duplicate/invalid counts are logged every time.
 
 Please keep it that way if you change the configuration. These services are
 free because people pay for them with their own time and hardware.
@@ -112,3 +119,8 @@ free because people pay for them with their own time and hardware.
 - PSKReporter, prop.kc2g.com and the RBN publish no formal data licence. Usage
   here is hobby-scale and attributed; contact them before any larger or
   commercial use.
+- **FIRMS MAP_KEY (Area API) path**: implemented and unit-tested — URL
+  construction and CSV parsing, since the Area API returns the same column
+  shape as the no-key snapshots — but not exercised against a real key (none
+  was available to this change). The verified, default path is the no-key
+  global snapshot, filtered locally to the configured area and window.

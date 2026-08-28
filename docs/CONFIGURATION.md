@@ -134,6 +134,7 @@ Additional fields by type:
 | `ionosonde.kc2g` | `pollSeconds` | foF2 / MUF soundings. |
 | `lightning.blitzortung` | — | WebSocket stream of strikes. Enabled by default; read the [terms](DATA-SOURCES.md#a-word-about-blitzortung). |
 | `earthquake.usgs` | `pollSeconds` | Recent quakes. |
+| `wildfire.firms` | `satellite`, `boxWest`, `boxSouth`, `boxEast`, `boxNorth`, `lookBackHours`, `pollSeconds`, `mapKey` | VIIRS/MODIS thermal-anomaly detections. `satellite` is one of `VIIRS_SNPP` (default), `VIIRS_NOAA20`, `VIIRS_NOAA21`, `MODIS` — add one entry per satellite you want. The box defaults to one example area (US West) if all four `box*` fields are left at 0; it does not wrap the antimeridian. `mapKey` is optional — see below. |
 | `orbital.celestrak` | `pollSeconds` | TLEs, propagated with SGP4. |
 | `aviation.adsb` | `latitude`, `longitude`, `radiusNm`, `pollSeconds`, `routeLookup` | Regional circle around a point (max 250 nm). Add one entry per area you care about. `routeLookup: false` turns off the callsign → origin/destination enrichment (adsbdb.com); it is on by default. |
 | `aviation.opensky` | `pollSeconds`, `login` (see note) | One global snapshot per request. Anonymous access is credit-limited; the shipped default is 1800 s. |
@@ -154,6 +155,31 @@ Replace it with your own — this is an example, not a recommended location:
 Add more entries with different centres for wider coverage. All sources share a
 global request gate and honour rate limiting, but keep intervals ≥ 30 s and be
 considerate: these are volunteer-run services.
+
+**Point the wildfire layer at your own area.** The shipped configuration
+contains one illustrative box (`firms-westus-example`, roughly the US West).
+Replace it — this is an example, not a recommended location:
+
+```json
+{ "id": "firms-home", "type": "wildfire.firms", "enabled": true,
+  "satellite": "VIIRS_SNPP",
+  "boxWest": 5.9, "boxSouth": 45.8, "boxEast": 10.5, "boxNorth": 47.8,
+  "lookBackHours": 24, "pollSeconds": 10800 }
+```
+
+Add more entries with different boxes or a different `satellite` for wider
+coverage; each source instance polls one satellite's feed. Keep `pollSeconds`
+at 1800 or above (see [DATA-SOURCES.md](DATA-SOURCES.md)) — FIRMS itself only
+refreshes its products roughly once an hour, so polling faster just repeats
+the same download.
+
+**Use a FIRMS MAP_KEY (optional).** By default this source downloads NASA's
+no-key global CSV snapshot and filters it locally, which needs no credentials
+at all. Registering a free
+[MAP_KEY](https://firms.modaps.eosdis.nasa.gov/api/map_key/) and setting it
+as `mapKey` switches the source to FIRMS' Area API instead, which filters
+server-side to your box — far less bandwidth, at the cost of a five-minute
+sign-up. Never commit a real key; set it only in your local `live.json`.
 
 **Enable the Reverse Beacon Network** — set `enabled: true` and put your own
 callsign in `login`.

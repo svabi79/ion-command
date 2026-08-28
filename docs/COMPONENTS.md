@@ -24,6 +24,7 @@ messages itself — that is the domain's job.
 | `ionosonde.kc2g` | GIRO soundings via prop.kc2g.com | HTTP poll | **on** | no | CC BY-NC-SA 4.0 |
 | `lightning.blitzortung` | Blitzortung strike stream | WebSocket | **on** | no | non-commercial; participant-oriented; not a warning system |
 | `earthquake.usgs` | USGS earthquake feed | HTTP poll | **on** | no | public domain |
+| `wildfire.firms` | NASA FIRMS VIIRS/MODIS thermal anomalies | HTTP poll | **on** (one example area) | no (optional free MAP_KEY for the scoped Area API) | attribution required; see below |
 | `orbital.celestrak` | CelesTrak TLEs (SGP4 locally) | HTTP poll | **on** | no | usage policy: stop on non-200 |
 | `aviation.adsb` | adsb.lol point query; callsign→route enrichment via adsbdb.com (`routeLookup`) | HTTP poll | **on** (one example region) | no | ODbL 1.0 |
 | `aviation.opensky` | OpenSky global state snapshot | HTTP poll | **on** | optional | non-profit research/education only |
@@ -47,6 +48,7 @@ envelope. Domains own the vocabulary; nothing above them does.
 | `ionosphere` | `ionosphere.sounding` | `ionosonde.kc2g` |
 | `geophysics` | `geophysics.earthquake` | `earthquake.usgs` |
 | `orbital` | `orbital.position` | `orbital.celestrak` |
+| `wildfire` | `wildfire.detection` | `wildfire.firms` |
 
 ## Context plugins
 
