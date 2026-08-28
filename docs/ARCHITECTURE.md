@@ -109,7 +109,7 @@ and volumes.
 | Module | Responsibility |
 |---|---|
 | `IonCommandCore` | canonical structs, geometry/layer contracts, geospatial and solar math |
-| `IonCommandData` | WebSocket, JSON parsing, bounded history, timeline, replay, selection, context queries |
+| `IonCommandData` | WebSocket, JSON parsing, bounded history, timeline, replay, selection, context queries, search index, watchlist/alerts |
 | `IonCommandVisualization` | layer registry and domain-neutral point/arc render adapters; globe and environmental instruments |
 | `IonCommandHamRadio` | radio semantic selection and centrally configured band visuals |
 | `IonCommandUI` | physical command console and world-space telemetry |

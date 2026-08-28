@@ -40,6 +40,11 @@ The component list is in [COMPONENTS.md](COMPONENTS.md) — not repeated here.
 - Overlay menu (per-layer and per-domain visibility) and an in-app settings
   panel with text entry for callsign and grid locator, persisted to `Game.ini`
 - Timeline: pause, replay of the recent window, variable speed, return to live
+- Keyboard-first search overlay (`/` or `S`) over a bounded, timeline-aware
+  index of accepted canonical messages, grouped by stable entity id; results
+  focus/select both Point and GreatCircle geometry
+- Watchlist and alerts (`W`): save a search query as a watch, persisted to
+  `Game.ini`; a bounded, live-only alert list with an at-a-glance unseen count
 
 **Delivery**
 

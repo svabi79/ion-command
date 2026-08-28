@@ -35,6 +35,10 @@ private:
     void CycleModeFilter();
     void ToggleOverlayMenu();
     FString ActiveModeFilter;
+    // "/" or "S" opens search; "W" toggles the watch/alert panel. Both just
+    // forward to the HUD, matching every other panel toggle in this class.
+    void OpenSearchOverlay();
+    void ToggleWatchlist();
     void StartRecentReplay();
     void ChangeReplaySpeed(double Factor);
     void ReplaySlower();

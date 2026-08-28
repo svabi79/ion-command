@@ -4,6 +4,8 @@
 #include "EngineUtils.h"
 #include "GeoArcLayerActor.h"
 #include "GeoDataSubsystem.h"
+#include "GeoPointLayerActor.h"
+#include "GeoSearchSubsystem.h"
 #include "GeoSelectionSubsystem.h"
 #include "GeoReplaySubsystem.h"
 #include "HamRadioOwnStationActor.h"
@@ -31,11 +33,23 @@ bool AIonCommandPlayerController::InputKey(const FInputKeyEventArgs& Params)
     if (Cockpit && Cockpit->IsCapturingText() && Params.Event == IE_Pressed)
     {
         const FKey Key = Params.Key;
-        if (Key == EKeys::BackSpace) { Cockpit->SettingsTextControl(0); return true; }
-        if (Key == EKeys::Enter) { Cockpit->SettingsTextControl(1); return true; }
-        if (Key == EKeys::Escape) { Cockpit->SettingsTextControl(2); return true; }
-        // Constrained callsign/grid character set. Letter keys report a
-        // one-character FName ("A".."Z"); digits report "Zero".."Nine".
+        // One shared text-capture gate (IsCapturingText) for both the
+        // settings panel and the search overlay; which surface actually
+        // receives the keystroke depends on which one is open.
+        const bool bSearchActive = Cockpit->IsSearchActive();
+        if (Key == EKeys::BackSpace) { bSearchActive ? Cockpit->SearchTextControl(0) : Cockpit->SettingsTextControl(0); return true; }
+        if (Key == EKeys::Enter) { bSearchActive ? Cockpit->SearchTextControl(1) : Cockpit->SettingsTextControl(1); return true; }
+        if (Key == EKeys::Escape) { bSearchActive ? Cockpit->SearchTextControl(2) : Cockpit->SettingsTextControl(2); return true; }
+        if (bSearchActive)
+        {
+            if (Key == EKeys::Up) { Cockpit->SearchMoveHighlight(-1); return true; }
+            if (Key == EKeys::Down) { Cockpit->SearchMoveHighlight(1); return true; }
+        }
+        // Constrained character set. Letter keys report a one-character
+        // FName ("A".."Z"); digits report "Zero".."Nine". Search also
+        // accepts hyphen and space, for hyphenated registrations and
+        // multi-word display titles; the settings field ignores them (its
+        // own character filter is narrower - see SettingsTextChar).
         const FString Name = Key.GetFName().ToString();
         TCHAR Typed = 0;
         if (Name.Len() == 1 && Name[0] >= 'A' && Name[0] <= 'Z') Typed = Name[0];
@@ -50,7 +64,9 @@ bool AIonCommandPlayerController::InputKey(const FInputKeyEventArgs& Params)
         else if (Name == TEXT("Eight")) Typed = '8';
         else if (Name == TEXT("Nine")) Typed = '9';
         else if (Key == EKeys::Slash) Typed = '/';
-        if (Typed != 0) { Cockpit->SettingsTextChar(Typed); return true; }
+        else if (Key == EKeys::Hyphen || Key == EKeys::Underscore) Typed = '-';
+        else if (Key == EKeys::SpaceBar) Typed = ' ';
+        if (Typed != 0) { bSearchActive ? Cockpit->SearchTextChar(Typed) : Cockpit->SettingsTextChar(Typed); return true; }
         // Swallow any other key while editing so it cannot trigger hotkeys.
         return true;
     }
@@ -80,6 +96,26 @@ void AIonCommandPlayerController::SetupInputComponent()
     InputComponent->BindAction(TEXT("TogglePaths"), IE_Pressed, this, &AIonCommandPlayerController::TogglePaths);
     InputComponent->BindAction(TEXT("CycleModeFilter"), IE_Pressed, this, &AIonCommandPlayerController::CycleModeFilter);
     InputComponent->BindAction(TEXT("ToggleOverlayMenu"), IE_Pressed, this, &AIonCommandPlayerController::ToggleOverlayMenu);
+    InputComponent->BindAction(TEXT("OpenSearch"), IE_Pressed, this, &AIonCommandPlayerController::OpenSearchOverlay);
+    InputComponent->BindAction(TEXT("ToggleWatchlist"), IE_Pressed, this, &AIonCommandPlayerController::ToggleWatchlist);
+}
+
+void AIonCommandPlayerController::OpenSearchOverlay()
+{
+    if (IsTypingText()) return;
+    if (AIonCockpitHudActor* Cockpit = Cast<AIonCockpitHudActor>(GetHUD()))
+    {
+        Cockpit->OpenSearch();
+    }
+}
+
+void AIonCommandPlayerController::ToggleWatchlist()
+{
+    if (IsTypingText()) return;
+    if (AIonCockpitHudActor* Cockpit = Cast<AIonCockpitHudActor>(GetHUD()))
+    {
+        Cockpit->ToggleWatchPanel();
+    }
 }
 
 void AIonCommandPlayerController::ToggleOverlayMenu()
@@ -260,7 +296,38 @@ void AIonCommandPlayerController::SelectUnderCursor()
         }
     }
 
-    UGeoSelectionSubsystem* Selection = GetGameInstance() ? GetGameInstance()->GetSubsystem<UGeoSelectionSubsystem>() : nullptr;
+    // Point markers (Part A: "generalise focus/selection for Point and path
+    // results") only expose the lightweight render record a ray pick finds -
+    // the same one hover already uses - not a canonical envelope. Resolve it
+    // back to one through the search index instead of reconstructing fields
+    // here, so a clicked point selects exactly like a clicked path with no
+    // domain-specific mapping in this generic controller.
+    const UGameInstance* GameInstance = GetGameInstance();
+    const UGeoSearchSubsystem* Search = GameInstance ? GameInstance->GetSubsystem<UGeoSearchSubsystem>() : nullptr;
+    if (Search)
+    {
+        for (TActorIterator<AGeoPointLayerActor> It(GetWorld()); It; ++It)
+        {
+            if (!It->IsHidden())
+            {
+                if (const FRenderedGeoPoint* Point = It->FindNearestToRay(RayOrigin, RayDirection, 24.0))
+                {
+                    const double CandidateDistance = FVector::DistSquared(RayOrigin, Point->RenderedLocation);
+                    if (CandidateDistance < BestMessageDistance)
+                    {
+                        if (const FGeoSearchResult* Result = Search->FindByKey(Point->EntityKey))
+                        {
+                            BestMessageDistance = CandidateDistance;
+                            BestMessage = Result->Envelope;
+                        }
+                    }
+                }
+            }
+            break; // one point layer, matching the hover tooltip's own convention
+        }
+    }
+
+    UGeoSelectionSubsystem* Selection = GameInstance ? GameInstance->GetSubsystem<UGeoSelectionSubsystem>() : nullptr;
     if (Selection)
     {
         if (!BestMessage.MessageId.IsEmpty()) Selection->SelectMessage(BestMessage);
