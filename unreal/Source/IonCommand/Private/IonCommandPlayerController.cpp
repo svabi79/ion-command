@@ -8,6 +8,7 @@
 #include "GeoSearchSubsystem.h"
 #include "GeoSelectionSubsystem.h"
 #include "GeoReplaySubsystem.h"
+#include "GeoTrackLayerActor.h"
 #include "HamRadioOwnStationActor.h"
 #include "IonActivityHeatmapActor.h"
 #include "IonCockpitHudActor.h"
@@ -94,6 +95,7 @@ void AIonCommandPlayerController::SetupInputComponent()
     InputComponent->BindAction(TEXT("CycleHud"), IE_Pressed, this, &AIonCommandPlayerController::CycleHudMode);
     InputComponent->BindAction(TEXT("ToggleHeatmap"), IE_Pressed, this, &AIonCommandPlayerController::ToggleHeatmap);
     InputComponent->BindAction(TEXT("TogglePaths"), IE_Pressed, this, &AIonCommandPlayerController::TogglePaths);
+    InputComponent->BindAction(TEXT("ToggleTrails"), IE_Pressed, this, &AIonCommandPlayerController::ToggleTrails);
     InputComponent->BindAction(TEXT("CycleModeFilter"), IE_Pressed, this, &AIonCommandPlayerController::CycleModeFilter);
     InputComponent->BindAction(TEXT("ToggleOverlayMenu"), IE_Pressed, this, &AIonCommandPlayerController::ToggleOverlayMenu);
     InputComponent->BindAction(TEXT("OpenSearch"), IE_Pressed, this, &AIonCommandPlayerController::OpenSearchOverlay);
@@ -175,6 +177,15 @@ void AIonCommandPlayerController::ToggleHeatmap()
 {
     if (IsTypingText()) return;
     for (TActorIterator<AIonActivityHeatmapActor> It(GetWorld()); It; ++It)
+    {
+        It->SetActorHiddenInGame(!It->IsHidden());
+    }
+}
+
+void AIonCommandPlayerController::ToggleTrails()
+{
+    if (IsTypingText()) return;
+    for (TActorIterator<AGeoTrackLayerActor> It(GetWorld()); It; ++It)
     {
         It->SetActorHiddenInGame(!It->IsHidden());
     }

@@ -32,6 +32,7 @@ private:
     void CycleHudMode();
     void ToggleHeatmap();
     void TogglePaths();
+    void ToggleTrails();
     void CycleModeFilter();
     void ToggleOverlayMenu();
     FString ActiveModeFilter;

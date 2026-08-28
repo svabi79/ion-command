@@ -11,6 +11,7 @@
 #include "EngineUtils.h"
 #include "GeoArcLayerActor.h"
 #include "GeoPointLayerActor.h"
+#include "GeoTrackLayerActor.h"
 #include "HamRadioLinkLayerActor.h"
 #include "HamRadioOwnStationActor.h"
 #include "IonCockpitHudActor.h"
@@ -41,6 +42,7 @@ void AIonCommandGameMode::BeginPlay()
     TActorIterator<AIonGlobeActor> Globe(World); if (!Globe) World->SpawnActor<AIonGlobeActor>(FVector::ZeroVector, FRotator::ZeroRotator);
     TActorIterator<AHamRadioLinkLayerActor> Arcs(World); if (!Arcs) World->SpawnActor<AHamRadioLinkLayerActor>(FVector::ZeroVector, FRotator::ZeroRotator);
     TActorIterator<AGeoPointLayerActor> Points(World); if (!Points) World->SpawnActor<AGeoPointLayerActor>(FVector::ZeroVector, FRotator::ZeroRotator);
+    TActorIterator<AGeoTrackLayerActor> Trails(World); if (!Trails) World->SpawnActor<AGeoTrackLayerActor>(FVector::ZeroVector, FRotator::ZeroRotator);
     TActorIterator<AIonIonosphereActor> Ionosphere(World); if (!Ionosphere) World->SpawnActor<AIonIonosphereActor>(FVector::ZeroVector, FRotator::ZeroRotator);
     TActorIterator<AIonAuroraActor> Aurora(World); if (!Aurora) World->SpawnActor<AIonAuroraActor>(FVector::ZeroVector, FRotator::ZeroRotator);
     TActorIterator<AIonActivityHeatmapActor> Heatmap(World); if (!Heatmap) World->SpawnActor<AIonActivityHeatmapActor>(FVector::ZeroVector, FRotator::ZeroRotator);
