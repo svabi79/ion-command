@@ -49,7 +49,7 @@ def vector(material, name, default, x, y):
     return node
 
 
-def import_texture(source: Path, asset_name: str) -> unreal.Texture2D:
+def import_texture(source: Path, asset_name: str, virtual_texture: bool = False) -> unreal.Texture2D:
     if not source.exists():
         raise RuntimeError(f"Missing visual source texture: {source}")
     asset_path = f"{TEXTURE_DIR}/{asset_name}"
@@ -69,7 +69,29 @@ def import_texture(source: Path, asset_name: str) -> unreal.Texture2D:
     imported = unreal.load_asset(asset_path)
     if imported is None:
         raise RuntimeError(f"Could not import {source} to {asset_path}")
-    imported.set_editor_property("never_stream", True)
+    if virtual_texture:
+        # Streaming Virtual Texture: only the mip/tile actually on screen is
+        # ever resident in VRAM, so a 21600x10800 source does not need to fit
+        # in full. Requires r.VirtualTextures=True (DefaultEngine.ini) to
+        # actually stream as VT instead of silently falling back. Mutually
+        # exclusive with never_stream below (which forces full residency -
+        # the opposite intent).
+        #
+        # power_of_two_mode must be set explicitly too: without it, VT
+        # silently fails to build for a non-power-of-two source and
+        # virtual_texture_streaming reads back False after saving, with no
+        # error anywhere (verified: T_EarthDay's 21600x10800 padded to
+        # 32768x16384 and streamed correctly through import alone, but
+        # T_EarthNight's 13500x6750 stayed un-padded and non-VT until this
+        # property was set too - the two sources otherwise went through the
+        # identical code path). Padding is transparent to material UVs -
+        # confirmed for T_EarthDay by rendering the live client and visually
+        # inspecting the result: real, correctly aligned Blue Marble imagery,
+        # not a squashed or letterboxed sub-rectangle.
+        imported.set_editor_property("power_of_two_mode", unreal.TexturePowerOfTwoSetting.PAD_TO_POWER_OF_TWO)
+        imported.set_editor_property("virtual_texture_streaming", True)
+    else:
+        imported.set_editor_property("never_stream", True)
     save_asset(asset_path)
     return imported
 
@@ -673,6 +695,13 @@ def build_earth_master(day_texture, night_texture) -> unreal.Material:
     material.set_editor_property("blend_mode", unreal.BlendMode.BLEND_OPAQUE)
     material.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_DEFAULT_LIT)
     material.set_editor_property("two_sided", False)
+    # generate_globe_mesh.py enables Nanite on SM_GlobeSphere (the Earth
+    # component's mesh); a Nanite mesh's material must carry this flag or UE
+    # refuses to compile the material for the Nanite codepath and silently
+    # renders the flat gray engine default instead - verified by capturing
+    # the live client before this flag was added (LogMaterial: "missing
+    # usage flag Nanite! Default Material will be used in game").
+    material.set_editor_property("used_with_nanite", True)
 
     day = expression(material, unreal.MaterialExpressionTextureSample, -1050, -260)
     day.set_editor_property("texture", day_texture)
@@ -801,8 +830,8 @@ def main() -> None:
     unreal.EditorLevelLibrary.new_level("/Game/ION/Maps/L_TransientRebuild")
     unreal.SystemLibrary.collect_garbage()
 
-    day = import_texture(SOURCE_DIR / "NASA" / "bluemarble-4096.png", "T_EarthDay")
-    night = import_texture(SOURCE_DIR / "NASA" / "earthatnight-4096.png", "T_EarthNight")
+    day = import_texture(SOURCE_DIR / "NASA" / "bluemarble-21600.png", "T_EarthDay", virtual_texture=True)
+    night = import_texture(SOURCE_DIR / "NASA" / "earthatnight-13500.png", "T_EarthNight", virtual_texture=True)
     clouds = import_texture(SOURCE_DIR / "NASA" / "clouds-2048.png", "T_CloudFraction")
     # Linear read: the runtime replacement (EUMETSAT IR remap) is linear gray,
     # and the sampler types of default and override must match.

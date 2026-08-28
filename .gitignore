@@ -28,9 +28,23 @@ Desktop.ini
 # Packaged builds
 dist/
 
-# Cached raw NASA downloads (tools/fetch-earth-textures.py rebuilds them)
-unreal/SourceAssets/NASA/download-*.jpg
-unreal/SourceAssets/NASA/starmap_2020_*.exr
+# Cached raw and converted NASA downloads (tools/fetch-earth-textures.py
+# rebuilds all of it; the day/night textures alone can be several hundred MB
+# at full resolution and must never enter the repository). Only the hand
+# written attribution file in this directory is tracked.
+unreal/SourceAssets/NASA/*.jpg
+unreal/SourceAssets/NASA/*.png
+unreal/SourceAssets/NASA/*.exr
+unreal/SourceAssets/NASA/*.tif
 
 # Personal collector setup (callsign, home QTH) - never published
 collector/configs/local.json
+
+# Imported Earth day/night texture ASSETS (not just the raw NASA source):
+# at 21600x10800 / 13500x6750 these compile to ~165 MB / ~31 MB .uasset
+# files, unlike every other Content/*.uasset in this project. Reproducible
+# with everything else via tools/fetch-earth-textures.py +
+# unreal/Scripts/create_material_instances.py, so - like the NASA source
+# images - they stay out of the repository rather than bloating history.
+unreal/Content/ION/Textures/T_EarthDay.uasset
+unreal/Content/ION/Textures/T_EarthNight.uasset

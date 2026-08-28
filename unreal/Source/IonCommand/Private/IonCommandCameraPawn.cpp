@@ -3,6 +3,7 @@
 #include "Camera/CameraComponent.h"
 #include "Components/InputComponent.h"
 #include "Components/SceneComponent.h"
+#include "Engine/Engine.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "GeoMathLibrary.h"
 #include "GeoReplaySubsystem.h"
@@ -11,6 +12,23 @@
 #include "Misc/Parse.h"
 #include "GeoSelectionSubsystem.h"
 #include "GeoTimelineSubsystem.h"
+
+namespace
+{
+    // Globe radius is 1000 units = Earth's mean radius (6371 km), so 1 unit
+    // = 6.371 km. The camera orbit distance is (GlobeRadius + altitude); the
+    // constants below are shared between the debug distance override, the
+    // wheel zoom clamp, and the near clip plane so all three stay consistent
+    // if the range ever changes again.
+    constexpr float MinOrbitDistance = 1005.0f; // ~31.9 km above the surface.
+    constexpr float MaxOrbitDistance = 6500.0f;
+    // Engine floor is 1.0 (see UnrealEngine.cpp's SetNearClipPlane); comfortably
+    // below MinOrbitDistance's 5-unit altitude (~6.4 km vs ~31.9 km, a 5x
+    // margin) so the nearest visible surface point - always exactly the
+    // camera's altitude above the globe, since the globe is convex and the
+    // camera sits outside it - is never behind the near plane.
+    constexpr float NearClipPlaneUnits = 1.0f;
+}
 
 AIonCommandCameraPawn::AIonCommandCameraPawn()
 {
@@ -41,12 +59,23 @@ AIonCommandCameraPawn::AIonCommandCameraPawn()
 void AIonCommandCameraPawn::BeginPlay()
 {
     Super::BeginPlay();
+    // The default near clip plane (10 units) is farther than the closest the
+    // wheel zoom now goes (5 units of altitude at MinOrbitDistance), which
+    // would clip the nearest ground out of view entirely. r.SetNearClipPlane
+    // is a console command, not a CVar, so it cannot be set from a config
+    // file - it has to be executed once here. This is a global renderer
+    // setting (all viewports), which is fine: nothing else in ION COMMAND
+    // relies on the default.
+    if (GEngine)
+    {
+        GEngine->Exec(GetWorld(), *FString::Printf(TEXT("r.SetNearClipPlane %f"), NearClipPlaneUnits));
+    }
     // -IonCameraDistance=<units> pins the orbit distance for unattended
     // captures (e.g. zoom-quality proofs).
     double CameraDistance = 0.0;
     if (FParse::Value(FCommandLine::Get(), TEXT("IonCameraDistance="), CameraDistance) && CameraDistance > 0.0)
     {
-        SpringArm->TargetArmLength = FMath::Clamp(static_cast<float>(CameraDistance), 1040.0f, 6500.0f);
+        SpringArm->TargetArmLength = FMath::Clamp(static_cast<float>(CameraDistance), MinOrbitDistance, MaxOrbitDistance);
     }
     // -IonCameraLongitude=<deg> centers the given longitude for captures.
     // The camera looks along the pawn's negative forward axis (the spring arm
@@ -159,11 +188,14 @@ void AIonCommandCameraPawn::Zoom(float Value)
     if (FMath::IsNearlyZero(Value)) return;
     // Distance-proportional steps: coarse with the whole globe framed, fine
     // near the surface, so one wheel notch never overshoots the last few
-    // hundred kilometres. 1040 puts the camera ~255 km up - close enough to
-    // separate individual aircraft on an approach. At the default orbit the
-    // step matches the old fixed 220 units.
-    const float Step = FMath::Clamp((SpringArm->TargetArmLength - 1000.0f) * 0.09f, 4.0f, 500.0f);
-    SpringArm->TargetArmLength = FMath::Clamp(SpringArm->TargetArmLength - Value * Step, 1040.0f, 6500.0f);
+    // kilometres. MinOrbitDistance (1005) puts the camera ~31.9 km up - close
+    // enough to make out the high-resolution globe texture and mesh in
+    // genuine close-up. At the default orbit the step matches the old fixed
+    // 220 units. The 0.4 floor sits just below the formula's own value at
+    // MinOrbitDistance (0.09 * 5 = 0.45), so it is a defensive minimum rather
+    // than something that actually kicks in across the live range.
+    const float Step = FMath::Clamp((SpringArm->TargetArmLength - 1000.0f) * 0.09f, 0.4f, 500.0f);
+    SpringArm->TargetArmLength = FMath::Clamp(SpringArm->TargetArmLength - Value * Step, MinOrbitDistance, MaxOrbitDistance);
 }
 void AIonCommandCameraPawn::TogglePause() { if (UGeoTimelineSubsystem* Timeline = GetGameInstance()->GetSubsystem<UGeoTimelineSubsystem>()) Timeline->SetPaused(!Timeline->IsPaused()); }
 void AIonCommandCameraPawn::ReturnToLive()

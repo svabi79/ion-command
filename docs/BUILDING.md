@@ -37,22 +37,35 @@ Run it against the live configuration:
 ## 2. Generated assets and materials
 
 Earth/night/cloud textures and the star map are **not** in the repository
-(licence-clean and large); fetch them once:
+(licence-clean and large, up to ~150 MB for the day texture alone); fetch
+them once:
 
 ```powershell
 python tools\fetch-earth-textures.py
 ```
 
-This downloads NASA Blue Marble, Black Marble, a cloud climatology and the SVS
-Deep Star Map into `unreal/SourceAssets/NASA/`.
+This downloads NASA Blue Marble (21600x10800), Black Marble (13500x6750), a
+cloud climatology (2048x1024, native resolution for that composite) and the
+SVS Deep Star Map into `unreal/SourceAssets/NASA/`. See the docstring in
+that script and `unreal/SourceAssets/NASA/ATTRIBUTION.md` for exactly what
+resolution is and is not available under a licence this project can use.
 
 Then generate the procedural assets (starfield fallback, marker icon atlas,
-deck ambience) and rebuild every master material deterministically:
+deck ambience), the high-resolution globe mesh, and rebuild every master
+material deterministically:
 
 ```powershell
 python unreal\Scripts\generate_visual_sources.py
 .\tools\run-editor.ps1            # runs the editor bootstrap scripts
 ```
+
+`run-editor.ps1` runs `generate_globe_mesh.py` first: it replaces the engine's
+placeholder sphere primitive with a 400x200-segment mesh built from Unreal's
+GeometryScript primitive generator (reproducible, not hand-authored — see the
+script for why it needs a UV correction after generation and how that is
+verified). The Earth day/night textures import as Streaming Virtual Textures
+(`r.VirtualTextures=True` in `DefaultEngine.ini`), so their VRAM cost tracks
+what is actually on screen rather than the full 21600x10800 source.
 
 `unreal/Scripts/create_material_instances.py` rebuilds all master materials
 from scratch on every run — never hand-edit the generated materials, change the
