@@ -83,6 +83,19 @@
       "type": "hamradio.rbn",
       "enabled": false,
       "login": "N0CALL"
+    },
+    {
+      "id": "dxcluster-primary",
+      "type": "hamradio.dxcluster",
+      "enabled": false,
+      "login": "N0CALL",
+      "broker": "dxc.nc7j.com:7373"
+    },
+    {
+      "id": "wspr-primary",
+      "type": "hamradio.wspr",
+      "enabled": true,
+      "pollSeconds": 300
     }
   ]
 }
