@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -28,11 +29,14 @@ type rawSpot struct {
 	FrequencyHz int64   `json:"frequencyHz"`
 	Band        string  `json:"band"`
 	Mode        string  `json:"mode"`
-	SNRDb       int     `json:"snrDb"`
-	TXDxcc      *int    `json:"txDxcc"`
-	RXDxcc      *int    `json:"rxDxcc"`
-	// Region names resolved by the source itself (RBN via the country file)
-	// when no ADIF DXCC codes are available.
+	// SNRDb is a pointer: automated decodes (PSKReporter, RBN, WSJT-X, WSPR)
+	// always report one, but a human-typed DX cluster spot frequently does
+	// not. Absent stays absent rather than being fabricated as 0 dB.
+	SNRDb  *int `json:"snrDb"`
+	TXDxcc *int `json:"txDxcc"`
+	RXDxcc *int `json:"rxDxcc"`
+	// Region names resolved by the source itself (via the country file) when
+	// no ADIF DXCC codes are available - used by RBN, the DX cluster and WSPR.
 	TXRegion string `json:"txRegion"`
 	RXRegion string `json:"rxRegion"`
 }
@@ -47,6 +51,21 @@ func regionName(code *int) string {
 		return name
 	}
 	return fmt.Sprintf("DXCC %d", *code)
+}
+
+// primaryLabel joins band and mode with the frequency, omitting either that
+// is unknown (a DX cluster spot frequently cannot recover a mode from its
+// free-text comment) instead of rendering an empty segment.
+func primaryLabel(band, mode string, frequencyHz int64) string {
+	parts := make([]string, 0, 3)
+	if band != "" {
+		parts = append(parts, band)
+	}
+	if mode != "" {
+		parts = append(parts, mode)
+	}
+	parts = append(parts, fmt.Sprintf("%.3f MHz", float64(frequencyHz)/1_000_000.0))
+	return strings.Join(parts, "  //  ")
 }
 
 func New() *Domain               { return &Domain{seenEntities: make(map[string]time.Time), maxSeenEntities: 200000} }
@@ -82,11 +101,16 @@ func (d *Domain) Normalize(_ context.Context, record plugins.RawRecord) ([]event
 	relationship.Geometry = events.GreatCircle(raw.TXLongitude, raw.TXLatitude, raw.RXLongitude, raw.RXLatitude)
 	relationship.Properties = map[string]any{
 		"spotId": raw.SpotID, "txCallsign": raw.TXCallsign, "rxCallsign": raw.RXCallsign,
-		"frequencyHz": raw.FrequencyHz, "band": raw.Band, "mode": raw.Mode, "snrDb": raw.SNRDb,
+		"frequencyHz": raw.FrequencyHz, "band": raw.Band, "mode": raw.Mode,
 		"representation": "Observed Link",
 		"display.title":  "Observed Link", "display.from": raw.TXCallsign, "display.to": raw.RXCallsign,
-		"display.primary":   fmt.Sprintf("%s  //  %s  //  %.3f MHz", raw.Band, raw.Mode, float64(raw.FrequencyHz)/1_000_000.0),
-		"display.secondary": fmt.Sprintf("SNR %+d dB", raw.SNRDb),
+		"display.primary": primaryLabel(raw.Band, raw.Mode, raw.FrequencyHz),
+	}
+	// SNR is omitted rather than fabricated as 0 dB when the source (a
+	// human-typed DX cluster spot) did not carry a signal report.
+	if raw.SNRDb != nil {
+		relationship.Properties["snrDb"] = *raw.SNRDb
+		relationship.Properties["display.secondary"] = fmt.Sprintf("SNR %+d dB", *raw.SNRDb)
 	}
 	if region := regionName(raw.TXDxcc); region != "" {
 		relationship.Properties["txDxcc"] = *raw.TXDxcc
