@@ -5,8 +5,19 @@
 #include "GeoDataSubsystem.h"
 #include "GeoLayerSubsystem.h"
 #include "GeoMathLibrary.h"
+#include "GeoRenderSlotMath.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "UObject/ConstructorHelpers.h"
+
+// Render-population strategy for this layer: every tracked marker
+// (ActivePoints) that should currently be visible owns exactly one stable
+// slot in MarkerInstances, recorded on the point (RenderSlot) and mirrored
+// in SlotToPointIndex. Insertion, removal, dead reckoning, and style/filter
+// changes all go through AddRenderInstance/RemoveRenderInstance or an
+// in-place UpdateInstanceTransform+SetCustomData on an existing slot - never
+// a ClearInstances()+AddInstances() rebuild of the whole pool. See the
+// class-level comment in GeoPointLayerActor.h for the slot invariants and
+// GeoRenderSlotMath.h for the swap-and-pop removal strategy.
 
 namespace
 {
@@ -219,12 +230,15 @@ void AGeoPointLayerActor::Submit(const FGeoMessageEnvelope& Message)
         FRenderedGeoPoint& Point = ActivePoints[*ExistingIndex];
         Point.LastSeenSeconds = NowSeconds;
         // Any marker whose rendered position has drifted past the tolerance
-        // needs a rebuild - the altitude proxy that used to gate this froze
+        // needs a refresh - the altitude proxy that used to gate this froze
         // low/ground movers whose feed omitted speed (audit finding #6). The
-        // tolerance alone already suppresses stationary jitter.
+        // tolerance alone already suppresses stationary jitter. Keyed by
+        // entity id (not index) so a later swap-and-pop removal elsewhere
+        // can never make this refer to the wrong point - see
+        // DirtyEntityKeys's declaration.
         if (!Point.RenderedLocation.Equals(Location, MovementTolerance))
         {
-            bMovementDirty = true;
+            DirtyEntityKeys.Add(EntityKey);
         }
         Point.Location = Location;
         Point.RadialDirection = Radial;
@@ -285,13 +299,11 @@ void AGeoPointLayerActor::Submit(const FGeoMessageEnvelope& Message)
     }
     if (ActivePoints.Num() >= MaxVisiblePoints)
     {
-        // Trim the oldest twentieth instead of wiping the whole class.
-        const int32 RemoveCount = FMath::Max(1, MaxVisiblePoints / 20);
-        ActivePoints.Sort([](const FRenderedGeoPoint& A, const FRenderedGeoPoint& B) { return A.LastSeenSeconds < B.LastSeenSeconds; });
-        ActivePoints.RemoveAt(0, RemoveCount, EAllowShrinking::No);
-        EntityToPoint.Reset();
-        for (int32 Index = 0; Index < ActivePoints.Num(); ++Index) EntityToPoint.Add(ActivePoints[Index].EntityKey, Index);
-        bNeedsRebuild = true;
+        // Evict the least-recently-seen chunk incrementally (swap-and-pop
+        // per point) instead of a full sort-and-rebuild: only the removed
+        // markers' instances (and whichever single marker gets swapped into
+        // each freed slot) are ever touched.
+        TrimToCapacity(FMath::Max(1, MaxVisiblePoints / 20));
     }
     FRenderedGeoPoint& Point = ActivePoints.AddDefaulted_GetRef();
     Point.EntityKey = EntityKey;
@@ -305,7 +317,7 @@ void AGeoPointLayerActor::Submit(const FGeoMessageEnvelope& Message)
     Point.SpeedUnitsPerSecond = SpeedUnitsPerSecond;
     // A lone kinematic marker added into an otherwise-quiet, static-camera
     // scene must start the coast cadence itself; otherwise the flag is only
-    // ever latched inside RebuildInstances and it never begins (finding #14).
+    // ever latched inside the movement pass and it never begins (finding #14).
     if (SpeedUnitsPerSecond > 0.0) bHasKinematicPoints = true;
     Point.LastSeenSeconds = NowSeconds;
     Point.ExpireAtSeconds = ExpireAt;
@@ -344,13 +356,11 @@ void AGeoPointLayerActor::Submit(const FGeoMessageEnvelope& Message)
     Point.Primary = Message.Properties.FindRef(TEXT("display.primary"));
     Point.Secondary = Message.Properties.FindRef(TEXT("display.secondary"));
     Point.Tertiary = Message.Properties.FindRef(TEXT("display.tertiary"));
-    EntityToPoint.Add(EntityKey, ActivePoints.Num() - 1);
+    const int32 NewIndex = ActivePoints.Num() - 1;
+    EntityToPoint.Add(EntityKey, NewIndex);
     if (!bNeedsRebuild && IsDomainVisible(Point.Domain))
     {
-        const int32 InstanceIndex = MarkerInstances->AddInstance(FTransform(FQuat::Identity, Location, FVector(MarkerScale * CurrentZoomFactor * PointScale)), true);
-        TArray<float> CustomData;
-        AppendCustomData(CustomData, Point);
-        MarkerInstances->SetCustomData(InstanceIndex, CustomData, true);
+        AddRenderInstance(NewIndex, NowSeconds);
     }
 }
 
@@ -370,6 +380,7 @@ void AGeoPointLayerActor::SetAltitudeExaggerationEnabled(bool bEnabled)
 {
     if (bAltitudeExaggeration == bEnabled) return;
     bAltitudeExaggeration = bEnabled;
+    const double NowSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
     // Recompute every marker's radial lift from the stored true altitude.
     for (FRenderedGeoPoint& Point : ActivePoints)
     {
@@ -377,6 +388,13 @@ void AGeoPointLayerActor::SetAltitudeExaggerationEnabled(bool bEnabled)
         const double Scale = bAltitudeExaggeration ? Point.DeclaredAltitudeScale : 1.0;
         const double AltitudeUnits = FMath::Max(Point.AltitudeMeters, 0.0) * Scale / 6371000.0 * GlobeRadius;
         Point.Location = Point.RadialDirection * (GlobeRadius + 8.0 + AltitudeUnits);
+        // RenderedLocation is only otherwise synced from Location by the
+        // coalesced movement/reconcile passes; refresh it (coast-aware, so a
+        // kinematic marker keeps gliding through this toggle instead of
+        // snapping to its last sighting) immediately here, covering HIDDEN
+        // points too, which the reconcile pass about to be triggered by
+        // bNeedsRebuild below intentionally never visits.
+        RefreshRenderedLocation(Point, NowSeconds);
     }
     bNeedsRebuild = true;
 }
@@ -456,26 +474,27 @@ void AGeoPointLayerActor::Tick(float DeltaSeconds)
 {
     Super::Tick(DeltaSeconds);
     const double NowSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
-    // Kinematic markers keep the cadence running even without fresh
-    // sightings: dead reckoning needs periodic rebuilds to glide.
-    if (bNeedsRebuild || ((bMovementDirty || bHasKinematicPoints) && NowSeconds - LastMovementRebuild >= MovementRebuildSeconds))
+    if (bNeedsRebuild)
     {
         bNeedsRebuild = false;
-        RebuildInstances();
+        ReconcileRenderedSet();
+    }
+    // Kinematic markers keep the cadence running even without fresh
+    // sightings: dead reckoning needs periodic passes to glide.
+    if ((!DirtyEntityKeys.IsEmpty() || bHasKinematicPoints) && NowSeconds - LastMovementRebuild >= MovementRebuildSeconds)
+    {
+        ApplyMovementUpdates(NowSeconds);
     }
     if (NowSeconds - LastExpiryCheck > 5.0)
     {
         LastExpiryCheck = NowSeconds;
-        auto Expired = [this, NowSeconds](const FRenderedGeoPoint& Point) { return IsExpired(Point, NowSeconds); };
-        int32 ExpiredCount = 0;
-        for (const FRenderedGeoPoint& Point : ActivePoints) if (Expired(Point)) ++ExpiredCount;
-        if (ExpiredCount > FMath::Max(8, ActivePoints.Num() / 20))
-        {
-            ActivePoints.RemoveAll(Expired);
-            EntityToPoint.Reset();
-            for (int32 Index = 0; Index < ActivePoints.Num(); ++Index) EntityToPoint.Add(ActivePoints[Index].EntityKey, Index);
-            RebuildInstances();
-        }
+        // Each removal only touches the point actually leaving (see
+        // GeoRenderSlotMath.h), so unlike the old threshold-gated batch
+        // there is no performance reason to wait for a minimum number of
+        // expired points to accumulate. The bound below is only a safety
+        // valve against a pathological simultaneous-expiry burst.
+        const int32 MaxRemovalsThisCheck = FMath::Max(64, MaxVisiblePoints / 20);
+        EvictExpiredPoints(NowSeconds, MaxRemovalsThisCheck);
     }
     const APlayerController* Player = GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr;
     if (!Player || !Player->PlayerCameraManager) return;
@@ -490,58 +509,262 @@ void AGeoPointLayerActor::Tick(float DeltaSeconds)
     const double Target = FMath::Clamp((CameraDistance - GlobeRadius) / 2400.0, 0.012, 1.15);
     if (FMath::Abs(Target - CurrentZoomFactor) / CurrentZoomFactor < 0.08) return;
     CurrentZoomFactor = Target;
-    RebuildInstances();
+    // Zoom changes every rendered marker's scale, so this pass necessarily
+    // visits all of them - but each visit is a same-slot transform update,
+    // never an add/remove, so it never renumbers anything.
+    ReconcileRenderedSet();
 }
 
-void AGeoPointLayerActor::RebuildInstances()
+void AGeoPointLayerActor::AddRenderInstance(int32 Index, double NowSeconds)
 {
-    const double NowSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
-    TArray<FTransform> Transforms;
-    TArray<const FRenderedGeoPoint*> Rendered;
-    Transforms.Reserve(ActivePoints.Num());
-    Rendered.Reserve(ActivePoints.Num());
+    FRenderedGeoPoint& Point = ActivePoints[Index];
+    check(Point.RenderSlot == INDEX_NONE);
+    // A point can start being rendered long after its last position sync
+    // (e.g. it was hidden by a domain filter while a fresh sighting moved
+    // it, and the movement cadence has not flushed that drift yet). Refresh
+    // to the true current (coast-adjusted) position now so it never pops
+    // into view at a stale location and only later jumps to the correct
+    // one - matching the old RebuildInstances(), which unconditionally
+    // re-synced every point's RenderedLocation before drawing any of them.
+    RefreshRenderedLocation(Point, NowSeconds);
+    const FVector Scale(MarkerScale * CurrentZoomFactor * Point.Scale);
+    const int32 Slot = MarkerInstances->AddInstance(FTransform(FQuat::Identity, Point.RenderedLocation, Scale), true);
+    Point.RenderSlot = Slot;
+    check(SlotToPointIndex.Num() == Slot);
+    SlotToPointIndex.Add(Index);
+    TArray<float> CustomData;
+    AppendCustomData(CustomData, Point);
+    MarkerInstances->SetCustomData(Slot, CustomData, true);
+    ++RuntimeStats.IncrementalInserts;
+}
+
+void AGeoPointLayerActor::RemoveRenderInstance(int32 Index)
+{
+    FRenderedGeoPoint& Point = ActivePoints[Index];
+    const int32 Slot = Point.RenderSlot;
+    check(Slot != INDEX_NONE);
+    const int32 InstanceCountBeforeFree = MarkerInstances->GetInstanceCount();
+    int32 MovedFromSlot = INDEX_NONE;
+    if (GeoRenderSlotMath::ComputeFreeMove(Slot, InstanceCountBeforeFree, MovedFromSlot))
+    {
+        const int32 MovedPointIndex = SlotToPointIndex[MovedFromSlot];
+        FRenderedGeoPoint& MovedPoint = ActivePoints[MovedPointIndex];
+        const FVector Scale(MarkerScale * CurrentZoomFactor * MovedPoint.Scale);
+        MarkerInstances->UpdateInstanceTransform(Slot, FTransform(FQuat::Identity, MovedPoint.RenderedLocation, Scale), true, false, true);
+        TArray<float> CustomData;
+        AppendCustomData(CustomData, MovedPoint);
+        MarkerInstances->SetCustomData(Slot, CustomData, false);
+        MovedPoint.RenderSlot = Slot;
+        SlotToPointIndex[Slot] = MovedPointIndex;
+    }
+    MarkerInstances->RemoveInstance(InstanceCountBeforeFree - 1);
+    SlotToPointIndex.RemoveAt(InstanceCountBeforeFree - 1, 1, EAllowShrinking::No);
+    MarkerInstances->MarkRenderStateDirty();
+    Point.RenderSlot = INDEX_NONE;
+    ++RuntimeStats.IncrementalRemovals;
+}
+
+void AGeoPointLayerActor::RemoveTrackedPoint(int32 Index)
+{
+    FRenderedGeoPoint& Point = ActivePoints[Index];
+    if (Point.RenderSlot != INDEX_NONE) RemoveRenderInstance(Index);
+    EntityToPoint.Remove(Point.EntityKey);
+    DirtyEntityKeys.Remove(Point.EntityKey);
+    const int32 LastIndex = ActivePoints.Num() - 1;
+    if (Index != LastIndex)
+    {
+        ActivePoints[Index] = MoveTemp(ActivePoints[LastIndex]);
+        FRenderedGeoPoint& MovedPoint = ActivePoints[Index];
+        EntityToPoint.Add(MovedPoint.EntityKey, Index);
+        if (MovedPoint.RenderSlot != INDEX_NONE) SlotToPointIndex[MovedPoint.RenderSlot] = Index;
+    }
+    ActivePoints.RemoveAt(LastIndex, 1, EAllowShrinking::No);
+}
+
+int32 AGeoPointLayerActor::EvictExpiredPoints(double NowSeconds, int32 MaxRemovals)
+{
+    int32 Removed = 0;
+    int32 Index = 0;
+    while (Index < ActivePoints.Num() && Removed < MaxRemovals)
+    {
+        if (IsExpired(ActivePoints[Index], NowSeconds))
+        {
+            RemoveTrackedPoint(Index);
+            ++Removed;
+            ++RuntimeStats.ExpiredRemovals;
+            // Do not advance Index: swap-and-pop moved a not-yet-tested
+            // point into this position.
+        }
+        else
+        {
+            ++Index;
+        }
+    }
+    return Removed;
+}
+
+int32 AGeoPointLayerActor::TrimToCapacity(int32 MaxRemovals)
+{
+    struct FVictim
+    {
+        int32 Index;
+        double LastSeenSeconds;
+    };
+    TArray<FVictim> Candidates;
+    Candidates.Reserve(ActivePoints.Num());
+    for (int32 Index = 0; Index < ActivePoints.Num(); ++Index)
+    {
+        Candidates.Add(FVictim{Index, ActivePoints[Index].LastSeenSeconds});
+    }
+    const int32 RemoveCount = FMath::Min(MaxRemovals, Candidates.Num());
+    if (RemoveCount <= 0) return 0;
+    // Least-recently-seen first, matching the original trim's intent. This
+    // full sort is CPU-only (small structs, no instance/GPU touch) and only
+    // runs on the rare capacity-overflow path.
+    Candidates.Sort([](const FVictim& A, const FVictim& B) { return A.LastSeenSeconds < B.LastSeenSeconds; });
+    Candidates.SetNum(RemoveCount, EAllowShrinking::No);
+    // Highest tracked index first: a swap-and-pop removal from ActivePoints
+    // only ever relocates the CURRENT last element, and every not-yet-
+    // processed victim's index here is strictly below the one being
+    // removed, so it can never be the element relocated out from under a
+    // later iteration (see GeoRenderSlotMathTests.cpp's descending-batch
+    // removal proof).
+    Candidates.Sort([](const FVictim& A, const FVictim& B) { return A.Index > B.Index; });
+    for (const FVictim& Victim : Candidates)
+    {
+        RemoveTrackedPoint(Victim.Index);
+        ++RuntimeStats.CapacityEvictions;
+    }
+    return RemoveCount;
+}
+
+void AGeoPointLayerActor::RefreshRenderedLocation(FRenderedGeoPoint& Point, double NowSeconds) const
+{
+    Point.RenderedLocation = Point.Location;
+    if (Point.SpeedUnitsPerSecond > 0.0)
+    {
+        // Cap covers the slow global-snapshot cycle (15 min polls).
+        const double CoastSeconds = FMath::Clamp(NowSeconds - Point.LastSeenSeconds, 0.0, 1200.0);
+        Point.RenderedLocation += Point.HeadingWorld * (Point.SpeedUnitsPerSecond * CoastSeconds);
+    }
+}
+
+void AGeoPointLayerActor::ApplyMovementUpdates(double NowSeconds)
+{
     bHasKinematicPoints = false;
+    bool bAnyChange = false;
+    // Kinematic markers must be re-coasted every cadence pass regardless of
+    // whether anything else changed - that CPU scan is O(active points),
+    // same as before. The improvement is downstream: only a marker that is
+    // both currently rendered and actually moved touches the instance
+    // buffer; a marker that is not moving is never touched here.
     for (FRenderedGeoPoint& Point : ActivePoints)
     {
-        // Dead reckoning: glide the marker along its heading between
-        // sightings (capped so a stalled feed cannot fly it off course);
-        // each fresh sighting snaps the base position back to truth.
-        Point.RenderedLocation = Point.Location;
-        if (Point.SpeedUnitsPerSecond > 0.0)
+        if (Point.SpeedUnitsPerSecond <= 0.0) continue;
+        bHasKinematicPoints = true;
+        const FVector Previous = Point.RenderedLocation;
+        RefreshRenderedLocation(Point, NowSeconds);
+        if (Point.RenderSlot != INDEX_NONE && !Previous.Equals(Point.RenderedLocation, UE_KINDA_SMALL_NUMBER))
         {
-            // Cap covers the slow global-snapshot cycle (15 min polls).
-            const double CoastSeconds = FMath::Clamp(NowSeconds - Point.LastSeenSeconds, 0.0, 1200.0);
-            Point.RenderedLocation += Point.HeadingWorld * (Point.SpeedUnitsPerSecond * CoastSeconds);
+            const FVector Scale(MarkerScale * CurrentZoomFactor * Point.Scale);
+            MarkerInstances->UpdateInstanceTransform(Point.RenderSlot, FTransform(FQuat::Identity, Point.RenderedLocation, Scale), true, false, true);
+            ++RuntimeStats.IncrementalUpdates;
+            bAnyChange = true;
         }
-        if (!IsDomainVisible(Point.Domain)) continue;
-        // Do not draw markers already past their lifetime but still waiting
-        // for the batched sweep: they rendered as glyph-less ghosts that the
-        // hover pick nonetheless reported (audit finding #4).
-        if (IsExpired(Point, NowSeconds)) continue;
-        if (IsAircraftFiltered(Point)) continue;
-        if (Point.SpeedUnitsPerSecond > 0.0) bHasKinematicPoints = true;
-        const FVector Scale(MarkerScale * CurrentZoomFactor * Point.Scale);
-        Transforms.Emplace(FQuat::Identity, Point.RenderedLocation, Scale);
-        Rendered.Add(&Point);
     }
-    bMovementDirty = false;
-    LastMovementRebuild = NowSeconds;
-    MarkerInstances->ClearInstances();
-    MarkerInstances->AddInstances(Transforms, false);
-    for (int32 Index = 0; Index < Rendered.Num(); ++Index)
+    // Fresh sightings whose position drifted past tolerance (see
+    // FRenderedGeoPoint::RenderedLocation): flush RenderedLocation now, on
+    // the same coalesced cadence as dead reckoning rather than immediately
+    // on submit. Uses the same coast-aware refresh as the loop above (not a
+    // bare snap to Location) so a point that is both kinematic and dirty -
+    // a moving marker whose last sighting also jumped past tolerance - is
+    // left at its correctly coasted position rather than having this loop
+    // undo the first one's work; for a non-kinematic point the two
+    // computations are identical.
+    for (const FString& EntityKey : DirtyEntityKeys)
     {
-        TArray<float> CustomData;
-        AppendCustomData(CustomData, *Rendered[Index]);
-        MarkerInstances->SetCustomData(Index, CustomData, false);
+        const int32* IndexPtr = EntityToPoint.Find(EntityKey);
+        if (!IndexPtr) continue; // expired/removed since being marked dirty
+        FRenderedGeoPoint& Point = ActivePoints[*IndexPtr];
+        RefreshRenderedLocation(Point, NowSeconds);
+        if (Point.RenderSlot != INDEX_NONE)
+        {
+            const FVector Scale(MarkerScale * CurrentZoomFactor * Point.Scale);
+            MarkerInstances->UpdateInstanceTransform(Point.RenderSlot, FTransform(FQuat::Identity, Point.RenderedLocation, Scale), true, false, true);
+            ++RuntimeStats.IncrementalUpdates;
+            bAnyChange = true;
+        }
     }
-    MarkerInstances->MarkRenderStateDirty();
+    DirtyEntityKeys.Reset();
+    if (bAnyChange) MarkerInstances->MarkRenderStateDirty();
+    LastMovementRebuild = NowSeconds;
+}
+
+void AGeoPointLayerActor::ReconcileRenderedSet()
+{
+    const double NowSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+    bool bAnyChange = false;
+    // ActivePoints.Num() is re-read each iteration: RemoveRenderInstance
+    // never changes it (only MarkerInstances/SlotToPointIndex), and
+    // AddRenderInstance never adds a tracked point either, so it is stable
+    // for the whole loop - this is just defensive against a future change.
+    for (int32 Index = 0; Index < ActivePoints.Num(); ++Index)
+    {
+        FRenderedGeoPoint& Point = ActivePoints[Index];
+        const bool bShouldRender = IsDomainVisible(Point.Domain) && !IsExpired(Point, NowSeconds) && !IsAircraftFiltered(Point);
+        if (bShouldRender && Point.RenderSlot == INDEX_NONE)
+        {
+            AddRenderInstance(Index, NowSeconds);
+            bAnyChange = true;
+        }
+        else if (!bShouldRender && Point.RenderSlot != INDEX_NONE)
+        {
+            RemoveRenderInstance(Index);
+            bAnyChange = true;
+        }
+        else if (bShouldRender)
+        {
+            // Already rendered and still should be: refresh transform and
+            // custom data in place on the SAME slot. A whole-pool trigger
+            // (zoom, altitude exaggeration, a filter threshold) can affect
+            // any point, so this branch still visits every rendered point
+            // once, but it is always a same-slot update - never an
+            // add/remove/renumber - so no OTHER point's slot is disturbed.
+            // Also re-syncs RenderedLocation (coast-aware, free here since
+            // the transform write below happens regardless): the old
+            // RebuildInstances() did this unconditionally for every point on
+            // every trigger, not only the movement cadence, and a kinematic
+            // marker must not appear to jump backward to its last sighting
+            // just because an unrelated point's style changed.
+            RefreshRenderedLocation(Point, NowSeconds);
+            const FVector Scale(MarkerScale * CurrentZoomFactor * Point.Scale);
+            MarkerInstances->UpdateInstanceTransform(Point.RenderSlot, FTransform(FQuat::Identity, Point.RenderedLocation, Scale), true, false, true);
+            TArray<float> CustomData;
+            AppendCustomData(CustomData, Point);
+            MarkerInstances->SetCustomData(Point.RenderSlot, CustomData, false);
+            ++RuntimeStats.IncrementalUpdates;
+            bAnyChange = true;
+        }
+    }
+    if (bAnyChange) MarkerInstances->MarkRenderStateDirty();
 }
 
 void AGeoPointLayerActor::Reset()
 {
     ActivePoints.Reset();
     EntityToPoint.Reset();
+    SlotToPointIndex.Reset();
+    DirtyEntityKeys.Reset();
+    bHasKinematicPoints = false;
     MarkerInstances->ClearInstances();
 }
 void AGeoPointLayerActor::OnMessageAccepted(const FGeoMessageEnvelope& Message) { Submit(Message); }
 void AGeoPointLayerActor::OnLayerVisibilityChanged(const FString& LayerId, bool bVisible) { if (LayerId == TEXT("core.point-markers")) SetActorHiddenInGame(!bVisible); }
+
+FGeoRenderLayerStatistics AGeoPointLayerActor::GetRenderStatistics() const
+{
+    FGeoRenderLayerStatistics Stats = RuntimeStats;
+    Stats.TrackedItems = ActivePoints.Num();
+    Stats.RenderedInstances = MarkerInstances ? MarkerInstances->GetInstanceCount() : 0;
+    return Stats;
+}
