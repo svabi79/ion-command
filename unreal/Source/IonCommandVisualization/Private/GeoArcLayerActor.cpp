@@ -5,6 +5,7 @@
 #include "GeoDataSubsystem.h"
 #include "GeoLayerSubsystem.h"
 #include "GeoMathLibrary.h"
+#include "GeoRenderSlotMath.h"
 #include "GeoSelectionSubsystem.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "UObject/ConstructorHelpers.h"
@@ -41,6 +42,10 @@ AGeoArcLayerActor::AGeoArcLayerActor()
         }
         PaletteMeshes.Add(Instances);
     }
+    // One CPU bucket per palette component, index-parallel with its instance
+    // blocks for the lifetime of the actor (PaletteMeshes.Num() never
+    // changes after construction).
+    ArcsByPalette.SetNum(PaletteMeshes.Num());
     SelectionMesh = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("SelectedArcInstances"));
     SelectionMesh->SetupAttachment(SceneRoot);
     SelectionMesh->SetStaticMesh(SegmentMesh.Object);
@@ -162,11 +167,6 @@ void AGeoArcLayerActor::Tick(float DeltaSeconds)
 {
     Super::Tick(DeltaSeconds);
     RefreshSelectionHighlight();
-    if (bNeedsRebuild)
-    {
-        bNeedsRebuild = false;
-        RebuildInstances();
-    }
     const double Now = FPlatformTime::Seconds();
     if (Now - LastExpiryCheck < 3.0) return;
     LastExpiryCheck = Now;
@@ -175,7 +175,6 @@ void AGeoArcLayerActor::Tick(float DeltaSeconds)
     // would remove arcs mid-fade. The half-second grace guarantees an arc is
     // fully invisible before its instances are dropped.
     const double RenderNow = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
-    const double AgeLimit = LifetimeSeconds + 0.5;
     // Endpoint congestion decays on the same cadence so a hotspot recovers
     // full brightness once its traffic subsides.
     for (auto It = EndpointDensity.CreateIterator(); It; ++It)
@@ -183,13 +182,15 @@ void AGeoArcLayerActor::Tick(float DeltaSeconds)
         It->Value *= 0.85f;
         if (It->Value < 0.5f) It.RemoveCurrent();
     }
-    int32 ExpiredCount = 0;
-    for (const FRenderedGeoArc& Arc : ActiveArcs) if (RenderNow - Arc.SpawnTimeSeconds > AgeLimit) ++ExpiredCount;
-    if (ExpiredCount > FMath::Max(32, ActiveArcs.Num() / 20))
-    {
-        ActiveArcs.RemoveAll([RenderNow, AgeLimit](const FRenderedGeoArc& Arc) { return RenderNow - Arc.SpawnTimeSeconds > AgeLimit; });
-        RebuildInstances();
-    }
+    // Each removal only touches the arc actually leaving (see
+    // GeoRenderSlotMath.h), so unlike the old threshold-gated batch there is
+    // no performance reason to wait for a minimum number of expired arcs to
+    // accumulate. The bound below is only a safety valve against a
+    // pathological simultaneous-expiry burst (e.g. the client sat
+    // backgrounded for a while); anything left over is already fully faded
+    // and invisible, and is picked up by the next check.
+    const int32 MaxRemovalsThisCheck = FMath::Max(256, MaxVisibleArcs / 4);
+    EvictExpiredArcs(RenderNow, MaxRemovalsThisCheck);
 }
 
 bool AGeoArcLayerActor::Supports(const FGeoMessageEnvelope& Message) const
@@ -208,18 +209,24 @@ void AGeoArcLayerActor::Submit(const FGeoMessageEnvelope& Message)
     {
         return;
     }
-    if (ActiveArcs.Num() >= MaxVisibleArcs)
+    if (TotalArcCount >= MaxVisibleArcs)
     {
-        // Trim without rebuilding: at firehose rates every submit would
-        // otherwise trigger a full instance rebuild. One rebuild per frame.
-        ActiveArcs.RemoveAt(0, FMath::Max(1, MaxVisibleArcs / 5), EAllowShrinking::No);
-        bNeedsRebuild = true;
+        // Evict the oldest chunk incrementally (swap-and-pop per arc)
+        // instead of rebuilding: at firehose rates every submit would
+        // otherwise touch every surviving arc's instances just to make room
+        // for one more.
+        TrimToCapacity(FMath::Max(1, MaxVisibleArcs / 5));
     }
-    FRenderedGeoArc& Arc = ActiveArcs.AddDefaulted_GetRef();
+    FRenderedGeoArc Arc;
     Arc.Message = Message;
     Arc.AddedUtc = Message.Time.ObservedUtc.GetTicks() > 0 ? Message.Time.ObservedUtc : FDateTime::UtcNow();
     Arc.SpawnTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
-    Arc.PaletteIndex = ResolvePaletteIndex(Message);
+    // Resolved once, clamped to a real component, and stored on the record
+    // itself so the palette a subclass's ResolvePaletteIndex() chose always
+    // matches the ArcsByPalette bucket the arc actually lives in.
+    const int32 ResolvedPalette = ResolvePaletteIndex(Message);
+    const int32 PaletteIndex = PaletteMeshes.IsValidIndex(ResolvedPalette) ? ResolvedPalette : PaletteMeshes.Num() - 1;
+    Arc.PaletteIndex = PaletteIndex;
     // Endpoint congestion (a skimmer hearing hundreds of stations) dims the
     // segments near that endpoint with the square root of its arc count;
     // the rest of the path keeps full brightness and color.
@@ -236,15 +243,13 @@ void AGeoArcLayerActor::Submit(const FGeoMessageEnvelope& Message)
     };
     Arc.BrightnessFrom = EndBrightness(BumpDensity(Message.FromEntityId));
     Arc.BrightnessTo = EndBrightness(BumpDensity(Message.ToEntityId));
-    if (!bNeedsRebuild)
-    {
-        AddArcInstances(Arc);
-    }
+    AddArc(PaletteIndex, Arc);
 }
 
 void AGeoArcLayerActor::Reset()
 {
-    ActiveArcs.Reset();
+    for (TArray<FRenderedGeoArc>& Arcs : ArcsByPalette) Arcs.Reset();
+    TotalArcCount = 0;
     EndpointDensity.Reset();
     for (UInstancedStaticMeshComponent* Instances : PaletteMeshes) Instances->ClearInstances();
     SelectionMesh->ClearInstances();
@@ -271,6 +276,12 @@ void AGeoArcLayerActor::SetEntityFilter(const TArray<FString>& EntityIds)
     Reset();
     if (DataSubsystem.IsValid())
     {
+        // A deliberate, infrequent operator action, not periodic churn: this
+        // resubmits the whole active window through the same incremental
+        // Submit() path used for live traffic, so it never falls back to a
+        // bulk clear-and-readd of an existing population - but it still
+        // touches every message in the window once, hence counted here.
+        ++RuntimeStats.FullRebuilds;
         for (const FGeoMessageEnvelope& Message : DataSubsystem->GetActiveMessages()) Submit(Message);
     }
 }
@@ -283,13 +294,14 @@ void AGeoArcLayerActor::SetPropertyFilter(const FString& Key, const FString& Val
     Reset();
     if (DataSubsystem.IsValid())
     {
+        ++RuntimeStats.FullRebuilds;
         for (const FGeoMessageEnvelope& Message : DataSubsystem->GetActiveMessages()) Submit(Message);
     }
 }
 
-void AGeoArcLayerActor::AddArcInstances(const FRenderedGeoArc& Arc)
+int32 AGeoArcLayerActor::AddArc(int32 PaletteIndex, const FRenderedGeoArc& Arc)
 {
-    UInstancedStaticMeshComponent* Instances = PaletteMeshes.IsValidIndex(Arc.PaletteIndex) ? PaletteMeshes[Arc.PaletteIndex] : PaletteMeshes.Last();
+    UInstancedStaticMeshComponent* Instances = PaletteMeshes[PaletteIndex];
     TArray<FTransform> Transforms;
     Transforms.Reserve(SegmentsPerArc);
     AppendArcTransforms(Transforms, Arc.Message, ArcThickness);
@@ -302,6 +314,136 @@ void AGeoArcLayerActor::AddArcInstances(const FRenderedGeoArc& Arc)
         Instances->SetCustomDataValue(Indices[Segment], 2, SegmentBrightness(Arc, Segment), false);
     }
     Instances->MarkRenderStateDirty();
+    // Append to the CPU bucket last: AddInstances() above already grew the
+    // component by SegmentsPerArc, so appending here is what keeps
+    // ArcsByPalette[PaletteIndex].Num() * SegmentsPerArc ==
+    // Instances->GetInstanceCount() true again.
+    const int32 Slot = ArcsByPalette[PaletteIndex].Add(Arc);
+    ++TotalArcCount;
+    ++RuntimeStats.IncrementalInserts;
+    return Slot;
+}
+
+void AGeoArcLayerActor::RemoveArcAtSlot(int32 PaletteIndex, int32 Slot)
+{
+    TArray<FRenderedGeoArc>& Arcs = ArcsByPalette[PaletteIndex];
+    UInstancedStaticMeshComponent* Instances = PaletteMeshes[PaletteIndex];
+    const int32 BlockCountBeforeFree = Arcs.Num();
+    int32 MovedFromSlot = INDEX_NONE;
+    if (GeoRenderSlotMath::ComputeFreeMove(Slot, BlockCountBeforeFree, MovedFromSlot))
+    {
+        // Recompute the relocated arc's transforms/custom data from its own
+        // source record rather than reading the instance buffer back: it is
+        // cheaper, and it cannot inherit any staleness the buffer might
+        // have accumulated.
+        const FRenderedGeoArc& MovedArc = Arcs[MovedFromSlot];
+        TArray<FTransform> Transforms;
+        Transforms.Reserve(SegmentsPerArc);
+        AppendArcTransforms(Transforms, MovedArc.Message, ArcThickness);
+        const int32 BaseInstance = Slot * SegmentsPerArc;
+        Instances->BatchUpdateInstancesTransforms(BaseInstance, Transforms, /*bWorldSpace=*/true, /*bMarkRenderStateDirty=*/false, /*bTeleport=*/true);
+        const float InverseLifetime = LifetimeSeconds > 0.0 ? static_cast<float>(1.0 / LifetimeSeconds) : 0.0f;
+        for (int32 Segment = 0; Segment < SegmentsPerArc; ++Segment)
+        {
+            Instances->SetCustomDataValue(BaseInstance + Segment, 0, static_cast<float>(MovedArc.SpawnTimeSeconds), false);
+            Instances->SetCustomDataValue(BaseInstance + Segment, 1, InverseLifetime, false);
+            Instances->SetCustomDataValue(BaseInstance + Segment, 2, SegmentBrightness(MovedArc, Segment), false);
+        }
+        // Keep the CPU record's own slot in sync with the instances we just
+        // wrote. MovedArc is read-only above; reassigning here (rather than
+        // moving) keeps the code simple - Arcs.RemoveAt() below discards the
+        // source element regardless.
+        Arcs[Slot] = Arcs[MovedFromSlot];
+    }
+    Arcs.RemoveAt(BlockCountBeforeFree - 1, 1, EAllowShrinking::No);
+    // Trim the trailing block: now either a stale duplicate (move case) or
+    // the freed block itself (no-move case). Removed from the component's
+    // true tail in descending order, which is safe regardless of whether
+    // RemoveInstance() internally swaps-with-last (it does, per
+    // r.InstancedStaticMeshes.ForceRemoveAtSwap) because nothing below the
+    // tail block ever changes index when only the tail is removed.
+    const int32 TailBase = (BlockCountBeforeFree - 1) * SegmentsPerArc;
+    TArray<int32> ToRemove;
+    ToRemove.Reserve(SegmentsPerArc);
+    for (int32 Segment = SegmentsPerArc - 1; Segment >= 0; --Segment) ToRemove.Add(TailBase + Segment);
+    Instances->RemoveInstances(ToRemove, /*bInstanceArrayAlreadySortedInReverseOrder=*/true);
+    Instances->MarkRenderStateDirty();
+    --TotalArcCount;
+    ++RuntimeStats.IncrementalRemovals;
+}
+
+int32 AGeoArcLayerActor::EvictExpiredArcs(double RenderNow, int32 MaxRemovals)
+{
+    const double AgeLimit = LifetimeSeconds + 0.5;
+    int32 Removed = 0;
+    for (int32 PaletteIndex = 0; PaletteIndex < ArcsByPalette.Num() && Removed < MaxRemovals; ++PaletteIndex)
+    {
+        TArray<FRenderedGeoArc>& Arcs = ArcsByPalette[PaletteIndex];
+        int32 Slot = 0;
+        while (Slot < Arcs.Num() && Removed < MaxRemovals)
+        {
+            if (RenderNow - Arcs[Slot].SpawnTimeSeconds > AgeLimit)
+            {
+                RemoveArcAtSlot(PaletteIndex, Slot);
+                ++Removed;
+                ++RuntimeStats.ExpiredRemovals;
+                // Do not advance Slot: the arc swapped into this position
+                // (if the removed one was not already the run's last block)
+                // has not been tested yet.
+            }
+            else
+            {
+                ++Slot;
+            }
+        }
+    }
+    return Removed;
+}
+
+int32 AGeoArcLayerActor::TrimToCapacity(int32 MaxRemovals)
+{
+    struct FVictim
+    {
+        int32 PaletteIndex;
+        int32 Slot;
+        double SpawnTimeSeconds;
+    };
+    TArray<FVictim> Candidates;
+    Candidates.Reserve(TotalArcCount);
+    for (int32 PaletteIndex = 0; PaletteIndex < ArcsByPalette.Num(); ++PaletteIndex)
+    {
+        const TArray<FRenderedGeoArc>& Arcs = ArcsByPalette[PaletteIndex];
+        for (int32 Slot = 0; Slot < Arcs.Num(); ++Slot)
+        {
+            Candidates.Add(FVictim{PaletteIndex, Slot, Arcs[Slot].SpawnTimeSeconds});
+        }
+    }
+    const int32 RemoveCount = FMath::Min(MaxRemovals, Candidates.Num());
+    if (RemoveCount <= 0) return 0;
+    // Oldest first, matching the original trim's intent: sustained overload
+    // sheds the arcs already closest to their natural age-based expiry.
+    // This full sort is CPU-only (small structs, no instance/GPU touch) and
+    // only runs on the rare burst path - the comment on MaxVisibleArcs notes
+    // steady-state traffic should not reach this at all.
+    Candidates.Sort([](const FVictim& A, const FVictim& B) { return A.SpawnTimeSeconds < B.SpawnTimeSeconds; });
+    Candidates.SetNum(RemoveCount, EAllowShrinking::No);
+    // Re-sort the chosen victims so each palette's are processed from the
+    // highest slot down. A swap-and-pop removal only ever relocates the
+    // CURRENT last slot of that palette, and every not-yet-processed
+    // victim's slot is strictly below the one being removed, so it can
+    // never be the one relocated out from under a later iteration (proved
+    // in GeoRenderSlotMathTests.cpp's descending-batch-removal case).
+    Candidates.Sort([](const FVictim& A, const FVictim& B)
+    {
+        if (A.PaletteIndex != B.PaletteIndex) return A.PaletteIndex < B.PaletteIndex;
+        return A.Slot > B.Slot;
+    });
+    for (const FVictim& Victim : Candidates)
+    {
+        RemoveArcAtSlot(Victim.PaletteIndex, Victim.Slot);
+        ++RuntimeStats.CapacityEvictions;
+    }
+    return RemoveCount;
 }
 
 float AGeoArcLayerActor::SegmentBrightness(const FRenderedGeoArc& Arc, int32 Segment) const
@@ -369,23 +511,26 @@ bool AGeoArcLayerActor::FindClosestMessageToRay(const FVector& RayOrigin, const 
     const FVector RayEnd = RayOrigin + RayDirection.GetSafeNormal() * RayLength;
     double BestDistanceSquared = FMath::Square(MaxDistance);
     bool bFound = false;
-    for (const FRenderedGeoArc& Arc : ActiveArcs)
+    for (const TArray<FRenderedGeoArc>& Arcs : ArcsByPalette)
     {
-        FVector Previous = CalculateArcPoint(Arc.Message, 0.0);
-        for (int32 Segment = 1; Segment <= SegmentsPerArc; ++Segment)
+        for (const FRenderedGeoArc& Arc : Arcs)
         {
-            const FVector Current = CalculateArcPoint(Arc.Message, static_cast<double>(Segment) / SegmentsPerArc);
-            FVector ClosestRay;
-            FVector ClosestArc;
-            FMath::SegmentDistToSegmentSafe(RayOrigin, RayEnd, Previous, Current, ClosestRay, ClosestArc);
-            const double DistanceSquared = FVector::DistSquared(ClosestRay, ClosestArc);
-            if (DistanceSquared < BestDistanceSquared)
+            FVector Previous = CalculateArcPoint(Arc.Message, 0.0);
+            for (int32 Segment = 1; Segment <= SegmentsPerArc; ++Segment)
             {
-                BestDistanceSquared = DistanceSquared;
-                OutMessage = Arc.Message;
-                bFound = true;
+                const FVector Current = CalculateArcPoint(Arc.Message, static_cast<double>(Segment) / SegmentsPerArc);
+                FVector ClosestRay;
+                FVector ClosestArc;
+                FMath::SegmentDistToSegmentSafe(RayOrigin, RayEnd, Previous, Current, ClosestRay, ClosestArc);
+                const double DistanceSquared = FVector::DistSquared(ClosestRay, ClosestArc);
+                if (DistanceSquared < BestDistanceSquared)
+                {
+                    BestDistanceSquared = DistanceSquared;
+                    OutMessage = Arc.Message;
+                    bFound = true;
+                }
+                Previous = Current;
             }
-            Previous = Current;
         }
     }
     return bFound;
@@ -427,42 +572,6 @@ void AGeoArcLayerActor::ApplySelectionDimming(bool bDim)
     }
 }
 
-void AGeoArcLayerActor::RebuildInstances()
-{
-    // One bulk update per palette component instead of one render-state dirty
-    // per segment; this keeps full rebuilds affordable at firehose feed rates.
-    TArray<TArray<FTransform>> PerPalette;
-    TArray<TArray<float>> PerPaletteSpawnTimes;
-    TArray<TArray<float>> PerPaletteBrightness;
-    PerPalette.SetNum(PaletteMeshes.Num());
-    PerPaletteSpawnTimes.SetNum(PaletteMeshes.Num());
-    PerPaletteBrightness.SetNum(PaletteMeshes.Num());
-    for (const FRenderedGeoArc& Arc : ActiveArcs)
-    {
-        const int32 PaletteIndex = PaletteMeshes.IsValidIndex(Arc.PaletteIndex) ? Arc.PaletteIndex : PaletteMeshes.Num() - 1;
-        AppendArcTransforms(PerPalette[PaletteIndex], Arc.Message, ArcThickness);
-        for (int32 Segment = 0; Segment < SegmentsPerArc; ++Segment)
-        {
-            PerPaletteSpawnTimes[PaletteIndex].Add(static_cast<float>(Arc.SpawnTimeSeconds));
-            PerPaletteBrightness[PaletteIndex].Add(SegmentBrightness(Arc, Segment));
-        }
-    }
-    const float InverseLifetime = LifetimeSeconds > 0.0 ? static_cast<float>(1.0 / LifetimeSeconds) : 0.0f;
-    for (int32 Index = 0; Index < PaletteMeshes.Num(); ++Index)
-    {
-        UInstancedStaticMeshComponent* Instances = PaletteMeshes[Index];
-        Instances->ClearInstances();
-        const TArray<int32> Added = Instances->AddInstances(PerPalette[Index], true, true);
-        for (int32 AddedIndex = 0; AddedIndex < Added.Num(); ++AddedIndex)
-        {
-            Instances->SetCustomDataValue(Added[AddedIndex], 0, PerPaletteSpawnTimes[Index][AddedIndex], false);
-            Instances->SetCustomDataValue(Added[AddedIndex], 1, InverseLifetime, false);
-            Instances->SetCustomDataValue(Added[AddedIndex], 2, PerPaletteBrightness[Index][AddedIndex], false);
-        }
-        Instances->MarkRenderStateDirty();
-    }
-}
-
 void AGeoArcLayerActor::OnLayerVisibilityChanged(const FString& LayerId, bool bVisible)
 {
     if (LayerId == CreateLayerManifest().LayerId) SetActorHiddenInGame(!bVisible);
@@ -495,10 +604,9 @@ void AGeoArcLayerActor::GetPaletteBreakdown(TArray<FGeoPaletteBreakdownEntry>& O
 {
     TArray<int32> Counts;
     Counts.SetNumZeroed(PaletteMeshes.Num());
-    for (const FRenderedGeoArc& Arc : ActiveArcs)
+    for (int32 PaletteIndex = 0; PaletteIndex < ArcsByPalette.Num(); ++PaletteIndex)
     {
-        const int32 PaletteIndex = Counts.IsValidIndex(Arc.PaletteIndex) ? Arc.PaletteIndex : Counts.Num() - 1;
-        if (Counts.IsValidIndex(PaletteIndex)) ++Counts[PaletteIndex];
+        if (Counts.IsValidIndex(PaletteIndex)) Counts[PaletteIndex] = ArcsByPalette[PaletteIndex].Num();
     }
     OutEntries.Reset();
     for (int32 Index = 0; Index < Counts.Num(); ++Index)
@@ -520,4 +628,17 @@ FGeoLayerManifest AGeoArcLayerActor::CreateLayerManifest() const
     Manifest.GeometryTypes = {EGeoGeometryType::GreatCircle, EGeoGeometryType::Arc};
     Manifest.bSupportsAggregation = true;
     return Manifest;
+}
+
+FGeoRenderLayerStatistics AGeoArcLayerActor::GetRenderStatistics() const
+{
+    FGeoRenderLayerStatistics Stats = RuntimeStats;
+    Stats.TrackedItems = TotalArcCount;
+    int32 InstanceTotal = 0;
+    for (const UInstancedStaticMeshComponent* Instances : PaletteMeshes)
+    {
+        if (Instances) InstanceTotal += Instances->GetInstanceCount();
+    }
+    Stats.RenderedInstances = InstanceTotal;
+    return Stats;
 }

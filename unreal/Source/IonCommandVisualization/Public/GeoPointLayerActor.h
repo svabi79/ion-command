@@ -55,6 +55,11 @@ struct FRenderedGeoPoint
     // tint, enlarged scale, and alarm title survive later non-emergency
     // sightings from another source until the marker expires.
     bool bEmergency = false;
+    // Stable render slot: the index into MarkerInstances currently showing
+    // this marker, or INDEX_NONE while it is tracked but not rendered (e.g.
+    // hidden by a domain/altitude/ground filter or expired but not yet
+    // swept). See AGeoPointLayerActor::AddRenderInstance/RemoveRenderInstance.
+    int32 RenderSlot = INDEX_NONE;
 };
 
 UCLASS()
@@ -98,6 +103,13 @@ public:
     void SetMarkerLifetimeSeconds(double Seconds);
     double GetMarkerLifetimeSeconds() const { return MarkerLifetimeSeconds; }
 
+    // Render-population instrumentation: counts of incremental slot
+    // operations (this layer no longer performs a full clear-and-readd
+    // rebuild anywhere - see the class-level comment in the .cpp), plus live
+    // tracked/rendered counts. Exposed the same way
+    // UGeoDataSubsystem::GetStatistics() exposes its counters.
+    FGeoRenderLayerStatistics GetRenderStatistics() const;
+
     UPROPERTY(EditAnywhere, Category="ION COMMAND|Layer") double GlobeRadius = 1000.0;
     // Sized for the global aviation snapshot (~8k airframes) on top of the
     // ham station, lightning, and satellite populations.
@@ -109,9 +121,9 @@ public:
     // observations (lightning strikes) fade much sooner than entities.
     UPROPERTY(EditAnywhere, Category="ION COMMAND|Layer") double MarkerLifetimeSeconds = 300.0;
     UPROPERTY(EditAnywhere, Category="ION COMMAND|Layer") double ObservationLifetimeSeconds = 30.0;
-    // Moving markers trigger a coalesced rebuild once their rendered position
-    // lags by this many world units (0.25 = ~1.6 km ground distance), at most
-    // every MovementRebuildSeconds.
+    // Moving markers trigger a coalesced dead-reckoning pass once their
+    // rendered position lags by this many world units (0.25 = ~1.6 km ground
+    // distance), at most every MovementRebuildSeconds.
     UPROPERTY(EditAnywhere, Category="ION COMMAND|Layer") double MovementTolerance = 0.25;
     UPROPERTY(EditAnywhere, Category="ION COMMAND|Layer") double MovementRebuildSeconds = 2.0;
 
@@ -119,13 +131,68 @@ private:
     void OnMessageAccepted(const FGeoMessageEnvelope& Message);
     void BuildEditorPreview();
     void OnLayerVisibilityChanged(const FString& LayerId, bool bVisible);
-    void RebuildInstances();
     // One instance's worth of custom data for the pictogram material:
     // icon index, RGB tint, world origin (billboard pivot).
     static void AppendCustomData(TArray<float>& Out, const FRenderedGeoPoint& Point);
     // Single source of truth for marker expiry, shared by the render path,
     // the batched cleanup sweep, and the hover pick so they never disagree.
     bool IsExpired(const FRenderedGeoPoint& Point, double NowSeconds) const;
+    bool IsAircraftFiltered(const FRenderedGeoPoint& Point) const;
+    // Single source of truth for "where is this point right now": resets to
+    // the authoritative Location, then re-applies the dead-reckoning coast
+    // delta for a kinematic point. Used by both the movement cadence and
+    // the style/filter reconcile pass so a kinematic marker's position
+    // never depends on WHICH trigger last touched it - without this shared
+    // computation, a reconcile pass triggered by an unrelated point's style
+    // change would snap a moving marker back to its last sighting instead
+    // of its current coasted position.
+    void RefreshRenderedLocation(FRenderedGeoPoint& Point, double NowSeconds) const;
+
+    // --- Stable render slots ---------------------------------------------
+    // ActivePoints tracks every live entity regardless of visibility;
+    // SlotToPointIndex[RenderSlot] gives the ActivePoints index currently
+    // occupying a given MarkerInstances slot, and MarkerInstances holds a
+    // dense (hole-free) run - i.e. SlotToPointIndex.Num() ==
+    // MarkerInstances->GetInstanceCount() always. A tracked point that is
+    // not currently rendered (hidden by a filter, or awaiting the expiry
+    // sweep) has RenderSlot == INDEX_NONE and no entry in either array. See
+    // GeoRenderSlotMath.h for the swap-and-pop removal strategy shared with
+    // the arc layer, and GeoRenderSlotMathTests.cpp for the consistency
+    // proof.
+
+    // Gives ActivePoints[Index] a render instance; it must not already have
+    // one. Appends to the tail of MarkerInstances.
+    void AddRenderInstance(int32 Index, double NowSeconds);
+    // Removes ActivePoints[Index]'s render instance via swap-and-pop against
+    // MarkerInstances' current last instance; it must already have one.
+    void RemoveRenderInstance(int32 Index);
+    // Removes ActivePoints[Index] entirely (releasing its render instance
+    // first if it has one) via swap-and-pop against ActivePoints' current
+    // last tracked entry, fixing up EntityToPoint and SlotToPointIndex for
+    // whichever entry moved.
+    void RemoveTrackedPoint(int32 Index);
+    // Removes up to MaxRemovals expired points, oldest-eligible first,
+    // bounding the work any single call can do. Returns the number removed.
+    int32 EvictExpiredPoints(double NowSeconds, int32 MaxRemovals);
+    // Evicts the least-recently-seen points, bounded by MaxRemovals, to
+    // bring ActivePoints back under MaxVisiblePoints. Returns the number
+    // removed.
+    int32 TrimToCapacity(int32 MaxRemovals);
+    // Coalesced dead-reckoning pass (see MovementRebuildSeconds): re-coasts
+    // every kinematic point's RenderedLocation and flushes any point whose
+    // true Location drifted past MovementTolerance since the last pass,
+    // touching the instance buffer only for points that are both rendered
+    // and actually moved.
+    void ApplyMovementUpdates(double NowSeconds);
+    // Reconciles the rendered subset of ActivePoints against current
+    // visibility (domain/altitude/ground filters, expiry) and per-point
+    // style (icon/tint/emergency/scale) and global presentation state
+    // (zoom, altitude exaggeration). Adds/removes only the points whose
+    // should-render state changed; every already-and-still-rendered point
+    // gets its transform/custom data refreshed in place on its existing
+    // slot, so no other point's slot is ever disturbed by this pass.
+    void ReconcileRenderedSet();
+
     UPROPERTY(VisibleAnywhere) TObjectPtr<USceneComponent> SceneRoot;
     // Single camera-facing quad pool; entity/observation split lives in the
     // bookkeeping (lifetimes), not in separate components anymore.
@@ -134,23 +201,31 @@ private:
     // Markers keep a roughly constant screen size: world scale follows the
     // camera distance instead of ballooning when the operator zooms in.
     double CurrentZoomFactor = 1.0;
-    // Stable per-entity markers with age-based expiry and coalesced rebuilds.
+    // Stable per-entity markers with age-based expiry and coalesced
+    // dead-reckoning updates. Not a UPROPERTY: FRenderedGeoPoint is a plain
+    // struct (no UObject references for the GC to trace), matching
+    // EntityToPoint/HiddenDomains below.
     TArray<FRenderedGeoPoint> ActivePoints;
     TMap<FString, int32> EntityToPoint;
+    // Render-slot reverse map; see the stable-render-slots comment above.
+    TArray<int32> SlotToPointIndex;
     TSet<FString> HiddenDomains;
     bool bAltitudeExaggeration = true;
     // Aviation declutter filter (settings-panel controlled).
     double MinAircraftAltitudeMeters = 0.0;
     bool bShowGroundAircraft = true;
-    bool IsAircraftFiltered(const FRenderedGeoPoint& Point) const;
     bool bNeedsRebuild = false;
-    // Movement-only dirtiness coalesces into a slower rebuild cadence so a
-    // few hundred aircraft updating every poll do not force a full rebuild
-    // four times a second.
-    bool bMovementDirty = false;
-    // True while any visible marker dead-reckons; keeps the rebuild cadence
-    // running so gliding markers actually glide.
+    // Entities whose true Location drifted past MovementTolerance since the
+    // last dead-reckoning pass and are awaiting the coalesced flush (see
+    // ApplyMovementUpdates). Keyed by entity id rather than ActivePoints
+    // index so an index invalidated by an unrelated swap-and-pop removal
+    // between submission and flush is never misread as a different point:
+    // a stale key simply misses the EntityToPoint lookup at flush time.
+    TSet<FString> DirtyEntityKeys;
+    // True while any visible marker dead-reckons; keeps the movement
+    // cadence running so gliding markers actually glide.
     bool bHasKinematicPoints = false;
     double LastMovementRebuild = 0.0;
     double LastExpiryCheck = 0.0;
+    FGeoRenderLayerStatistics RuntimeStats;
 };
