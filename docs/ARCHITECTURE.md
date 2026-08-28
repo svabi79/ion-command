@@ -135,6 +135,14 @@ or material per message. `AGeoArcLayerActor` is domain-neutral;
 implementation can replace HISM segments with Niagara Data Channels behind the
 same adapter.
 
+`AGeoTrackLayerActor` renders motion trails behind moving entities the same
+way: one shared instanced segment component, GPU age fade via per-instance
+spawn-time/inverse-lifetime custom data, and a bounded CPU-side tracker
+(`FGeoTrackTracker`) that decides, purely from repeated Point sightings of one
+stable entity id, whether an entity is moving and therefore has a trail. It
+does not consume the reserved `Track` geometry payload; nothing produces one
+today.
+
 Path selection performs a bounded CPU ray-to-segment query only on click. This
 keeps collision disabled on the large HISM batches. The selected envelope is
 copied into the generic selection subsystem and rendered through one dedicated

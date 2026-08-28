@@ -12,6 +12,13 @@ superseded configurations, is in
 
 ### Added
 
+- **Motion trails.** Aircraft, satellites, and anything else that reports a
+  moving Point now leave a short, fading comet tail along the globe surface
+  behind them, built purely from repeated sightings of the same entity — a
+  stationary ground station or ionosonde never grows one. Bounded to the
+  busiest 300 currently-updating entities and 12 points each, thin and
+  quick to fade by default so it stays a subtle wake rather than turning a
+  busy globe into spaghetti. Toggle with `T` or the overlay menu's TRAILS row.
 - **Flight routes in the aircraft tooltip.** Aircraft seen by an
   `aviation.adsb` circle show their filed origin and destination in plain
   words (`CDG Paris  >  TUN Tunis`), resolved per callsign via adsbdb.com —

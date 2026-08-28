@@ -34,6 +34,10 @@ The component list is in [COMPONENTS.md](COMPONENTS.md) — not repeated here.
 - Instanced marker layer: per-type pictogram atlas, per-instance tint, camera
   facing, heading orientation, dead reckoning between updates, altitude
   exaggeration toggle, aviation altitude/ground filter
+- Instanced motion-trail layer: a bounded, GPU age-faded comet tail behind any
+  moving entity, built client-side from repeated Point sightings of one
+  stable entity id (not from the reserved Track geometry payload); stationary
+  entities never accumulate one. Toggle: `T` key or the overlay menu
 - Cockpit HUD: status bar, band histogram, path-rate sparkline, top DXCC
   regions with flags, auroral oval, HF conditions estimate, hop/MUF path
   analysis, hover tooltips, own-station reticle
@@ -78,8 +82,11 @@ The component list is in [COMPONENTS.md](COMPONENTS.md) — not repeated here.
 
 - Niagara-based renderer (ADR 0003 describes the intent; the renderer uses
   hierarchical instanced meshes)
-- Geometry beyond Point and GreatCircle — tracks, polygons, grids, raster
-  fields, shells and volumes are reserved in the contract only
+- Geometry beyond Point and GreatCircle — the `Track` semantic geometry
+  payload itself, plus polygons, grids, raster fields, shells and volumes,
+  are reserved in the contract only and parsed but not rendered. (The client
+  motion-trail layer above is a distinct client-side visualization built from
+  ordinary Point messages, not an implementation of this payload.)
 - Dynamic or third-party plugin loading
 - Any multi-user, server-hosted or authenticated deployment mode
 

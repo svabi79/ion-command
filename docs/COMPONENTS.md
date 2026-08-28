@@ -62,7 +62,7 @@ A context derives interpretation from canonical messages without owning a feed.
 | --- | --- | --- |
 | `IonCommandCore` | geo maths, generic types, the pinned sphere frame | no |
 | `IonCommandData` | envelope parsing, stream/data/timeline/replay subsystems | no |
-| `IonCommandVisualization` | globe, atmosphere, arc layer, point/marker layer, heatmap, ionosphere shells | no |
+| `IonCommandVisualization` | globe, atmosphere, arc layer, point/marker layer, motion-trail layer, heatmap, ionosphere shells | no |
 | `IonCommandUI` | cockpit HUD, overlay menu, settings panel, tooltips | no |
 | `IonCommandHamRadio` | own station, band/DXCC panels, HF conditions and path analysis | **yes** |
 | `IonCommand` | game mode, player controller, camera rig | thin glue |
