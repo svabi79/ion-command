@@ -16,6 +16,8 @@ non-commercial only.
 | --- | --- | --- |
 | **PSKReporter** | Spot data by PSKReporter (Philip Gladstone, N1DQ). The MQTT feed is operated by Tom M0LTE on donated hosting. No formal terms published. | [pskreporter.info](https://pskreporter.info) |
 | **Reverse Beacon Network** | Data courtesy of the Reverse Beacon Network and its skimmer operators. Requires **your own** amateur callsign as login. No formal data licence published; contact RBN before non-hobby use. | [reversebeacon.net](https://reversebeacon.net) |
+| **DX cluster network** | Spot data from the classic DX cluster network - DXSpider, AR-Cluster and CC Cluster software running on independently operated, mostly volunteer-run nodes. There is no single publisher and no formal data licence published by any of the node software projects; most nodes' banners state they are for use by **licensed amateur radio operators only**, and require **your own** callsign as login. Configure your own node (there is no single canonical address, unlike RBN). | [dxcluster.org](https://www.dxcluster.org) |
+| **WSPRnet / wspr.live** | Weak-signal beacon reception reports originally from WSPRnet.org, republished free of charge as a ClickHouse mirror by wspr.live. Read-only, no credentials needed. Usage must **remain free of charge for everyone** and **commercial or profit-oriented use is not allowed**. Published with **no guarantee of correctness, availability or stability**: "raw data as reported, saved and published by wsprnet.org" and "may contain duplicates, false spots and other errors," maintained by volunteers. | [wspr.live](https://wspr.live) |
 | **NOAA / NWS SWPC** | Space-weather data from the NOAA Space Weather Prediction Center (public domain, US Government work). NOAA does not endorse this project. ION COMMAND's HF-conditions verdict is a **derived heuristic, not an official NOAA forecast**. | [swpc.noaa.gov](https://www.swpc.noaa.gov) |
 | **U.S. Geological Survey** | Earthquake data from the U.S. Geological Survey (public domain). | [earthquake.usgs.gov](https://earthquake.usgs.gov/earthquakes/feed/) |
 | **NASA FIRMS** | Active-fire thermal-anomaly detections from NASA's Fire Information for Resource Management System (FIRMS): VIIRS (S-NPP, NOAA-20, NOAA-21) and MODIS (Terra/Aqua), distributed through LANCE. This is near-real-time data — generated fast rather than fully quality-checked like the standard science product — provided "as is"; NASA does not endorse this project, and a detection is a thermal anomaly, not a confirmed fire (ION COMMAND's own display text says so). Cite: NASA VIIRS Land Science Team, *VIIRS Active Fire Product NRT* (S-NPP), DOI [10.5067/FIRMS/VIIRS/VNP14IMGT_NRT.002](https://doi.org/10.5067/FIRMS/VIIRS/VNP14IMGT_NRT.002); *MODIS Collection 6.1 NRT Hotspot/Active Fire Detections MCD14DL*, DOI [10.5067/FIRMS/MODIS/MCD14DL.NRT.006](https://doi.org/10.5067/FIRMS/MODIS/MCD14DL.NRT.006). | [firms.modaps.eosdis.nasa.gov](https://firms.modaps.eosdis.nasa.gov) |
@@ -53,6 +55,8 @@ What each source actually does, in the order it appears in `live.json`:
 | `hamradio.rbn` | telnet `telnet.reversebeacon.net` | streaming | `hamradio` spots | **no** (needs your callsign) |
 | `wsjtx.udp` | local UDP listener | streaming | `hamradio` | no |
 | `ais.aisstream` | `wss://stream.aisstream.io/v0/stream` | streaming | `maritime.vessel` | **no** (needs a free API key) |
+| `hamradio.dxcluster` | telnet, node address configured per install (no default; example `dxc.nc7j.com:7373`) | streaming | `hamradio` spots | **no** (needs your callsign and a chosen node) |
+| `hamradio.wspr` | `db1.wspr.live` HTTP/ClickHouse `?query=` interface | 300 s (floor 120 s) | `hamradio` spots | yes |
 
 ## A word about Blitzortung
 
@@ -212,6 +216,16 @@ these wrong silently produces a globe full of wrong ships:
   rather than a tight retry loop, honouring the provider's three
   connections-per-account / three connections-per-IP limits, and resets the
   backoff only after a connection has proven healthy for a couple of minutes.
+- Sources that need an identity (RBN, the DX cluster) ship **disabled** rather
+  than with a placeholder callsign.
+- WSPR queries wspr.live for only the columns actually needed, filtered by
+  time, at a default of every 5 minutes (floor 2 minutes) — well under its
+  published 20-requests/minute limit and its own guidance to filter by time.
+  A response is capped at 30,000 rows as a safety valve; a fetch failure
+  backs off from 2 to 30 minutes and the source **stops entirely** after 8
+  consecutive failures.
+- The DX cluster source reconnects on a flat 10-second pause after any
+  disconnect, the same discipline as RBN and the Blitzortung stream.
 
 Please keep it that way if you change the configuration. These services are
 free because people pay for them with their own time and hardware.
@@ -238,3 +252,18 @@ free because people pay for them with their own time and hardware.
   accepted for delivery, but with no real key available, an authenticated
   session, real traffic actually reaching `ParseFrame`, sustained reconnect
   behaviour, and real-world message volume have not been exercised.
+- PSKReporter, prop.kc2g.com, the RBN and the DX cluster network publish no
+  formal data licence. Usage here is hobby-scale and attributed; contact them
+  before any larger or commercial use.
+- **WSPR mode disambiguation**: wspr.live's `code` column distinguishes
+  WSPR-2/WSPR-15/FST4W variants, but no verified, authoritative mapping for
+  its integer values could be found (secondary sources disagreed with each
+  other and with the values actually observed live). Rather than risk
+  mislabelling a spot, every reception report from this source is reported
+  under the umbrella mode `"WSPR"`, which is accurate for the large majority
+  (over 95% of sampled traffic) and a defensible approximation for the rest.
+- **DX cluster mode and signal report**: unlike RBN's fixed skimmer format, a
+  human-typed DX cluster comment is free text. Mode and signal report are
+  recovered best-effort (a leading recognised mode token; a space-delimited
+  "N dB") and are frequently absent - this is expected, not a bug, and is
+  never backfilled with an invented value.

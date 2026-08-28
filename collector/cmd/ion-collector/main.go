@@ -30,6 +30,7 @@ import (
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/ais"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/blitzortung"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/celestrak"
+	"github.com/ion-command/ion-command/collector/internal/plugins/sources/dxcluster"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/firms"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/kc2g"
 	mocksource "github.com/ion-command/ion-command/collector/internal/plugins/sources/mock"
@@ -39,6 +40,7 @@ import (
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/swpc"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/usgs"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/wsjtx"
+	"github.com/ion-command/ion-command/collector/internal/plugins/sources/wspr"
 	"github.com/ion-command/ion-command/collector/internal/recording"
 	"github.com/ion-command/ion-command/collector/internal/stream"
 	"github.com/ion-command/ion-command/collector/internal/telemetry"
@@ -105,6 +107,10 @@ func run(configPath, listenAddress string, logger *slog.Logger) error {
 			source, err = rbn.New(sourceConfig, logger)
 		case sourceConfig.Type == "ais.aisstream":
 			source, err = ais.New(sourceConfig, logger)
+		case sourceConfig.Type == "hamradio.dxcluster":
+			source, err = dxcluster.New(sourceConfig, logger)
+		case sourceConfig.Type == "hamradio.wspr":
+			source, err = wspr.New(sourceConfig, logger)
 		default:
 			err = fmt.Errorf("unknown source type %q", sourceConfig.Type)
 		}

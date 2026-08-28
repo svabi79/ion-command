@@ -105,6 +105,19 @@
       "boundingBoxes": [
         { "minLatitude": 25.603, "maxLatitude": 25.835, "minLongitude": -80.208, "maxLongitude": -79.879 }
       ]
+    },
+    {
+      "id": "dxcluster-primary",
+      "type": "hamradio.dxcluster",
+      "enabled": false,
+      "login": "N0CALL",
+      "broker": "dxc.nc7j.com:7373"
+    },
+    {
+      "id": "wspr-primary",
+      "type": "hamradio.wspr",
+      "enabled": true,
+      "pollSeconds": 300
     }
   ]
 }
