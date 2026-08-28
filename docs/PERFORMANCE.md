@@ -8,6 +8,29 @@
 - UI and interaction latency: under 100 ms;
 - no monotonically growing CPU or GPU allocations.
 
+## Measured
+
+`tools/bench.ps1` streams 600 synthetic spots per second into the **packaged**
+client at 5120 x 1440 and derives the average frame rate from the frame counter
+at capture time. On the RTX 4090 workstation, 2026-08-28, with the incremental
+render slots in place:
+
+| Date | Build | Result |
+| --- | --- | --- |
+| 2026-07-19 | packaged, cylinder segments, full rebuilds | 6.5 FPS (24 seg/arc), 10.3 FPS (16 seg/arc) |
+| 2026-08-28 | packaged, cube segments, incremental slots | **90.2 FPS** (8,120 frames / 90 s) |
+
+The 60 FPS target is met with headroom. The two figures are **not** a clean A/B
+of one change: between them the segment mesh moved from the smooth
+BasicShapes cylinder to a 12-triangle cube (which alone removed a
+primitive-count bottleneck), the render slots became incremental, and the globe
+gained a Nanite mesh with virtual textures. Treat 90.2 FPS as the current
+state, not as the isolated gain from any single change.
+
+The benchmark measures throughput, not legibility: at 10,000 arcs the globe is
+a solid white overdraw wall. Screen-space density management (roadmap
+priority 1, step 4) is what makes that number useful to an operator.
+
 ## Current controls
 
 - collector raw queue: bounded (`queueCapacity`, default 16,384);

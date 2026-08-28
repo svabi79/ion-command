@@ -251,7 +251,7 @@ reserved-port background.
 ```
 http://127.0.0.1:7810/api/health      status
 http://127.0.0.1:7810/api/status      sources and their state
-http://127.0.0.1:7810/api/statistics  accepted / dropped / evicted counters
+http://127.0.0.1:7810/api/stats  accepted / dropped / evicted counters
 ```
 
 (Substitute the port if the launcher fell back to 17810 or 27810.)

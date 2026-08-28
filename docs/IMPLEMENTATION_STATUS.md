@@ -19,7 +19,7 @@ The component list is in [COMPONENTS.md](COMPONENTS.md) — not repeated here.
   generic `display.*` / `visual.*` presentation properties
 - Retained state per entity with TTL, background purge and replay on connect
 - JSONL recording with hourly rotation and a total-size cap; time-scaled replay
-- HTTP API (`/api/health`, `/api/status`, `/api/statistics`) and
+- HTTP API (`/api/health`, `/api/status`, `/api/stats`, `/api/sources`) and
   `ws://…/ws/live`
 - Rate-limit discipline: global request spacing for aviation, 429/420 backoff
   with `Retry-After`, hard stop on repeated failures
@@ -94,7 +94,15 @@ The component list is in [COMPONENTS.md](COMPONENTS.md) — not repeated here.
 - Recording is off by default because the live feeds produce several GB per
   hour.
 - Globe, night, cloud and star textures are not in the repository and must be
-  fetched before a source build (`tools/fetch-earth-textures.py`).
+  fetched before a source build (`tools/fetch-earth-textures.py`). The day
+  texture alone is a 147 MB PNG that compiles to a 165 MB virtual-texture
+  asset, well past what belongs in git.
+- **Close-range zoom outruns the imagery.** The camera now descends to ~32 km,
+  but the best freely licensed global mosaic (NASA Blue Marble, 21600x10800)
+  is about 2 km per pixel, so the surface turns to mush below roughly 300 km.
+  The geometry, near clip plane and marker scaling are correct down there; the
+  data simply is not. Sharp low-altitude terrain needs a streamed tile service
+  (NASA GIBS, Sentinel-2), which is a separate piece of work.
 - Aircraft coverage depends on the configured regions plus the global snapshot;
   the anonymous OpenSky poll is slow by design.
 
