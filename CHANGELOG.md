@@ -22,6 +22,20 @@ superseded configurations, is in
   the last stretch is fine-grained instead of one overshooting notch. Markers
   and the own-station reticle keep a constant screen size through the whole
   range, so individual aircraft separate cleanly on an approach.
+- **Deep zoom: 21600x10800 day/night imagery, a generated 200x400-segment
+  globe mesh, and a much closer orbit.** Blue Marble and Black Marble now
+  fetch at NASA's largest single-file resolution (up from 4096x2048) and
+  import as Streaming Virtual Textures, so the close-up view is genuinely
+  sharp without holding the full texture in VRAM. The engine's placeholder
+  sphere primitive is replaced by a mesh generated from
+  `unreal/Scripts/generate_globe_mesh.py` (reproducible, not hand-authored)
+  fine enough that the limb and the terrain stay smooth instead of faceted.
+  The wheel zoom's near clamp drops from ~255 km to ~32 km above the surface,
+  with a correspondingly closer near clip plane so nothing clips. See
+  `docs/DATA-SOURCES.md` and `unreal/SourceAssets/NASA/ATTRIBUTION.md` for
+  what resolution is and is not available under a licence this project can
+  use, and the caveat about markers not yet re-tuned for the closest part of
+  the new range.
 
 ### Fixed
 

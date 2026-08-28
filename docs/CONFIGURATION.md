@@ -53,7 +53,7 @@ Press **O**. Every row is clickable and shows its state:
 | --- | --- |
 | **Left mouse** | select a path / click menu rows |
 | **Right mouse** (drag) | orbit the globe |
-| **Mouse wheel** | zoom — steps scale with distance, down to ~255 km above the surface |
+| **Mouse wheel** | zoom — steps scale with distance, down to ~32 km above the surface |
 | **Hover a marker** | tooltip with callsign/flight level/type/…; aircraft seen by an `aviation.adsb` circle also show their filed route (`CDG Paris  >  TUN Tunis`) once resolved |
 | **Tab** | cycle HUD: full → minimal → hidden |
 | **O** | overlay menu |
