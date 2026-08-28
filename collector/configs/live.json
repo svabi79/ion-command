@@ -83,6 +83,12 @@
       "type": "hamradio.rbn",
       "enabled": false,
       "login": "N0CALL"
+    },
+    {
+      "id": "aprsis-primary",
+      "type": "aprs.is",
+      "enabled": false,
+      "login": "NOCALL"
     }
   ]
 }
