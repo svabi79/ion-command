@@ -28,6 +28,7 @@ messages itself — that is the domain's job.
 | `aviation.adsb` | adsb.lol point query; callsign→route enrichment via adsbdb.com (`routeLookup`) | HTTP poll | **on** (one example region) | no | ODbL 1.0 |
 | `aviation.opensky` | OpenSky global state snapshot | HTTP poll | **on** | optional | non-profit research/education only |
 | `hamradio.rbn` | Reverse Beacon Network | telnet | off | **yes** (your callsign) | no published licence |
+| `aprs.is` | APRS-IS packet stream | TCP | off | **yes** (callsign; passcode fixed at read-only `-1`) | no published data licence; be a good citizen (see below) |
 | `mock.*` | deterministic synthetic traffic | in-process | off | no | development and tests only |
 
 Terms and attribution in full: [DATA-SOURCES.md](DATA-SOURCES.md).
@@ -41,6 +42,7 @@ envelope. Domains own the vocabulary; nothing above them does.
 | Domain | Emits (`semanticType`) | Fed by |
 | --- | --- | --- |
 | `hamradio` | `radio.reception`, `radio.station` | `pskreporter.mqtt`, `hamradio.rbn`, `wsjtx.udp` |
+| `aprs` | `aprs.station`, `aprs.object` | `aprs.is` |
 | `aviation` | `aviation.aircraft` | `aviation.adsb`, `aviation.opensky` |
 | `weather` | `weather.lightning` | `lightning.blitzortung` |
 | `spaceweather` | `spaceweather.state` | `spaceweather.swpc` |

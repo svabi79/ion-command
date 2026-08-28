@@ -138,6 +138,7 @@ Additional fields by type:
 | `aviation.adsb` | `latitude`, `longitude`, `radiusNm`, `pollSeconds`, `routeLookup` | Regional circle around a point (max 250 nm). Add one entry per area you care about. `routeLookup: false` turns off the callsign → origin/destination enrichment (adsbdb.com); it is on by default. |
 | `aviation.opensky` | `pollSeconds`, `login` (see note) | One global snapshot per request. Anonymous access is credit-limited; the shipped default is 1800 s. |
 | `hamradio.rbn` | `login` | Reverse Beacon Network telnet; **requires a real callsign**. Disabled by default. |
+| `aprs.is` | `login`, `filter`, `broker`, `latitude`/`longitude`/`radiusNm` | APRS-IS packet stream; **requires a real callsign**. Disabled by default. |
 | `wsjtx.udp` | `broker` (listen address) | Local WSJT-X UDP feed. |
 
 ### Common adjustments
@@ -157,6 +158,26 @@ considerate: these are volunteer-run services.
 
 **Enable the Reverse Beacon Network** — set `enabled: true` and put your own
 callsign in `login`.
+
+**Enable APRS-IS** — set `enabled: true` and put your own callsign in
+`login` (the connection always logs in read-only, passcode `-1`, so no real
+passcode is ever needed or sent). By default it subscribes to an
+illustrative 300 km circle around the same example point as `aviation.adsb`
+plus position/object/item packet types only — not the entire world feed.
+Point it at your own area instead:
+
+```json
+{ "id": "aprsis-home", "type": "aprs.is", "enabled": true,
+  "login": "YOUR-CALLSIGN", "latitude": 47.3, "longitude": 8.5, "radiusNm": 100 }
+```
+
+Or set `filter` directly to any [APRS-IS filter spec](https://www.aprs-is.net/javAPRSFilter.aspx)
+(e.g. `"filter": "r/47.3/8.5/150 t/poi"`) for full control; the special value
+`"filter": "world"` removes the filter entirely (the full global feed — mind
+the volume). Supported packet types are uncompressed and compressed position
+reports, Objects, Items, and Mic-E (position and symbol, not course/speed);
+everything else (messages, status, telemetry, positionless weather,
+third-party) is intentionally skipped.
 
 **OpenSky authentication does not currently work.** The `login`/`password`
 fields use HTTP basic auth, which OpenSky retired in favour of OAuth2 client

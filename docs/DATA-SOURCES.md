@@ -16,6 +16,7 @@ non-commercial only.
 | --- | --- | --- |
 | **PSKReporter** | Spot data by PSKReporter (Philip Gladstone, N1DQ). The MQTT feed is operated by Tom M0LTE on donated hosting. No formal terms published. | [pskreporter.info](https://pskreporter.info) |
 | **Reverse Beacon Network** | Data courtesy of the Reverse Beacon Network and its skimmer operators. Requires **your own** amateur callsign as login. No formal data licence published; contact RBN before non-hobby use. | [reversebeacon.net](https://reversebeacon.net) |
+| **APRS-IS** | Data courtesy of APRS-IS and the amateur radio operators whose stations, digipeaters and IGates feed it. APRS-IS is maintained and operated by volunteer amateur radio operators to support Amateur Radio APRS on RF; "APRS" is a trademark of Tucson Amateur Packet Radio (TAPR). No formal data licence is published, and the network's own maintainers have publicly discouraged commercial harvesting of the feed. Requires **your own** amateur callsign as login (the read-only passcode `-1` needs no verification, but ION COMMAND still asks for a real callsign rather than a shared placeholder). Contact the APRS-IS maintainers before any commercial or bulk-redistribution use. | [aprs-is.net](https://www.aprs-is.net) |
 | **NOAA / NWS SWPC** | Space-weather data from the NOAA Space Weather Prediction Center (public domain, US Government work). NOAA does not endorse this project. ION COMMAND's HF-conditions verdict is a **derived heuristic, not an official NOAA forecast**. | [swpc.noaa.gov](https://www.swpc.noaa.gov) |
 | **U.S. Geological Survey** | Earthquake data from the U.S. Geological Survey (public domain). | [earthquake.usgs.gov](https://earthquake.usgs.gov/earthquakes/feed/) |
 | **CelesTrak** | Orbital elements courtesy of CelesTrak (Dr. T.S. Kelso). Users must observe the CelesTrak usage policy; the collector backs off and stops on repeated non-200 responses. | [celestrak.org](https://celestrak.org/usage-policy.php) |
@@ -48,6 +49,7 @@ What each source actually does, in the order it appears in `live.json`:
 | `aviation.adsb` | adsb.lol `/v2/point/<lat>/<lon>/<nm>`; route lookups via api.adsbdb.com (cached, global 2 s gate, `routeLookup: false` disables) | 60 s, global 4 s request gate | `aviation.aircraft` | yes (one example circle) |
 | `aviation.opensky` | opensky-network.org `/api/states/all` | 1800 s anonymous | `aviation.aircraft` | yes |
 | `hamradio.rbn` | telnet `telnet.reversebeacon.net` | streaming | `hamradio` spots | **no** (needs your callsign) |
+| `aprs.is` | TCP `rotate.aprs2.net:14580`, read-only login (passcode `-1`) | streaming | `aprs` → `aprs.station`, `aprs.object` | **no** (needs your callsign) |
 | `wsjtx.udp` | local UDP listener | streaming | `hamradio` | no |
 
 ## A word about Blitzortung
@@ -104,11 +106,52 @@ you commercial rights to Blitzortung's data.
 Please keep it that way if you change the configuration. These services are
 free because people pay for them with their own time and hardware.
 
+## A word about APRS-IS
+
+The APRS-IS layer is **off by default**, for the same reason as the RBN: it
+needs your own amateur callsign, so it cannot ship pre-configured.
+
+APRS-IS exists to support Amateur Radio APRS on RF. Its own maintainers ask
+that:
+
+- Traffic on APRS-IS stay suitable for gating to and from real RF networks -
+  ION COMMAND's use is receive-only, so this does not apply to it directly,
+  but it is why the collector always logs in with the documented **read-only
+  passcode (`-1`)**: it can never inject anything onto the network.
+- Client software identify itself properly rather than impersonating another
+  tool - the collector's `vers` login field says `ion-command-collector 0.1`.
+- Nobody use the public servers to **harvest data for commercial purposes**;
+  the network's maintainers have said in public discussion that they do not
+  consider themselves able to grant that, even though the data itself is not
+  formally copyrighted.
+
+So please, if you turn this source on:
+
+- Use **your own** licensed amateur callsign in `login`, not a shared
+  placeholder - a real callsign costs nothing to use for a read-only
+  connection and is how the network expects clients to identify themselves.
+- Keep the shipped default (or your own) **filter** narrow rather than
+  subscribing to the entire world: see [CONFIGURATION.md](CONFIGURATION.md).
+- Do not use this source for commercial data harvesting.
+
+### How the collector tries to be a good citizen
+
+- Always logs in with passcode `-1` (read-only); it has no code path that
+  could transmit a packet onto the network.
+- Ships with a bounded server-side filter by default - an example 300 km
+  circle plus position-bearing packet types only - instead of the full
+  firehose, and documents how to point it at your own area.
+- Reconnects with exponential backoff (5 s up to 5 min) rather than
+  hammering a server that drops the connection.
+
 ## Known gaps
 
 - **OpenSky authentication**: the `login`/`password` fields use HTTP basic
   auth, which OpenSky has retired in favour of OAuth2 client credentials.
   Anonymous access still works; authenticated access currently does not.
-- PSKReporter, prop.kc2g.com and the RBN publish no formal data licence. Usage
-  here is hobby-scale and attributed; contact them before any larger or
-  commercial use.
+- PSKReporter, prop.kc2g.com, the RBN and APRS-IS publish no formal data
+  licence. Usage here is hobby-scale and attributed; contact them before any
+  larger or commercial use.
+- **APRS-IS Mic-E course/speed** is intentionally not decoded (position and
+  symbol are); see the collector's `aprs` domain package comment for why the
+  published algorithm could not be verified against its own worked example.
