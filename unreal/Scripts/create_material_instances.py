@@ -834,6 +834,12 @@ def main() -> None:
         red, green, blue = colorsys.hsv_to_rgb(index / 11.0, 0.72, 1.0)
         create_instance(f"MI_Signal_{index:02d}", signal, unreal.LinearColor(red, green, blue, 1.0), 0.62, intensity=4.6)
     create_instance("MI_Signal_Selected", signal, unreal.LinearColor(0.78, 1.0, 1.0, 1.0), 1.0, intensity=11.0)
+    # Motion trails (AGeoTrackLayerActor): a cool blue-cyan close to the point
+    # layer's default entity-marker tint, so a trail reads as "belongs to the
+    # marker it follows" rather than a specific band. Dimmer than the numbered
+    # band palette and far dimmer than the click-selection highlight, so a
+    # trail stays a subtle wake instead of competing with markers and arcs.
+    create_instance("MI_Track", signal, unreal.LinearColor(0.05, 0.65, 1.0, 1.0), 0.5, intensity=2.4)
     # Point markers moved to the pictogram master (M_MarkerIcon); drop the
     # obsolete sphere instances so stale assets cannot be referenced again.
     for obsolete in ("MI_Point_Entity", "MI_Point_Observation"):
