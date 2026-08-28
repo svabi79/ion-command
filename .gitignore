@@ -39,3 +39,12 @@ unreal/SourceAssets/NASA/*.tif
 
 # Personal collector setup (callsign, home QTH) - never published
 collector/configs/local.json
+
+# Imported Earth day/night texture ASSETS (not just the raw NASA source):
+# at 21600x10800 / 13500x6750 these compile to ~165 MB / ~31 MB .uasset
+# files, unlike every other Content/*.uasset in this project. Reproducible
+# with everything else via tools/fetch-earth-textures.py +
+# unreal/Scripts/create_material_instances.py, so - like the NASA source
+# images - they stay out of the repository rather than bloating history.
+unreal/Content/ION/Textures/T_EarthDay.uasset
+unreal/Content/ION/Textures/T_EarthNight.uasset
