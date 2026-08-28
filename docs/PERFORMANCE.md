@@ -15,17 +15,28 @@ client at 5120 x 1440 and derives the average frame rate from the frame counter
 at capture time. On the RTX 4090 workstation, 2026-08-28, with the incremental
 render slots in place:
 
-| Date | Build | Result |
+| Date | Configuration | avg fps |
 | --- | --- | --- |
-| 2026-07-19 | packaged, cylinder segments, full rebuilds | 6.5 FPS (24 seg/arc), 10.3 FPS (16 seg/arc) |
-| 2026-08-28 | packaged, cube segments, incremental slots | **90.2 FPS** (8,120 frames / 90 s) |
+| 2026-07-19 | 12k arcs, cube segments, engine-primitive globe | 125.3 |
+| 2026-08-28 | globe + HUD only, no arcs (`-IonPathsHidden`) | 117.7 |
+| 2026-08-28 | 12k arcs, cube segments, Nanite globe + virtual textures | **90.2** |
 
-The 60 FPS target is met with headroom. The two figures are **not** a clean A/B
-of one change: between them the segment mesh moved from the smooth
-BasicShapes cylinder to a 12-triangle cube (which alone removed a
-primitive-count bottleneck), the render slots became incremental, and the globe
-gained a Nanite mesh with virtual textures. Treat 90.2 FPS as the current
-state, not as the isolated gain from any single change.
+The 60 FPS target is met with 1.5x headroom, but this is a **regression against
+the 125.3 FPS measured on 2026-07-19 under the same fixture and hardware** —
+roughly 28% lost. The no-arc row localises it: with every arc hidden the scene
+still only reaches 117.7 FPS, so most of the loss is fixed cost in the globe
+itself (a 158k-triangle Nanite mesh and two streaming virtual textures replacing
+the engine primitive and its plain 4K textures), not in the arc renderer. The
+12,000 arcs on top cost about 27 FPS.
+
+That is a deliberate trade: the high-resolution globe is what makes close-range
+zoom possible at all. It is recorded here as a cost, not hidden as an
+improvement. If the budget ever needs reclaiming, the first things to measure
+are the virtual-texture pool size (`r.VT.PoolSizeMB`, left at engine default)
+and whether the globe needs Nanite at all at typical orbit distances.
+
+Retracted earlier figures (6.5 / 10.3 FPS, "overdraw-bound, needs Niagara")
+were a frame-counter wrap artifact; see the development log.
 
 The benchmark measures throughput, not legibility: at 10,000 arcs the globe is
 a solid white overdraw wall. Screen-space density management (roadmap
