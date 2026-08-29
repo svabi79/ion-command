@@ -30,6 +30,7 @@ non-commercial only.
 | **OpenSky Network** | Aircraft data from the OpenSky Network. Licensed for **non-profit research and education only**; commercial or operational use requires written permission from OpenSky. Conditions pass through to downstream users. Cite: Schäfer, M., Strohmeier, M., Lenders, V., Martinovic, I., Wilhelm, M., *Bringing Up OpenSky: A Large-scale ADS-B Sensor Network for Research*, IPSN 2014, pp. 83–94. | [Terms of use](https://opensky-network.org/about/terms-of-use) |
 | **AIS Stream (aisstream.io)** | Vessel AIS data from aisstream.io, free with a self-service API key. No commercial-use restriction or redistribution licence is published as of this writing; treated with the same hobby-scale, attributed posture as the other unlicensed feeds below until the operator confirms otherwise. Direct browser connections to the stream are against its terms — ION COMMAND already only connects from the collector process, never from client JavaScript, so this is satisfied by the existing architecture. See [below](#enabling-ais-ships-aisstreamio) for the full picture. | [aisstream.io](https://aisstream.io) · [docs](https://aisstream.io/documentation) |
 | **EUMETSAT** | Cloud imagery ©EUMETSAT 2026. Governed by the EUMETSAT Data Policy, not Creative Commons. | [Terms of use](https://www.eumetsat.int/about-us/terms-use) |
+| **NASA GIBS** | Close-orbit map tiles from NASA's Global Imagery Browse Services, fetched at runtime below ~1000 km altitude and cached locally. Public service, no account or key. Base layer: `BlueMarble_ShadedRelief_Bathymetry` (NASA Earth Observatory). Detail layer: `HLS_S30_Nadir_BRDF_Adjusted_Reflectance` — Harmonized Landsat and Sentinel-2 at 30 m, which **contains modified Copernicus Sentinel-2 data** and NASA/USGS Landsat. Credit GIBS where imagery is shown to third parties. NASA does not endorse ION COMMAND. `-IonNoTileImagery` disables the fetch. | [GIBS docs](https://nasa-gibs.github.io/gibs-api-docs/) |
 | **NASA** | Day globe: Blue Marble Next Generation, NASA Earth Observatory (Reto Stockli, NASA/GSFC). Night: Black Marble 2016, NASA Earth Observatory/NOAA NCEI (Joshua Stevens, Suomi NPP VIIRS data, Miguel Román, NASA/GSFC). Clouds: NASA Earth Observatory Blue Marble (record 57747). Star map: NASA/GSFC Scientific Visualization Studio, *Deep Star Maps 2020*; Gaia DR2: ESA/Gaia/DPAC; also Hipparcos-2, Tycho-2, UCAC3; constellation figures based on those developed for the IAU by Alan MacRobert of Sky & Telescope (Roger Sinnott and Rick Fienberg). NASA does not endorse ION COMMAND. | [SVS 4851](https://svs.gsfc.nasa.gov/4851/) |
 | **AD1C** | DXCC prefix data from the Big CTY file by Jim Reisert, AD1C (version VER20260714). Full copyright and permission notice in [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md). | [country-files.com](https://www.country-files.com) |
 | **ADIF** | DXCC entity table derived from the ADIF specification. | [adif.org](https://adif.org) |
@@ -269,6 +270,57 @@ So please, if you turn this source on:
   firehose, and documents how to point it at your own area.
 - Reconnects with exponential backoff (5 s up to 5 min) rather than
   hammering a server that drops the connection.
+
+## Close-orbit imagery (NASA GIBS tiles)
+
+The packaged Blue Marble texture is about 1.9 km per pixel. That is fine for
+an orbital view and useless up close: at the camera's closest approach the
+frame spans roughly 43 km, which needs about 40 m per pixel to look sharp.
+No single global texture can do that — 40 m/pixel worldwide would be a
+million pixels across, some 500 gigapixels.
+
+So below roughly 1000 km altitude the globe stops relying on the global
+texture alone and opens a *window*: a 4x4 block of map tiles centred on
+whatever the camera is looking at, assembled into one texture that the globe
+material blends in over the region it covers. The window only has to cover
+what is on screen, so the same texture budget buys whatever resolution the
+current altitude actually calls for. Panning inside the window costs
+nothing; leaving it fetches a new one.
+
+Two layers stack inside the window:
+
+| Layer | Tile matrix set | Deepest level | Ground resolution | Role |
+| --- | --- | --- | --- | --- |
+| `BlueMarble_ShadedRelief_Bathymetry` | `500m` | 7 | ~489 m/px | Base — cloud-free, no gaps, always covers the window |
+| `HLS_S30_Nadir_BRDF_Adjusted_Reflectance` | `31.25m` | 11 | ~30.6 m/px | Detail — only where there was a usable overpass |
+
+HLS is real observation, not a mosaic, so it has holes: cloud, no recent
+overpass, polar night. Its empty pixels are skipped rather than composited,
+which leaves the base layer showing through instead of punching holes in the
+Earth. Both layers are requested with the time value `default`, which asks
+GIBS for its own newest date and avoids guessing at processing latency (HLS
+runs about a week behind).
+
+GIBS publishes in EPSG:4326, whose tile pyramid is the same equirectangular
+convention the globe mesh's UVs already use — level 0 is two 512-pixel tiles
+of 288 degrees each from (-180, 90), halving every level. A tile is
+therefore an axis-aligned rectangle in UV space and drops into the window
+without being resampled. That is the main reason for preferring GIBS over a
+Web Mercator source such as Esri or Bing, quite apart from their terms.
+
+Tiles are cached under `<Saved>/TileCache/<layer>/<time>/<level>_<row>_<col>`
+and reused across restarts. The cache is never evicted automatically; delete
+the directory to reclaim the space.
+
+Diagnostics: the client logs one line per level change, e.g.
+
+```
+ION COMMAND detail imagery: level 11 (31 m/px) at 47.520, 9.208
+```
+
+If close orbit looks blurry, that line says whether the window is off
+(altitude too high), stuck at a shallow level, or fetching correctly but
+finding no HLS coverage there.
 
 ## Known gaps
 

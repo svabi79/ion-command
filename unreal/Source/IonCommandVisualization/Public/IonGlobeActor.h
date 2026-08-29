@@ -8,6 +8,7 @@ class UDirectionalLightComponent;
 class UMaterialInstanceDynamic;
 class UPointLightComponent;
 class USceneComponent;
+class UGeoTileMosaic;
 class UStaticMeshComponent;
 class UTexture2D;
 
@@ -42,4 +43,15 @@ private:
     FTimerHandle CloudRefreshTimer;
     void RequestLiveClouds();
     void ApplyLiveClouds(const TArray<uint8>& PngBytes);
+
+    // Close-orbit imagery. The global textures top out around 1.9 km per
+    // pixel, which is already coarse at 1000 km up and pure mush at the
+    // closest approach; below that altitude a tile window follows the camera
+    // and supplies whatever resolution the current altitude calls for.
+    UPROPERTY(Transient) TObjectPtr<UGeoTileMosaic> DetailImagery;
+    void UpdateDetailImagery();
+    // Seconds since the window was last re-aimed. The camera moves every
+    // frame; the tile service does not need to hear about it that often.
+    double DetailCheckTimer = 0.0;
+    int32 LastDetailLevel = -1;
 };

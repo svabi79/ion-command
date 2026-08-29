@@ -2,8 +2,11 @@
 
 All files here are produced by `tools/fetch-earth-textures.py` (download
 plus a lossless re-save; native resolution is kept, no downscaling). They
-are imported as Streaming Virtual Textures, which tile arbitrary source
-dimensions themselves, so there is no power-of-two requirement.
+are imported as Streaming Virtual Textures with
+`STRETCH_TO_POWER_OF_TWO`. The stretch is not optional: VT needs
+power-of-two dimensions, and padding to reach them leaves the map in the
+corner of a larger canvas, which slides the whole world east by the padding
+ratio. See the comment in `unreal/Scripts/create_material_instances.py`.
 
 `bluemarble-21600.png` is NASA's Blue Marble Next Generation with topography
 and bathymetry, July 2004, at NASA's largest single-file resolution:
@@ -41,3 +44,33 @@ Star Maps 2020* (Gaia DR2: ESA/Gaia/DPAC; also Hipparcos-2, Tycho-2, UCAC3).
 Public domain.
 
 Source: https://svs.gsfc.nasa.gov/vis/a000000/a004800/a004851/starmap_2020_4k.exr
+
+## Runtime tiles: NASA GIBS
+
+Close-orbit imagery is not packaged. Below roughly 1000 km altitude the
+globe switches to a window of map tiles that follows the camera, fetched
+from NASA's Global Imagery Browse Services (GIBS) and cached under
+`<Saved>/TileCache`. GIBS is a public service and needs no account or key.
+
+Two layers are combined (see `AIonGlobeActor::BeginPlay`):
+
+- `BlueMarble_ShadedRelief_Bathymetry` (500m tile matrix set, to level 7,
+  ~489 m/pixel) as the base. Cloud-free and gapless, so it always covers
+  the window. Credit: NASA Earth Observatory.
+- `HLS_S30_Nadir_BRDF_Adjusted_Reflectance` (31.25m set, to level 11,
+  ~30.6 m/pixel) on top. Harmonized Landsat and Sentinel-2 surface
+  reflectance, which only covers where there was a recent usable overpass;
+  its empty pixels leave the base showing through rather than punching
+  holes. Credit: NASA/USGS Landsat and ESA Copernicus Sentinel-2, via the
+  NASA HLS project. Contains modified Copernicus Sentinel data.
+
+Endpoint: https://gibs.earthdata.nasa.gov/wmts/epsg4326/best
+
+NASA's imagery policy asks that GIBS-derived visuals credit "NASA
+Worldview / GIBS" where imagery is shown to third parties; the HUD carries
+this in the overlay panel. GIBS terms:
+https://nasa-gibs.github.io/gibs-api-docs/
+
+`-IonNoTileImagery` disables the runtime fetch entirely and leaves the
+packaged global textures in place, which is what deterministic captures and
+offline demos should use.

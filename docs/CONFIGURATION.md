@@ -106,6 +106,8 @@ Useful when driving the client from a script or a video wall:
 | `-IonOverlayMenu` | open the overlay menu at startup |
 | `-IonPathsHidden` | start with the path layer hidden |
 | `-IonNoLiveClouds` | keep the offline cloud texture instead of fetching live imagery |
+| `-IonNoTileImagery` | keep the packaged global textures instead of fetching close-orbit map tiles. Use for deterministic captures and offline demos |
+| `-IonTileBaseUrl=` | override the WMTS endpoint the close-orbit tiles come from (default: NASA GIBS EPSG:4326) |
 | `-IonMute` | no ambience audio |
 | `-IonCameraDistance=` `-IonCameraLongitude=` `-IonCameraLatitude=` | pin the camera (captures) |
 | `-IonScreenshotAfter=<s>` `-IonScreenshotFile=<path>` `-IonExitAfterScreenshot` | unattended screenshots |

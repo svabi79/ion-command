@@ -49,6 +49,21 @@ def vector(material, name, default, x, y):
     return node
 
 
+def mask(material, source, channels, x, y):
+    """Component mask, e.g. mask(m, node, "rg", x, y) for a float2 of X and Y."""
+    node = expression(material, unreal.MaterialExpressionComponentMask, x, y)
+    for channel in "rgba":
+        node.set_editor_property(channel, channel in channels)
+    MEL.connect_material_expressions(source, "", node, "")
+    return node
+
+
+def constant(material, value, x, y):
+    node = expression(material, unreal.MaterialExpressionConstant, x, y)
+    node.set_editor_property("r", value)
+    return node
+
+
 def import_texture(source: Path, asset_name: str, virtual_texture: bool = False) -> unreal.Texture2D:
     if not source.exists():
         raise RuntimeError(f"Missing visual source texture: {source}")
@@ -770,10 +785,95 @@ def build_earth_master(day_texture, night_texture) -> unreal.Material:
     MEL.connect_material_expressions(rough_ocean, "", roughness, "B")
     MEL.connect_material_expressions(ocean_mask, "", roughness, "Alpha")
 
-    MEL.connect_material_property(day, "RGB", unreal.MaterialProperty.MP_BASE_COLOR)
+    # --- Close-orbit detail window ---
+    # No global texture can serve the closest orbit: at ~43 km across the
+    # frame the screen wants ~40 m per pixel, which would be a million-pixel
+    # wide Earth. UGeoTileMosaic instead keeps a window of map tiles that
+    # follows the camera, and hands it over as DetailMap plus the window's
+    # bounds in this material's own UV space. Inside the window we sample
+    # that; everywhere else the global day texture stands, unchanged.
+    uv = expression(material, unreal.MaterialExpressionTextureCoordinate, -1560, -640)
+    # (uMin, vMin, uSpan, vSpan). The default is the full sphere so the graph
+    # is well-defined before the first region exists - DetailBlend is 0 then
+    # anyway, but a zero span here would divide by zero.
+    bounds = vector(material, "DetailBounds", unreal.LinearColor(0.0, 0.0, 1.0, 1.0), -1560, -560)
+    # Build the two float2s from the parameter's individual channel outputs.
+    # A ComponentMask cannot reach B/A here: a VectorParameter's default
+    # output is float3, so masking "ba" fails the material to compile with
+    # "Not enough components in (float3) for component mask 0011".
+    window_min = expression(material, unreal.MaterialExpressionAppendVector, -1400, -580)
+    MEL.connect_material_expressions(bounds, "R", window_min, "A")
+    MEL.connect_material_expressions(bounds, "G", window_min, "B")
+    window_span = expression(material, unreal.MaterialExpressionAppendVector, -1400, -500)
+    MEL.connect_material_expressions(bounds, "B", window_span, "A")
+    MEL.connect_material_expressions(bounds, "A", window_span, "B")
+    local_uv = expression(material, unreal.MaterialExpressionSubtract, -1280, -640)
+    MEL.connect_material_expressions(uv, "", local_uv, "A")
+    MEL.connect_material_expressions(window_min, "", local_uv, "B")
+    detail_uv = expression(material, unreal.MaterialExpressionDivide, -1160, -640)
+    MEL.connect_material_expressions(local_uv, "", detail_uv, "A")
+    MEL.connect_material_expressions(window_span, "", detail_uv, "B")
+
+    detail = expression(material, unreal.MaterialExpressionTextureSampleParameter2D, -1010, -760)
+    detail.set_editor_property("parameter_name", "DetailMap")
+    # The default must NOT be a virtual texture. A TextureSampleParameter2D
+    # samples with a plain sampler, and binding a VT to it fails the whole
+    # material to compile - silently, because the failure only surfaces at
+    # cook time and the packaged client then falls back to the default
+    # material, which renders the globe as an unrecognisable grey mass.
+    # The runtime value (the tile mosaic) is an ordinary transient texture,
+    # so this placeholder only has to be a valid non-VT stand-in.
+    fallback = unreal.EditorAssetLibrary.load_asset("/Engine/EngineResources/Black")
+    if fallback is None or fallback.get_editor_property("virtual_texture_streaming"):
+        raise RuntimeError("DetailMap needs a non-virtual fallback texture; /Engine/EngineResources/Black is unusable")
+    detail.set_editor_property("texture", fallback)
+    MEL.connect_material_expressions(detail_uv, "", detail, "UVs")
+
+    # One expression settles both "is this pixel inside the window" and "fade
+    # the seam": distance from the window centre is 0 at the middle, 1 at the
+    # border and above 1 outside, so a saturated ramp off the border is
+    # exactly the mask we want and there is no hard edge to see.
+    centre_offset = expression(material, unreal.MaterialExpressionSubtract, -1010, -560)
+    MEL.connect_material_expressions(detail_uv, "", centre_offset, "A")
+    MEL.connect_material_expressions(constant(material, 0.5, -1160, -500), "", centre_offset, "B")
+    centre_distance = expression(material, unreal.MaterialExpressionAbs, -940, -560)
+    MEL.connect_material_expressions(centre_offset, "", centre_distance, "")
+    distance = expression(material, unreal.MaterialExpressionMultiply, -880, -560)
+    MEL.connect_material_expressions(centre_distance, "", distance, "A")
+    MEL.connect_material_expressions(constant(material, 2.0, -940, -480), "", distance, "B")
+    furthest_axis = expression(material, unreal.MaterialExpressionMax, -760, -560)
+    MEL.connect_material_expressions(mask(material, distance, "r", -820, -600), "", furthest_axis, "A")
+    MEL.connect_material_expressions(mask(material, distance, "g", -820, -520), "", furthest_axis, "B")
+    inside = expression(material, unreal.MaterialExpressionOneMinus, -650, -560)
+    MEL.connect_material_expressions(furthest_axis, "", inside, "")
+    seam = expression(material, unreal.MaterialExpressionDivide, -540, -560)
+    MEL.connect_material_expressions(inside, "", seam, "A")
+    MEL.connect_material_expressions(constant(material, 0.08, -650, -490), "", seam, "B")
+    seam_clamped = expression(material, unreal.MaterialExpressionSaturate, -430, -560)
+    MEL.connect_material_expressions(seam, "", seam_clamped, "")
+
+    # Driven by the actor: coverage of the current region, faded out again as
+    # the globe recedes and the window stops being worth anything.
+    detail_blend = scalar(material, "DetailBlend", 0.0, -540, -680)
+    detail_alpha = expression(material, unreal.MaterialExpressionMultiply, -320, -600)
+    MEL.connect_material_expressions(seam_clamped, "", detail_alpha, "A")
+    MEL.connect_material_expressions(detail_blend, "", detail_alpha, "B")
+
+    surface_colour = expression(material, unreal.MaterialExpressionLinearInterpolate, -180, -300)
+    MEL.connect_material_expressions(day, "RGB", surface_colour, "A")
+    MEL.connect_material_expressions(detail, "RGB", surface_colour, "B")
+    MEL.connect_material_expressions(detail_alpha, "", surface_colour, "Alpha")
+
+    MEL.connect_material_property(surface_colour, "", unreal.MaterialProperty.MP_BASE_COLOR)
     MEL.connect_material_property(night_emissive, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
     MEL.connect_material_property(roughness, "", unreal.MaterialProperty.MP_ROUGHNESS)
     MEL.recompile_material(material)
+    bound = MEL.get_material_default_texture_parameter_value(material, "DetailMap")
+    if bound is None or bound.get_editor_property("virtual_texture_streaming"):
+        raise RuntimeError(
+            f"M_EarthSurface DetailMap resolved to {bound.get_name() if bound else None}, which is a virtual "
+            f"texture; the material would fail to compile at cook time and the globe would render as the "
+            f"default material")
     save_asset(f"{MATERIAL_DIR}/M_EarthSurface")
     return material
 

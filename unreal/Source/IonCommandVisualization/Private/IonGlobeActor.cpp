@@ -5,7 +5,9 @@
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/Texture2D.h"
+#include "Engine/GameViewportClient.h"
 #include "GeoMathLibrary.h"
+#include "GeoTileMosaic.h"
 #include "GeoTimelineSubsystem.h"
 #include "HttpModule.h"
 #include "IImageWrapper.h"
@@ -18,6 +20,7 @@
 #include "Misc/Parse.h"
 #include "Modules/ModuleManager.h"
 #include "TimerManager.h"
+#include "UnrealClient.h"
 #include "UObject/ConstructorHelpers.h"
 
 AIonGlobeActor::AIonGlobeActor()
@@ -121,6 +124,38 @@ void AIonGlobeActor::BeginPlay()
 {
     Super::BeginPlay();
     if (!GetWorld() || !GetWorld()->IsGameWorld()) return;
+
+    // Close-orbit imagery from NASA GIBS. Public, no account, and published
+    // in EPSG:4326 - the same equirectangular convention the globe mesh's
+    // UVs use, so a tile drops into the window without being resampled.
+    // -IonNoTileImagery keeps the global textures alone (offline demos,
+    // deterministic captures).
+    if (!FParse::Param(FCommandLine::Get(), TEXT("IonNoTileImagery")))
+    {
+        FString TileBaseUrl = TEXT("https://gibs.earthdata.nasa.gov/wmts/epsg4326/best");
+        FParse::Value(FCommandLine::Get(), TEXT("IonTileBaseUrl="), TileBaseUrl);
+        DetailImagery = NewObject<UGeoTileMosaic>(this);
+        // Two layers, deliberately. Blue Marble is cloud-free and has no
+        // gaps, so it always covers the window; HLS is 30 m Landsat/Sentinel
+        // but only where there was a recent usable overpass, so it paints
+        // over the parts it actually observed and leaves the rest alone.
+        // "default" as the time value asks the service for its own newest
+        // date, which avoids guessing at a layer's processing latency (HLS
+        // runs about a week behind).
+        FGeoTileLayer Base;
+        Base.Identifier = TEXT("BlueMarble_ShadedRelief_Bathymetry");
+        Base.MatrixSet = TEXT("500m");
+        Base.Extension = TEXT("jpeg");
+        Base.MaxLevel = 7;
+        FGeoTileLayer Detail;
+        Detail.Identifier = TEXT("HLS_S30_Nadir_BRDF_Adjusted_Reflectance");
+        Detail.MatrixSet = TEXT("31.25m");
+        Detail.Extension = TEXT("png");
+        Detail.MaxLevel = 11;
+        Detail.bMayBeSparse = true;
+        DetailImagery->Configure(TileBaseUrl, {Base, Detail});
+    }
+
     // Live weather: replace the packaged climatology cloud texture with the
     // current EUMETSAT world IR composite, refreshed hourly. -IonNoLiveClouds
     // keeps the static fallback (offline demos, deterministic captures).
@@ -200,6 +235,12 @@ void AIonGlobeActor::ApplyLiveClouds(const TArray<uint8>& PngBytes)
 void AIonGlobeActor::Tick(float DeltaSeconds)
 {
     Super::Tick(DeltaSeconds);
+    DetailCheckTimer += DeltaSeconds;
+    if (DetailCheckTimer >= 0.25)
+    {
+        DetailCheckTimer = 0.0;
+        UpdateDetailImagery();
+    }
     const UGeoTimelineSubsystem* Timeline = GetGameInstance() ? GetGameInstance()->GetSubsystem<UGeoTimelineSubsystem>() : nullptr;
     const FDateTime TimelineUtc = Timeline ? Timeline->GetTimelineUtc() : FDateTime::UtcNow();
     const FGeoPosition Subsolar = UGeoMathLibrary::SolarSubpoint(TimelineUtc);
@@ -236,4 +277,80 @@ void AIonGlobeActor::Tick(float DeltaSeconds)
     // Clouds drift slowly relative to the terrain; the geographic frame of
     // arcs and markers stays pinned to the Earth mesh itself.
     if (Clouds->IsVisible()) Clouds->AddLocalRotation(FRotator(0.0, DeltaSeconds * 0.06, 0.0));
+}
+
+void AIonGlobeActor::UpdateDetailImagery()
+{
+    if (!DetailImagery || !EarthMID)
+    {
+        return;
+    }
+    const APlayerController* Player = GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr;
+    if (!Player || !Player->PlayerCameraManager)
+    {
+        return;
+    }
+    // The orbit camera always looks at the globe's centre, so the point
+    // directly under the camera is the centre of frame.
+    const FVector CameraLocation = Player->PlayerCameraManager->GetCameraLocation();
+    const double Distance = CameraLocation.Length();
+    if (Distance <= GlobeRadius)
+    {
+        return;
+    }
+    const FGeoPosition Nadir = UGeoMathLibrary::UnitSphereToLatitudeLongitude(CameraLocation.GetSafeNormal());
+
+    // How much of the globe fits on screen, as an arc in degrees. Near the
+    // surface this is the small-angle case (2*h*tan(fov/2)); the clamp keeps
+    // the far end sane, where the horizon rather than the field of view is
+    // the limit.
+    const double Altitude = Distance - GlobeRadius;
+    const double HalfFovRadians = FMath::DegreesToRadians(Player->PlayerCameraManager->GetFOVAngle() * 0.5);
+    const double VisibleArc = 2.0 * Altitude * FMath::Tan(HalfFovRadians);
+    const double SpanDegrees = FMath::Clamp(FMath::RadiansToDegrees(VisibleArc / GlobeRadius), 0.0001, 150.0);
+
+    // Above roughly 1000 km the global texture is already finer than the
+    // deepest tile level worth fetching, so the window buys nothing and is
+    // simply switched off.
+    constexpr double MosaicSpanThresholdDegrees = 12.0;
+    if (SpanDegrees > MosaicSpanThresholdDegrees)
+    {
+        EarthMID->SetScalarParameterValue(TEXT("DetailBlend"), 0.0f);
+        if (LastDetailLevel != -1)
+        {
+            LastDetailLevel = -1;
+            UE_LOG(LogTemp, Verbose, TEXT("ION COMMAND detail imagery: off (span %.2f deg)"), SpanDegrees);
+        }
+        return;
+    }
+
+    int32 ScreenHeight = 1080;
+    if (GEngine && GEngine->GameViewport && GEngine->GameViewport->Viewport)
+    {
+        ScreenHeight = FMath::Max(1, GEngine->GameViewport->Viewport->GetSizeXY().Y);
+    }
+    if (DetailImagery->Update(Nadir.Latitude, Nadir.Longitude, SpanDegrees, ScreenHeight))
+    {
+        const int32 Level = DetailImagery->GetLevel();
+        if (Level != LastDetailLevel)
+        {
+            LastDetailLevel = Level;
+            // One line per level change so "why is it blurry here" is
+            // answerable from a log: level, ground resolution, and where.
+            const double MetresPerPixel = (288.0 / static_cast<double>(1 << Level)) / 512.0 * 111319.49;
+            UE_LOG(LogTemp, Display, TEXT("ION COMMAND detail imagery: level %d (%.0f m/px) at %.3f, %.3f"),
+                Level, MetresPerPixel, Nadir.Latitude, Nadir.Longitude);
+        }
+    }
+    if (UTexture2D* Mosaic = DetailImagery->GetTexture())
+    {
+        EarthMID->SetTextureParameterValue(TEXT("DetailMap"), Mosaic);
+        EarthMID->SetVectorParameterValue(TEXT("DetailBounds"), DetailImagery->GetBoundsUV());
+        // Fade in with coverage so a half-filled window never shows as
+        // holes, and out again as the globe recedes.
+        const double FadeOut = FMath::GetMappedRangeValueClamped(
+            FVector2D(MosaicSpanThresholdDegrees * 0.75, MosaicSpanThresholdDegrees), FVector2D(1.0, 0.0), SpanDegrees);
+        EarthMID->SetScalarParameterValue(TEXT("DetailBlend"),
+            static_cast<float>(FadeOut) * DetailImagery->GetCoverage());
+    }
 }
