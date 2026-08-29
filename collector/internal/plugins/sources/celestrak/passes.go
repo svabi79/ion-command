@@ -26,6 +26,13 @@ const (
 	passRecomputeInterval = 10 * time.Minute
 )
 
+// predictedPass pairs a satellite with its next appearance, so the sweep's
+// result can be re-announced without re-searching for it.
+type predictedPass struct {
+	tracked trackedSatellite
+	pass    satellitePass
+}
+
 // satellitePass is one horizon-to-horizon appearance over the station.
 type satellitePass struct {
 	acquisition time.Time

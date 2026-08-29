@@ -54,6 +54,47 @@ Locator=JN47om
 
 For a packaged build that is `dist/windows/IonCommand/Saved/Config/IonOperator.ini`.
 
+## Collector: satellite passes over your station
+
+`orbital.celestrak` tracks the CelesTrak `amateur` group. Give it a ground
+station and it also answers the two questions a station operator has - what
+is above me now, and when is the next pass:
+
+```json
+{
+  "id": "orbital-primary",
+  "type": "orbital.celestrak",
+  "enabled": true,
+  "latitude": 47.52,
+  "longitude": 9.21,
+  "altitudeM": 440
+}
+```
+
+Without `latitude`/`longitude` the source behaves exactly as before, emitting
+positions and nothing else. With them:
+
+- every position also carries `elevationDeg`, `azimuthDeg`, `rangeKm` and
+  `aboveHorizon`, and satellites that are up are drawn brighter and larger;
+- every 10 minutes each satellite's next pass within 24 hours is emitted as
+  `orbital.pass` with acquisition, culmination, loss, peak elevation and the
+  compass bearing to point at (`"SE -> N"`). Passes peaking below 10 degrees
+  are not reported - they are inside any real station's ground clutter.
+
+Predictions are recomputed every 10 minutes but re-announced on every
+position tick. That is deliberate: the collector has no state snapshot on
+connect, so a client joining between sweeps would otherwise show "awaiting
+prediction" for up to ten minutes. Re-emitting is nearly free - the search
+was the expensive part, not the record - and a repeat for the same pass
+supersedes rather than accumulates, because the message id is keyed on the
+acquisition time.
+
+The client shows both in the **SATELLITES** cockpit panel, titled with your
+locator. Note this is the collector's station, configured here, not the
+client's `[IonCommand.Station]` - the prediction happens where SGP4 runs.
+Keeping them in step is on you; a mismatch means the panel is titled with one
+place and predicting for another.
+
 ## Client: overlay menu
 
 Press **O**. Every row is clickable and shows its state:

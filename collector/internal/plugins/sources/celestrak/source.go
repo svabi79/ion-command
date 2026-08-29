@@ -188,6 +188,7 @@ func (s *Source) Start(ctx context.Context, output chan<- plugins.RawRecord) err
 	// hundred thousand propagations, and the answer does not change between
 	// position ticks.
 	var nextPassSweep time.Time
+	var predictions []predictedPass
 	ticker := time.NewTicker(positionInterval)
 	defer ticker.Stop()
 	for ctx.Err() == nil {
@@ -241,7 +242,7 @@ func (s *Source) Start(ctx context.Context, output chan<- plugins.RawRecord) err
 		}
 		if s.observer.set && len(sets) > 0 && at.After(nextPassSweep) {
 			nextPassSweep = at.Add(passRecomputeInterval)
-			predicted := 0
+			predictions = predictions[:0]
 			for _, tracked := range sets {
 				if ctx.Err() != nil {
 					return nil
@@ -250,16 +251,28 @@ func (s *Source) Start(ctx context.Context, output chan<- plugins.RawRecord) err
 				if !ok {
 					continue
 				}
-				predicted++
-				select {
-				case output <- PassRecord(tracked, pass, s.id, at):
-				case <-ctx.Done():
-					return nil
-				}
+				predictions = append(predictions, predictedPass{tracked: tracked, pass: pass})
 			}
 			s.logger.Info("celestrak pass prediction swept",
-				"satellites", len(sets), "passesWithin24h", predicted,
+				"satellites", len(sets), "passesWithin24h", len(predictions),
 				"station", fmt.Sprintf("%.4f,%.4f", s.observer.latitude, s.observer.longitude))
+		}
+		// Re-announce the cached predictions on every tick. There is no
+		// state snapshot on connect, so a client that joins between sweeps
+		// would otherwise sit on "awaiting prediction" for up to the whole
+		// recompute interval. Re-emitting is nearly free - the expensive
+		// part was the search, not the record - and a repeated envelope for
+		// the same pass supersedes rather than accumulates, because the id
+		// is keyed on the acquisition time.
+		for _, predicted := range predictions {
+			if predicted.pass.loss.Before(at) {
+				continue
+			}
+			select {
+			case output <- PassRecord(predicted.tracked, predicted.pass, s.id, at):
+			case <-ctx.Done():
+				return nil
+			}
 		}
 		select {
 		case <-ctx.Done():

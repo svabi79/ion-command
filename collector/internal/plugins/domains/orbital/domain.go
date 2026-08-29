@@ -75,14 +75,17 @@ func (d *Domain) normalizePass(record plugins.RawRecord, raw rawPass) ([]events.
 	// satellite sets, which is also when the prediction stops being useful.
 	event.Time.ValidUntilUTC = &loss
 	event.Properties = map[string]any{
-		"noradId":           raw.SatID,
-		"aosUtc":            acquisition.UTC().Format(time.RFC3339),
-		"tcaUtc":            raw.TcaUTC,
-		"losUtc":            loss.UTC().Format(time.RFC3339),
-		"peakElevationDeg":  raw.PeakElDeg,
-		"aosAzimuthDeg":     raw.AosAzDeg,
-		"losAzimuthDeg":     raw.LosAzDeg,
-		"durationS":         raw.DurationS,
+		"noradId":          raw.SatID,
+		"aosUtc":           acquisition.UTC().Format(time.RFC3339),
+		"tcaUtc":           raw.TcaUTC,
+		"losUtc":           loss.UTC().Format(time.RFC3339),
+		"peakElevationDeg": raw.PeakElDeg,
+		"aosAzimuthDeg":    raw.AosAzDeg,
+		"losAzimuthDeg":    raw.LosAzDeg,
+		"durationS":        raw.DurationS,
+		// Explicit, so a consumer never has to parse the compass pair back
+		// out of the display string.
+		"bearing":           fmt.Sprintf("%s -> %s", compass(raw.AosAzDeg), compass(raw.LosAzDeg)),
 		"display.title":     raw.Name,
 		"display.primary":   fmt.Sprintf("AOS %s  %s -> %s", acquisition.UTC().Format("15:04Z"), compass(raw.AosAzDeg), compass(raw.LosAzDeg)),
 		"display.secondary": fmt.Sprintf("peak %.0f deg  //  %.0f min", raw.PeakElDeg, raw.DurationS/60.0),
