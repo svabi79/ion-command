@@ -34,4 +34,8 @@ if ($materialFailures) {
     $detail = ($materialFailures | Select-Object -First 8) -join "`n  "
     throw "Packaging produced materials that will render as the default material:`n  $detail"
 }
+# Say so on success too. Collecting the cook output above means a clean run
+# otherwise prints nothing at all, and "no output yet" is indistinguishable
+# from "still running" for anything waiting on this.
+Write-Output "Packaging complete: $archive (cook log: $cookLog)"
 
