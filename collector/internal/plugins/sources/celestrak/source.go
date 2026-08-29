@@ -35,16 +35,20 @@ const (
 )
 
 type trackedSatellite struct {
-	name    string
-	norad   string
-	sgp4    satellite.Satellite
+	name  string
+	norad string
+	sgp4  satellite.Satellite
 }
 
 type Source struct {
-	id     string
-	url    string
-	client *http.Client
-	logger *slog.Logger
+	id  string
+	url string
+	// Ground station to compute look angles from. Zero latitude AND
+	// longitude means unset - the Gulf of Guinea is not a plausible station
+	// and is the conventional sentinel for "no position configured".
+	observer observer
+	client   *http.Client
+	logger   *slog.Logger
 	// fetch and now are swappable for tests.
 	fetch func(ctx context.Context) ([]byte, error)
 	now   func() time.Time
@@ -62,6 +66,14 @@ func New(sourceConfig config.Source, logger *slog.Logger) (*Source, error) {
 		url = sourceConfig.Broker
 	}
 	source := &Source{id: sourceConfig.ID, url: url, client: &http.Client{Timeout: 30 * time.Second}, logger: logger, now: time.Now}
+	if sourceConfig.Latitude != 0 || sourceConfig.Longitude != 0 {
+		source.observer = observer{
+			latitude:   sourceConfig.Latitude,
+			longitude:  sourceConfig.Longitude,
+			altitudeKm: sourceConfig.AltitudeM / 1000.0,
+			set:        true,
+		}
+	}
 	source.fetch = source.httpFetch
 	return source, nil
 }
@@ -109,8 +121,33 @@ func ParseTLESets(body []byte) []trackedSatellite {
 	return sets
 }
 
+// observer is the ground station look angles are measured from.
+type observer struct {
+	latitude   float64
+	longitude  float64
+	altitudeKm float64
+	set        bool
+}
+
+// lookAngles returns azimuth and elevation in degrees, plus slant range in
+// km, for a satellite at an ECI position and time. Elevation is negative when
+// the satellite is below the horizon, which is what makes "is it up now"
+// answerable without a second propagation.
+func (o observer) lookAngles(position satellite.Vector3, at time.Time) (azimuthDeg, elevationDeg, rangeKm float64) {
+	jday := satellite.JDay(at.Year(), int(at.Month()), at.Day(), at.Hour(), at.Minute(), at.Second())
+	angles := satellite.ECIToLookAngles(position, satellite.LatLong{
+		Latitude:  o.latitude * math.Pi / 180.0,
+		Longitude: o.longitude * math.Pi / 180.0,
+	}, o.altitudeKm, jday)
+	return angles.Az * 180.0 / math.Pi, angles.El * 180.0 / math.Pi, angles.Rg
+}
+
 // PositionRecord propagates one satellite to the given time.
 func PositionRecord(tracked trackedSatellite, at time.Time, sourceInstanceID string) (plugins.RawRecord, bool) {
+	return positionRecordFrom(tracked, at, sourceInstanceID, observer{})
+}
+
+func positionRecordFrom(tracked trackedSatellite, at time.Time, sourceInstanceID string, from observer) (plugins.RawRecord, bool) {
 	at = at.UTC()
 	position, _ := satellite.Propagate(tracked.sgp4, at.Year(), int(at.Month()), at.Day(), at.Hour(), at.Minute(), at.Second())
 	if math.IsNaN(position.X) || (position.X == 0 && position.Y == 0 && position.Z == 0) {
@@ -125,6 +162,11 @@ func PositionRecord(tracked trackedSatellite, at time.Time, sourceInstanceID str
 	}
 	payload := fmt.Sprintf(`{"satId":"%s","name":%q,"latitude":%.5f,"longitude":%.5f,"altKm":%.1f}`,
 		tracked.norad, tracked.name, degrees.Latitude, longitude, altitudeKm)
+	if from.set {
+		azimuth, elevation, slantRange := from.lookAngles(position, at)
+		payload = fmt.Sprintf(`{"satId":"%s","name":%q,"latitude":%.5f,"longitude":%.5f,"altKm":%.1f,"azDeg":%.1f,"elDeg":%.1f,"rangeKm":%.0f}`,
+			tracked.norad, tracked.name, degrees.Latitude, longitude, altitudeKm, azimuth, elevation, slantRange)
+	}
 	return plugins.RawRecord{
 		SourcePluginID:   "celestrak",
 		SourceInstanceID: sourceInstanceID,
@@ -142,6 +184,10 @@ func (s *Source) Start(ctx context.Context, output chan<- plugins.RawRecord) err
 	// ticker into a download loop (CelesTrak usage policy).
 	var consecutiveFailures int
 	var nextFetchAllowed time.Time
+	// Pass prediction runs on its own, much slower cadence: a sweep is a few
+	// hundred thousand propagations, and the answer does not change between
+	// position ticks.
+	var nextPassSweep time.Time
 	ticker := time.NewTicker(positionInterval)
 	defer ticker.Stop()
 	for ctx.Err() == nil {
@@ -183,7 +229,7 @@ func (s *Source) Start(ctx context.Context, output chan<- plugins.RawRecord) err
 		}
 		at := s.now()
 		for _, tracked := range sets {
-			record, ok := PositionRecord(tracked, at, s.id)
+			record, ok := positionRecordFrom(tracked, at, s.id, s.observer)
 			if !ok {
 				continue
 			}
@@ -192,6 +238,28 @@ func (s *Source) Start(ctx context.Context, output chan<- plugins.RawRecord) err
 			case <-ctx.Done():
 				return nil
 			}
+		}
+		if s.observer.set && len(sets) > 0 && at.After(nextPassSweep) {
+			nextPassSweep = at.Add(passRecomputeInterval)
+			predicted := 0
+			for _, tracked := range sets {
+				if ctx.Err() != nil {
+					return nil
+				}
+				pass, ok := s.observer.nextPass(tracked, at)
+				if !ok {
+					continue
+				}
+				predicted++
+				select {
+				case output <- PassRecord(tracked, pass, s.id, at):
+				case <-ctx.Done():
+					return nil
+				}
+			}
+			s.logger.Info("celestrak pass prediction swept",
+				"satellites", len(sets), "passesWithin24h", predicted,
+				"station", fmt.Sprintf("%.4f,%.4f", s.observer.latitude, s.observer.longitude))
 		}
 		select {
 		case <-ctx.Done():

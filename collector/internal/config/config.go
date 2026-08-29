@@ -59,9 +59,14 @@ type Source struct {
 	// sentinel "world" requests no filter at all.
 	Filter string `json:"filter,omitempty"`
 	// Geographic scope for area-query sources (e.g. ADS-B around a point).
+	// orbital.celestrak reads the same pair as the ground station to compute
+	// look angles and passes from; leaving it unset simply omits them.
 	Latitude  float64 `json:"latitude,omitempty"`
 	Longitude float64 `json:"longitude,omitempty"`
 	RadiusNm  float64 `json:"radiusNm,omitempty"`
+	// AltitudeM is the observer's height above sea level, which matters for
+	// look angles at low elevation. Zero is a fine default inland.
+	AltitudeM float64 `json:"altitudeM,omitempty"`
 	// RouteLookup toggles the callsign → origin/destination enrichment on
 	// aviation.adsb sources (adsbdb.com). Unset means enabled.
 	RouteLookup *bool `json:"routeLookup,omitempty"`
