@@ -30,6 +30,7 @@ non-commercial only.
 | **OpenSky Network** | Aircraft data from the OpenSky Network. Licensed for **non-profit research and education only**; commercial or operational use requires written permission from OpenSky. Conditions pass through to downstream users. Cite: Schäfer, M., Strohmeier, M., Lenders, V., Martinovic, I., Wilhelm, M., *Bringing Up OpenSky: A Large-scale ADS-B Sensor Network for Research*, IPSN 2014, pp. 83–94. | [Terms of use](https://opensky-network.org/about/terms-of-use) |
 | **AIS Stream (aisstream.io)** | Vessel AIS data from aisstream.io, free with a self-service API key. No commercial-use restriction or redistribution licence is published as of this writing; treated with the same hobby-scale, attributed posture as the other unlicensed feeds below until the operator confirms otherwise. Direct browser connections to the stream are against its terms — ION COMMAND already only connects from the collector process, never from client JavaScript, so this is satisfied by the existing architecture. See [below](#enabling-ais-ships-aisstreamio) for the full picture. | [aisstream.io](https://aisstream.io) · [docs](https://aisstream.io/documentation) |
 | **EUMETSAT** | Cloud imagery ©EUMETSAT 2026. Governed by the EUMETSAT Data Policy, not Creative Commons. | [Terms of use](https://www.eumetsat.int/about-us/terms-use) |
+| **AWS Terrain Tiles** | Elevation for the close-orbit relief, from the AWS Open Data terrain tiles (the Mapzen "terrarium" encoding), fetched at runtime and cached locally. No account or key. The underlying data is a public-domain composite — chiefly SRTM (NASA/USGS), the USGS 3DEP and NED, Canada's CDEM, and the EU's EU-DEM — assembled by Mapzen and hosted by the AWS Open Data programme. Individual source licences are permissive or public domain; credit "elevation data from the AWS Terrain Tiles, based on SRTM and national elevation datasets" where relief is shown to third parties. `-IonNoTileImagery` disables the fetch. | [registry.opendata.aws/terrain-tiles](https://registry.opendata.aws/terrain-tiles/) |
 | **NASA GIBS** | Close-orbit map tiles from NASA's Global Imagery Browse Services, fetched at runtime below ~1000 km altitude and cached locally. Public service, no account or key. Base layer: `BlueMarble_ShadedRelief_Bathymetry` (NASA Earth Observatory). Detail layer: `HLS_S30_Nadir_BRDF_Adjusted_Reflectance` — Harmonized Landsat and Sentinel-2 at 30 m, which **contains modified Copernicus Sentinel-2 data** and NASA/USGS Landsat. Credit GIBS where imagery is shown to third parties. NASA does not endorse ION COMMAND. `-IonNoTileImagery` disables the fetch. | [GIBS docs](https://nasa-gibs.github.io/gibs-api-docs/) |
 | **NASA** | Day globe: Blue Marble Next Generation, NASA Earth Observatory (Reto Stockli, NASA/GSFC). Night: Black Marble 2016, NASA Earth Observatory/NOAA NCEI (Joshua Stevens, Suomi NPP VIIRS data, Miguel Román, NASA/GSFC). Clouds: NASA Earth Observatory Blue Marble (record 57747). Star map: NASA/GSFC Scientific Visualization Studio, *Deep Star Maps 2020*; Gaia DR2: ESA/Gaia/DPAC; also Hipparcos-2, Tycho-2, UCAC3; constellation figures based on those developed for the IAU by Alan MacRobert of Sky & Telescope (Roger Sinnott and Rick Fienberg). NASA does not endorse ION COMMAND. | [SVS 4851](https://svs.gsfc.nasa.gov/4851/) |
 | **AD1C** | DXCC prefix data from the Big CTY file by Jim Reisert, AD1C (version VER20260714). Full copyright and permission notice in [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md). | [country-files.com](https://www.country-files.com) |
@@ -321,6 +322,37 @@ ION COMMAND detail imagery: level 11 (31 m/px) at 47.520, 9.208
 If close orbit looks blurry, that line says whether the window is off
 (altitude too high), stuck at a shallow level, or fetching correctly but
 finding no HLS coverage there.
+
+## Terrain relief
+
+The same window that fetches close-orbit imagery also fetches a height
+field, and the globe material turns it into a surface normal. That is what
+makes ridges and valleys catch the light instead of reading as a painted-on
+texture.
+
+It is shading, not geometry, and the distinction is worth being clear
+about: the globe mesh has 400x200 quads, so one quad spans about 100 km
+while the closest orbit sees 43 km across. There is not a single vertex in
+frame to displace. Lighting the surface as though it were displaced costs
+three texture reads and works at every zoom level; the price is that the
+silhouette at the horizon stays smooth, and terrain never occludes terrain.
+
+| Source | Layout | Deepest level | Ground resolution | Encoding |
+| --- | --- | --- | --- | --- |
+| AWS Terrain Tiles (`terrarium`) | XYZ web mercator, 256 px | 12 | ~38 m/px | `(R*256 + G + B/256) - 32768` metres |
+
+This is the one source that is not in EPSG:4326, which is why
+`UGeoTileMosaic` carries a layout per layer. Web mercator tiles are
+resampled into the equirectangular window on the way in — only a per-row
+remapping, since longitude stays linear in both projections. It is also why
+levels are never compared across layers: a mercator level 12 with 256-pixel
+tiles is about 38 m/px, while a geographic level 12 with 512-pixel tiles
+would be about 15 m/px. The mosaic resolves each layer by ground
+resolution instead.
+
+Heights land in a 16-bit channel scaled across -1000 m to 9500 m, which is
+about 0.16 m per step. Eight bits would quantise to 41 m and read as
+terraces once the material takes a slope from it.
 
 ## Known gaps
 

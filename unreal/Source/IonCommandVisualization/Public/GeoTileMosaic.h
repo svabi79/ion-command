@@ -6,34 +6,64 @@
 
 class UTexture2D;
 
-// One layer of a WMTS tile pyramid, as a source the mosaic can draw from.
-// Levels share the pyramid geometry below; a layer only declares how deep it
-// goes and how to address it.
+// How a tile service numbers its tiles.
+UENUM()
+enum class EGeoTileLayout : uint8
+{
+    // OGC WMTS geographic (EPSG:4326). Level 0 is two 512-pixel tiles of 288
+    // degrees each from the top-left corner (-180, 90); every level halves
+    // that span. Latitude is linear within a tile.
+    Geographic,
+    // XYZ web mercator (EPSG:3857), the {z}/{x}/{y} scheme. 2^z tiles each
+    // way; latitude is non-linear within a tile and the poles beyond
+    // +-85.05 degrees do not exist.
+    WebMercator,
+};
+
+// What the tile's pixels mean.
+UENUM()
+enum class EGeoTileEncoding : uint8
+{
+    // Ordinary colour, composited as-is.
+    Colour,
+    // Terrarium elevation: metres = (R * 256 + G + B / 256) - 32768,
+    // rescaled into the mosaic's single 16-bit channel.
+    TerrariumElevation,
+};
+
+// One layer of a tile pyramid the mosaic can draw from.
 USTRUCT()
 struct FGeoTileLayer
 {
     GENERATED_BODY()
 
-    // Layer identifier as the service names it.
-    UPROPERTY() FString Identifier;
-    // Tile matrix set the layer is published in.
-    UPROPERTY() FString MatrixSet;
+    // Full URL template with {z}, {x}, {y} placeholders. Keeping the whole
+    // template here rather than assembling it from parts is what lets one
+    // mosaic serve both a WMTS REST endpoint and a plain XYZ bucket.
+    UPROPERTY() FString UrlTemplate;
+    // Short name for the on-disk cache directory.
+    UPROPERTY() FString CacheName;
     // File extension of the tile images ("jpeg", "png").
     UPROPERTY() FString Extension;
     // Deepest zoom level the layer offers. Requesting beyond it is an error
     // from the service, not a blurrier tile.
     UPROPERTY() int32 MaxLevel = 0;
-    // Time dimension value, or "default" for layers without one.
-    UPROPERTY() FString Time = TEXT("default");
-    // Tiles that carry an alpha channel may be partly or wholly empty where
-    // the source has no observation; those pixels must not overwrite the
-    // coarser layer already in the mosaic.
+    UPROPERTY() EGeoTileLayout Layout = EGeoTileLayout::Geographic;
+    UPROPERTY() EGeoTileEncoding Encoding = EGeoTileEncoding::Colour;
+    // Edge length of the service's own tiles. WMTS commonly serves 512, the
+    // XYZ convention 256, and the difference matters: the same level number
+    // means different ground resolutions, so levels are never compared
+    // across layers - only resolutions are.
+    UPROPERTY() int32 NativeTilePixels = 512;
+    // Tiles that may be partly or wholly empty where the source has no
+    // observation; those pixels must not overwrite whatever is already in
+    // the mosaic beneath them.
     UPROPERTY() bool bMayBeSparse = false;
 };
 
-// A window of map imagery that follows the camera: the visible region is
-// resolved to whole tiles of a WMTS pyramid, fetched, and assembled into one
-// texture the globe material samples inside the region's bounds.
+// A window of map data that follows the camera: the visible region is
+// resolved to whole tiles, fetched, and assembled into one texture the globe
+// material samples inside the region's bounds.
 //
 // This exists because no single global texture can serve a close orbit. At
 // the closest approach the camera sees ~43 km across, which needs ~40 m per
@@ -41,75 +71,101 @@ struct FGeoTileLayer
 // A window only has to cover what is on screen, so the same texture budget
 // buys whatever resolution the current altitude actually calls for.
 //
-// The pyramid is the OGC WMTS geographic (EPSG:4326) layout: level 0 is two
-// 512-pixel tiles spanning 288 degrees each from the top-left corner
-// (-180, 90), and every level halves that span. That is the same
-// equirectangular convention the globe mesh's UVs use, so a tile is an
-// axis-aligned rectangle in UV space and drops into the mosaic without
-// resampling.
+// The window itself is always equirectangular - the same convention the
+// globe mesh's UVs use - so the material needs no projection maths. Tiles
+// from a web mercator source are resampled into it on the way in, which is
+// only a per-row remapping because longitude stays linear in both layouts.
 UCLASS()
 class IONCOMMANDVISUALIZATION_API UGeoTileMosaic final : public UObject
 {
     GENERATED_BODY()
 
 public:
-    // Tiles across and down the mosaic. Four covers the visible span with
-    // room to pan before a refill is needed, at 16 requests per region.
-    static constexpr int32 TilesPerSide = 4;
+    // Tiles across and down the window. Wider than tall because screens are:
+    // a square window that just covers the visible height falls short of the
+    // width on 16:9 and badly short on 21:9 or 32:9, and the shortfall shows
+    // as a blurred band down the side of the frame where the window ends.
+    static constexpr int32 TilesX = 8;
+    static constexpr int32 TilesY = 4;
     static constexpr int32 TilePixels = 512;
-    static constexpr int32 TextureSize = TilesPerSide * TilePixels;
+    static constexpr int32 TextureWidth = TilesX * TilePixels;
+    static constexpr int32 TextureHeight = TilesY * TilePixels;
 
-    // Base of the WMTS REST endpoint, up to and including the projection and
-    // the "best" (or equivalent) collection segment.
-    void Configure(const FString& InBaseUrl, const TArray<FGeoTileLayer>& InLayers);
+    // Elevation range the 16-bit channel is scaled across. Earth's land runs
+    // from the Dead Sea shore (-430 m) to Everest (8849 m); the margins keep
+    // bathymetry near the coast and any future outlier inside the range.
+    static constexpr double ElevationFloorMetres = -1000.0;
+    static constexpr double ElevationCeilingMetres = 9500.0;
 
-    // Re-aim the window. Center is degrees, SpanDegrees is the north-south
-    // extent the camera can see. Returns true if this started a new region;
-    // panning inside the current region is free.
-    bool Update(double CenterLatitude, double CenterLongitude, double SpanDegrees, int32 ScreenHeightPixels);
+    void Configure(const TArray<FGeoTileLayer>& InLayers);
 
-    // Texture holding the assembled region, or null before the first tile
-    // has landed.
+    // Re-aim the window. Center is degrees; SpanDegrees is the north-south
+    // extent the camera can see and SpanLongitudeDegrees the east-west one,
+    // which is the larger of the two on any normal display and is what
+    // decides whether the window actually covers the frame. Returns true if
+    // this started a new region; panning inside the current one is free.
+    bool Update(double CenterLatitude, double CenterLongitude, double SpanDegrees,
+                double SpanLongitudeDegrees, int32 ScreenHeightPixels);
+
     UTexture2D* GetTexture() const { return Texture; }
 
     // Region bounds as (uMin, vMin, uSpan, vSpan) in the globe's
-    // equirectangular UV space, for the material to map a pixel into the
-    // mosaic. Zero span means "no region", i.e. sample the global texture.
+    // equirectangular UV space. Zero span means "no region".
     FLinearColor GetBoundsUV() const { return BoundsUV; }
 
     // 0 while the region is still filling, 1 once every tile has resolved.
-    // The material fades the window in on this so a half-filled mosaic never
-    // shows as holes in the Earth.
     float GetCoverage() const { return Coverage; }
 
-    // Deepest level currently requested, for diagnostics.
     int32 GetLevel() const { return CurrentLevel; }
 
+    // Ground sample distance of the window in metres, for a material that
+    // needs to turn height differences into a slope. Rows and columns are
+    // the same size on the ground because the window is square in degrees
+    // per texel, not in count.
+    double GetMetresPerPixel() const;
+
 private:
-    // Pixels per tile edge in degrees at a given level.
-    static double LevelSpanDegrees(int32 Level) { return 288.0 / static_cast<double>(1 << Level); }
-    // Deepest level whose pixels are still coarser than the screen needs, so
-    // the mosaic never fetches detail the display cannot show.
-    int32 ChooseLevel(double SpanDegrees, int32 ScreenHeightPixels, int32 MaxLevel) const;
+    // Degrees spanned by one tile edge at a level, in the geographic layout.
+    static double GeographicTileSpan(int32 Level) { return 288.0 / static_cast<double>(1 << Level); }
+    // Fractional tile row for a latitude, in whichever layout. This is the
+    // only place the two projections differ.
+    static double TileRowForLatitude(const FGeoTileLayer& Layer, int32 Level, double Latitude);
+    static double TileColumnForLongitude(const FGeoTileLayer& Layer, int32 Level, double Longitude);
+    // Inverse of TileRowForLatitude, for working out which latitudes a tile
+    // covers.
+    static double LatitudeForTileRow(const FGeoTileLayer& Layer, int32 Level, double Row);
+
+    // Degrees per pixel a layer delivers at one of its own levels, and the
+    // shallowest level of that layer that is at least as fine as a target.
+    static double LayerDegreesPerPixel(const FGeoTileLayer& Layer, int32 Level);
+    static int32 LayerLevelForResolution(const FGeoTileLayer& Layer, double TargetDegreesPerPixel);
+    int32 ChooseLevel(double SpanDegrees, double SpanLongitudeDegrees, int32 ScreenHeightPixels) const;
     void BeginRegion(int32 Level, int32 ColMin, int32 RowMin);
-    // Dest is the rectangle of the mosaic this tile fills; Source is the
-    // sub-rectangle of the tile that belongs there, which is the whole tile
-    // except when a shallow layer is covering a deeper level.
-    void RequestTile(const FGeoTileLayer& Layer, int32 Level, int32 Col, int32 Row,
-                     const FIntRect& Dest, const FIntRect& Source);
-    void CompositeTile(const TArray<uint8>& Bytes, const FGeoTileLayer& Layer,
-                       const FIntRect& Dest, const FIntRect& Source);
+    void RequestTile(const FGeoTileLayer& Layer, int32 Level, int32 Col, int32 Row);
+    // Paints the tile into whichever part of the window it covers, mapping
+    // through latitude/longitude so a mercator tile lands in the right rows.
+    void CompositeTile(const TArray<uint8>& Bytes, const FGeoTileLayer& Layer, int32 Level, int32 Col, int32 Row);
     void TileResolved();
     void EnsureTexture();
     void PushToGpu();
     FString CacheFilePath(const FGeoTileLayer& Layer, int32 Level, int32 Col, int32 Row) const;
 
-    FString BaseUrl;
     UPROPERTY() TArray<FGeoTileLayer> Layers;
     UPROPERTY(Transient) TObjectPtr<UTexture2D> Texture;
 
-    // CPU-side mosaic; tiles composite here before one upload to the GPU.
+    // CPU-side window; tiles composite here before one upload to the GPU.
+    // Colour mosaics use Pixels, elevation mosaics use Heights.
     TArray<FColor> Pixels;
+    TArray<uint16> Heights;
+    bool bElevation = false;
+
+    // Geographic bounds of the window, which is always equirectangular
+    // whatever layout the tiles came in.
+    double WindowLonMin = 0.0;
+    double WindowLatMax = 0.0;
+    double WindowSpanDegrees = 0.0;
+    double WindowSpanLongitude = 0.0;
+
     FLinearColor BoundsUV = FLinearColor(0, 0, 0, 0);
     float Coverage = 0.0f;
     int32 CurrentLevel = -1;

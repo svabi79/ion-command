@@ -10,51 +10,153 @@
 #include "Misc/Paths.h"
 #include "Modules/ModuleManager.h"
 
-void UGeoTileMosaic::Configure(const FString& InBaseUrl, const TArray<FGeoTileLayer>& InLayers)
+namespace
 {
-    BaseUrl = InBaseUrl;
-    Layers = InLayers;
-    // Shallow layers composite first so the sharp, sparse ones paint over
-    // them, whatever order the caller listed them in.
-    Layers.Sort([](const FGeoTileLayer& A, const FGeoTileLayer& B) { return A.MaxLevel < B.MaxLevel; });
+    // Web mercator is undefined at the poles and every implementation clips
+    // at the latitude that makes the world square.
+    constexpr double MercatorLatitudeLimit = 85.05112877980659;
+
+    // Terrarium packs metres as (R*256 + G + B/256) - 32768. Raw is BGRA.
+    double DecodeTerrariumMetres(const TArray64<uint8>& Raw, int32 Width, int32 Height, int32 X, int32 Y)
+    {
+        const int32 ClampedX = FMath::Clamp(X, 0, Width - 1);
+        const int32 ClampedY = FMath::Clamp(Y, 0, Height - 1);
+        const int64 Index = (static_cast<int64>(ClampedY) * Width + ClampedX) * 4;
+        return (Raw[Index + 2] * 256.0 + Raw[Index + 1] + Raw[Index + 0] / 256.0) - 32768.0;
+    }
 }
 
-int32 UGeoTileMosaic::ChooseLevel(double SpanDegrees, int32 ScreenHeightPixels, int32 MaxLevel) const
+void UGeoTileMosaic::Configure(const TArray<FGeoTileLayer>& InLayers)
+{
+    Layers = InLayers;
+    // Shallow layers composite first so sharp, sparse ones paint over them,
+    // whatever order the caller listed them in.
+    Layers.Sort([](const FGeoTileLayer& A, const FGeoTileLayer& B) { return A.MaxLevel < B.MaxLevel; });
+    bElevation = Layers.ContainsByPredicate(
+        [](const FGeoTileLayer& L) { return L.Encoding == EGeoTileEncoding::TerrariumElevation; });
+}
+
+double UGeoTileMosaic::TileColumnForLongitude(const FGeoTileLayer& Layer, int32 Level, double Longitude)
+{
+    if (Layer.Layout == EGeoTileLayout::WebMercator)
+    {
+        return (Longitude + 180.0) / 360.0 * static_cast<double>(1 << Level);
+    }
+    return (Longitude + 180.0) / GeographicTileSpan(Level);
+}
+
+double UGeoTileMosaic::TileRowForLatitude(const FGeoTileLayer& Layer, int32 Level, double Latitude)
+{
+    if (Layer.Layout == EGeoTileLayout::WebMercator)
+    {
+        const double Clamped = FMath::Clamp(Latitude, -MercatorLatitudeLimit, MercatorLatitudeLimit);
+        const double Radians = FMath::DegreesToRadians(Clamped);
+        const double Projected = FMath::Loge(FMath::Tan(Radians) + 1.0 / FMath::Cos(Radians));
+        return (1.0 - Projected / PI) / 2.0 * static_cast<double>(1 << Level);
+    }
+    return (90.0 - Latitude) / GeographicTileSpan(Level);
+}
+
+double UGeoTileMosaic::LatitudeForTileRow(const FGeoTileLayer& Layer, int32 Level, double Row)
+{
+    if (Layer.Layout == EGeoTileLayout::WebMercator)
+    {
+        const double Projected = PI * (1.0 - 2.0 * Row / static_cast<double>(1 << Level));
+        return FMath::RadiansToDegrees(FMath::Atan(FMath::Sinh(Projected)));
+    }
+    return 90.0 - Row * GeographicTileSpan(Level);
+}
+
+double UGeoTileMosaic::GetMetresPerPixel() const
+{
+    if (WindowSpanDegrees <= 0.0)
+    {
+        return 0.0;
+    }
+    // 111319.49 m per degree of latitude, which is what the window's rows
+    // are spaced in regardless of the source layout.
+    return WindowSpanDegrees * 111319.49 / static_cast<double>(TextureHeight);
+}
+
+double UGeoTileMosaic::LayerDegreesPerPixel(const FGeoTileLayer& Layer, int32 Level)
+{
+    const double Pixels = static_cast<double>(FMath::Max(1, Layer.NativeTilePixels));
+    if (Layer.Layout == EGeoTileLayout::WebMercator)
+    {
+        return 360.0 / static_cast<double>(1 << Level) / Pixels;
+    }
+    return GeographicTileSpan(Level) / Pixels;
+}
+
+int32 UGeoTileMosaic::LayerLevelForResolution(const FGeoTileLayer& Layer, double TargetDegreesPerPixel)
+{
+    for (int32 Candidate = 0; Candidate <= Layer.MaxLevel; ++Candidate)
+    {
+        if (LayerDegreesPerPixel(Layer, Candidate) <= TargetDegreesPerPixel)
+        {
+            return Candidate;
+        }
+    }
+    return Layer.MaxLevel;
+}
+
+int32 UGeoTileMosaic::ChooseLevel(double SpanDegrees, double SpanLongitudeDegrees, int32 ScreenHeightPixels) const
 {
     if (SpanDegrees <= 0.0 || ScreenHeightPixels <= 0)
     {
         return 0;
     }
+    // Never resolve finer than the best layer can actually supply, or the
+    // window would fetch coarse tiles and magnify them for nothing.
+    double FinestAvailable = TNumericLimits<double>::Max();
+    for (const FGeoTileLayer& Layer : Layers)
+    {
+        FinestAvailable = FMath::Min(FinestAvailable, LayerDegreesPerPixel(Layer, Layer.MaxLevel));
+    }
     // Stop at the first level whose pixels are finer than the screen can
     // resolve: deeper costs bandwidth and shows nothing more.
     const double DegreesPerScreenPixel = SpanDegrees / static_cast<double>(ScreenHeightPixels);
-    for (int32 Candidate = 0; Candidate <= MaxLevel; ++Candidate)
+    const double Target = FMath::Max(DegreesPerScreenPixel, FinestAvailable);
+    int32 Level = 0;
+    for (int32 Candidate = 0; Candidate <= 24; ++Candidate)
     {
-        if (LevelSpanDegrees(Candidate) / static_cast<double>(TilePixels) <= DegreesPerScreenPixel)
+        Level = Candidate;
+        if (GeographicTileSpan(Candidate) / static_cast<double>(TilePixels) <= Target)
         {
-            return Candidate;
+            break;
         }
     }
-    return MaxLevel;
+    // Coverage beats sharpness: a window that does not reach the edge of the
+    // frame leaves a visibly blurred band there, which is worse than the
+    // whole frame being one level coarser. Back off until it fits both axes.
+    while (Level > 0 &&
+           (GeographicTileSpan(Level) * TilesY < SpanDegrees ||
+            GeographicTileSpan(Level) * TilesX < SpanLongitudeDegrees))
+    {
+        --Level;
+    }
+    return Level;
 }
 
-bool UGeoTileMosaic::Update(double CenterLatitude, double CenterLongitude, double SpanDegrees, int32 ScreenHeightPixels)
+bool UGeoTileMosaic::Update(double CenterLatitude, double CenterLongitude, double SpanDegrees,
+                            double SpanLongitudeDegrees, int32 ScreenHeightPixels)
 {
-    if (Layers.Num() == 0 || BaseUrl.IsEmpty())
+    if (Layers.Num() == 0)
     {
         return false;
     }
-    const int32 DeepestAvailable = Layers.Last().MaxLevel;
-    const int32 Level = ChooseLevel(SpanDegrees, ScreenHeightPixels, DeepestAvailable);
-    const double Span = LevelSpanDegrees(Level);
+    // The window is laid out on the geographic grid whatever the layers use,
+    // so one level and one tile origin describe it for all of them.
+    const int32 Level = ChooseLevel(SpanDegrees, SpanLongitudeDegrees, ScreenHeightPixels);
+    const double Span = GeographicTileSpan(Level);
 
     const int32 CenterCol = FMath::FloorToInt32((CenterLongitude + 180.0) / Span);
     const int32 CenterRow = FMath::FloorToInt32((90.0 - CenterLatitude) / Span);
     const int32 MatrixHeight = FMath::CeilToInt32(180.0 / Span);
-    const int32 ColMin = CenterCol - TilesPerSide / 2;
-    // Clamp north-south: the pyramid has no rows past the poles, and a
-    // wrapped row would quietly show the wrong hemisphere.
-    const int32 RowMin = FMath::Clamp(CenterRow - TilesPerSide / 2, 0, FMath::Max(0, MatrixHeight - TilesPerSide));
+    const int32 ColMin = CenterCol - TilesX / 2;
+    // Clamp north-south: there are no rows past the poles, and a wrapped row
+    // would quietly show the wrong hemisphere.
+    const int32 RowMin = FMath::Clamp(CenterRow - TilesY / 2, 0, FMath::Max(0, MatrixHeight - TilesY));
 
     if (Level == CurrentLevel && ColMin == CurrentColMin && RowMin == CurrentRowMin)
     {
@@ -71,96 +173,69 @@ void UGeoTileMosaic::BeginRegion(int32 Level, int32 ColMin, int32 RowMin)
     CurrentRowMin = RowMin;
     ++RegionSerial;
 
-    const double Span = LevelSpanDegrees(Level);
-    // Bounds in the globe's UV space. u = (lon+180)/360 and v = (90-lat)/180
-    // are exactly the pyramid's own axes, so the window is an axis-aligned
-    // rectangle and no tile is ever resampled to fit it.
-    const double LonMin = ColMin * Span - 180.0;
-    const double LatMax = 90.0 - RowMin * Span;
-    const double WindowSpan = Span * TilesPerSide;
+    const double Span = GeographicTileSpan(Level);
+    WindowLonMin = ColMin * Span - 180.0;
+    WindowLatMax = 90.0 - RowMin * Span;
+    WindowSpanDegrees = Span * TilesY;
+    WindowSpanLongitude = Span * TilesX;
+
+    // u = (lon+180)/360 and v = (90-lat)/180 are the globe mesh's own axes.
     BoundsUV = FLinearColor(
-        static_cast<float>((LonMin + 180.0) / 360.0),
-        static_cast<float>((90.0 - LatMax) / 180.0),
-        static_cast<float>(WindowSpan / 360.0),
-        static_cast<float>(WindowSpan / 180.0));
+        static_cast<float>((WindowLonMin + 180.0) / 360.0),
+        static_cast<float>((90.0 - WindowLatMax) / 180.0),
+        static_cast<float>(WindowSpanLongitude / 360.0),
+        static_cast<float>(WindowSpanDegrees / 180.0));
 
     EnsureTexture();
     // Keep the previous region's pixels until new ones land: clearing here
-    // would flash a black window across the globe on every level change.
+    // would flash a hole across the globe on every level change.
     Coverage = 0.0f;
-    PendingTiles = 0;
-    ExpectedTiles = 0;
 
-    // Collect the work first, then issue it, so ExpectedTiles is final
-    // before any response can come back and divide by it.
+    const double WindowLonMax = WindowLonMin + WindowSpanLongitude;
+    const double WindowLatMin = WindowLatMax - WindowSpanDegrees;
+
+    // Collect the work first so ExpectedTiles is final before any response
+    // can come back and divide by it.
     struct FTileFetch
     {
         FGeoTileLayer Layer;
         int32 Level;
         int32 Col;
         int32 Row;
-        FIntRect Dest;
-        FIntRect Source;
     };
     TArray<FTileFetch> Fetches;
 
     for (const FGeoTileLayer& Layer : Layers)
     {
-        // A layer shallower than the requested level still contributes: its
-        // coarsest covering tiles fill the window, and a sparse sharper
-        // layer paints over wherever it actually observed something.
-        const int32 LayerLevel = FMath::Min(Level, Layer.MaxLevel);
-        const int32 Shift = Level - LayerLevel;
-        const int32 Ratio = 1 << Shift;
-        const int32 LayerMatrixWidth = FMath::CeilToInt32(360.0 / LevelSpanDegrees(LayerLevel));
-        const int32 LayerMatrixHeight = FMath::CeilToInt32(180.0 / LevelSpanDegrees(LayerLevel));
+        // A layer that cannot reach the window's resolution still
+        // contributes: its finest covering tiles fill the window, and a
+        // sparse sharper layer paints over wherever it observed something.
+        // Resolution, not level number, is what the layers have in common.
+        const int32 LayerLevel = LayerLevelForResolution(Layer, WindowSpanDegrees / static_cast<double>(TextureHeight));
+        const int32 TilesAcross = Layer.Layout == EGeoTileLayout::WebMercator
+            ? (1 << LayerLevel)
+            : FMath::CeilToInt32(360.0 / GeographicTileSpan(LayerLevel));
+        const int32 TilesDown = Layer.Layout == EGeoTileLayout::WebMercator
+            ? (1 << LayerLevel)
+            : FMath::CeilToInt32(180.0 / GeographicTileSpan(LayerLevel));
 
-        // Iterate the distinct source tiles, not the mosaic slots: one
-        // coarse tile can cover the whole window, and fetching it once per
-        // slot would be sixteen identical requests.
-        const int32 SrcColMin = FMath::FloorToInt32(static_cast<float>(ColMin) / Ratio);
-        const int32 SrcColMax = FMath::FloorToInt32(static_cast<float>(ColMin + TilesPerSide - 1) / Ratio);
-        const int32 SrcRowMin = FMath::FloorToInt32(static_cast<float>(RowMin) / Ratio);
-        const int32 SrcRowMax = FMath::FloorToInt32(static_cast<float>(RowMin + TilesPerSide - 1) / Ratio);
+        // Which of this layer's tiles overlap the window? Ask in the layer's
+        // own numbering rather than assuming it matches the window's.
+        const int32 FirstCol = FMath::FloorToInt32(TileColumnForLongitude(Layer, LayerLevel, WindowLonMin));
+        const int32 LastCol = FMath::FloorToInt32(TileColumnForLongitude(Layer, LayerLevel, FMath::Min(WindowLonMax, 179.999999)));
+        // Rows count southward, so the window's north edge is the low row.
+        const int32 FirstRow = FMath::FloorToInt32(TileRowForLatitude(Layer, LayerLevel, WindowLatMax));
+        const int32 LastRow = FMath::FloorToInt32(TileRowForLatitude(Layer, LayerLevel, WindowLatMin));
 
-        for (int32 SrcRow = SrcRowMin; SrcRow <= SrcRowMax; ++SrcRow)
+        for (int32 Row = FirstRow; Row <= LastRow; ++Row)
         {
-            for (int32 SrcCol = SrcColMin; SrcCol <= SrcColMax; ++SrcCol)
+            for (int32 Col = FirstCol; Col <= LastCol; ++Col)
             {
-                if (SrcCol < 0 || SrcRow < 0 || SrcCol >= LayerMatrixWidth || SrcRow >= LayerMatrixHeight)
+                if (Col < 0 || Row < 0 || Col >= TilesAcross || Row >= TilesDown)
                 {
                     continue;
                 }
-                // Which target tiles does this source tile cover, and which
-                // of those fall inside the window?
-                const int32 FirstCol = FMath::Max(SrcCol * Ratio, ColMin);
-                const int32 LastCol = FMath::Min((SrcCol + 1) * Ratio, ColMin + TilesPerSide);
-                const int32 FirstRow = FMath::Max(SrcRow * Ratio, RowMin);
-                const int32 LastRow = FMath::Min((SrcRow + 1) * Ratio, RowMin + TilesPerSide);
-                if (FirstCol >= LastCol || FirstRow >= LastRow)
-                {
-                    continue;
-                }
-                FTileFetch Fetch;
-                Fetch.Layer = Layer;
-                Fetch.Level = LayerLevel;
-                Fetch.Col = SrcCol;
-                Fetch.Row = SrcRow;
-                Fetch.Dest = FIntRect(
-                    (FirstCol - ColMin) * TilePixels, (FirstRow - RowMin) * TilePixels,
-                    (LastCol - ColMin) * TilePixels, (LastRow - RowMin) * TilePixels);
-                // The matching sub-rectangle of the source tile. At Ratio 1
-                // this is the whole tile; deeper down it is the fraction the
-                // window actually sits on, which is what makes a coarse
-                // underlay line up with the sharp layer above it instead of
-                // being stretched across the whole window.
-                const int32 SourcePixelsPerTargetTile = FMath::Max(1, TilePixels / Ratio);
-                Fetch.Source = FIntRect(
-                    (FirstCol - SrcCol * Ratio) * SourcePixelsPerTargetTile,
-                    (FirstRow - SrcRow * Ratio) * SourcePixelsPerTargetTile,
-                    (LastCol - SrcCol * Ratio) * SourcePixelsPerTargetTile,
-                    (LastRow - SrcRow * Ratio) * SourcePixelsPerTargetTile);
-                Fetches.Add(MoveTemp(Fetch));
+                Fetches.Add({Layer, LayerLevel, Col, Row});
             }
         }
     }
@@ -174,13 +249,13 @@ void UGeoTileMosaic::BeginRegion(int32 Level, int32 ColMin, int32 RowMin)
     }
     for (const FTileFetch& Fetch : Fetches)
     {
-        RequestTile(Fetch.Layer, Fetch.Level, Fetch.Col, Fetch.Row, Fetch.Dest, Fetch.Source);
+        RequestTile(Fetch.Layer, Fetch.Level, Fetch.Col, Fetch.Row);
     }
 }
 
 FString UGeoTileMosaic::CacheFilePath(const FGeoTileLayer& Layer, int32 Level, int32 Col, int32 Row) const
 {
-    return FPaths::ProjectSavedDir() / TEXT("TileCache") / Layer.Identifier / Layer.Time /
+    return FPaths::ProjectSavedDir() / TEXT("TileCache") / Layer.CacheName /
         FString::Printf(TEXT("%d_%d_%d.%s"), Level, Row, Col, *Layer.Extension);
 }
 
@@ -192,8 +267,7 @@ void UGeoTileMosaic::TileResolved()
         : 1.0f;
 }
 
-void UGeoTileMosaic::RequestTile(const FGeoTileLayer& Layer, int32 Level, int32 Col, int32 Row,
-                                 const FIntRect& Dest, const FIntRect& Source)
+void UGeoTileMosaic::RequestTile(const FGeoTileLayer& Layer, int32 Level, int32 Col, int32 Row)
 {
     const uint32 Serial = RegionSerial;
 
@@ -203,13 +277,15 @@ void UGeoTileMosaic::RequestTile(const FGeoTileLayer& Layer, int32 Level, int32 
     TArray<uint8> Cached;
     if (FFileHelper::LoadFileToArray(Cached, *CachePath, FILEREAD_Silent) && Cached.Num() > 0)
     {
-        CompositeTile(Cached, Layer, Dest, Source);
+        CompositeTile(Cached, Layer, Level, Col, Row);
         TileResolved();
         return;
     }
 
-    const FString Url = FString::Printf(TEXT("%s/%s/default/%s/%s/%d/%d/%d.%s"),
-        *BaseUrl, *Layer.Identifier, *Layer.Time, *Layer.MatrixSet, Level, Row, Col, *Layer.Extension);
+    FString Url = Layer.UrlTemplate;
+    Url.ReplaceInline(TEXT("{z}"), *FString::FromInt(Level));
+    Url.ReplaceInline(TEXT("{x}"), *FString::FromInt(Col));
+    Url.ReplaceInline(TEXT("{y}"), *FString::FromInt(Row));
 
     const TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = FHttpModule::Get().CreateRequest();
     Request->SetURL(Url);
@@ -218,7 +294,7 @@ void UGeoTileMosaic::RequestTile(const FGeoTileLayer& Layer, int32 Level, int32 
     TWeakObjectPtr<UGeoTileMosaic> WeakThis(this);
     const FGeoTileLayer LayerCopy = Layer;
     Request->OnProcessRequestComplete().BindLambda(
-        [WeakThis, LayerCopy, Dest, Source, Serial, CachePath](FHttpRequestPtr, FHttpResponsePtr Response, bool bConnected)
+        [WeakThis, LayerCopy, Level, Col, Row, Serial, CachePath](FHttpRequestPtr, FHttpResponsePtr Response, bool bConnected)
         {
             if (!WeakThis.IsValid())
             {
@@ -233,7 +309,7 @@ void UGeoTileMosaic::RequestTile(const FGeoTileLayer& Layer, int32 Level, int32 
                 // compositing them would smear the old place over the new.
                 if (Serial == Self->RegionSerial)
                 {
-                    Self->CompositeTile(Bytes, LayerCopy, Dest, Source);
+                    Self->CompositeTile(Bytes, LayerCopy, Level, Col, Row);
                 }
             }
             // A missing tile is ordinary, not a failure: sparse layers only
@@ -248,31 +324,38 @@ void UGeoTileMosaic::RequestTile(const FGeoTileLayer& Layer, int32 Level, int32 
 
 void UGeoTileMosaic::EnsureTexture()
 {
-    if (Pixels.Num() != TextureSize * TextureSize)
+    if (bElevation)
     {
-        Pixels.SetNumZeroed(TextureSize * TextureSize);
+        if (Heights.Num() != TextureWidth * TextureHeight)
+        {
+            Heights.SetNumZeroed(TextureWidth * TextureHeight);
+        }
+    }
+    else if (Pixels.Num() != TextureWidth * TextureHeight)
+    {
+        Pixels.SetNumZeroed(TextureWidth * TextureHeight);
     }
     if (Texture)
     {
         return;
     }
-    Texture = UTexture2D::CreateTransient(TextureSize, TextureSize, PF_B8G8R8A8);
+    // 16 bits for elevation: 8 would quantise the range to 41 m steps, which
+    // reads as terraces once the material takes a slope from it.
+    Texture = UTexture2D::CreateTransient(TextureWidth, TextureHeight, bElevation ? PF_G16 : PF_B8G8R8A8);
     if (!Texture)
     {
         return;
     }
-    // Colour imagery, blended against the sRGB global textures.
-    Texture->SRGB = true;
+    Texture->SRGB = !bElevation;
     Texture->AddressX = TA_Clamp;
     Texture->AddressY = TA_Clamp;
-    Texture->Filter = TF_Trilinear;
+    Texture->Filter = TF_Bilinear;
     Texture->UpdateResource();
 }
 
-void UGeoTileMosaic::CompositeTile(const TArray<uint8>& Bytes, const FGeoTileLayer& Layer,
-                                   const FIntRect& Dest, const FIntRect& Source)
+void UGeoTileMosaic::CompositeTile(const TArray<uint8>& Bytes, const FGeoTileLayer& Layer, int32 Level, int32 Col, int32 Row)
 {
-    if (Bytes.Num() == 0)
+    if (Bytes.Num() == 0 || WindowSpanDegrees <= 0.0)
     {
         return;
     }
@@ -296,42 +379,88 @@ void UGeoTileMosaic::CompositeTile(const TArray<uint8>& Bytes, const FGeoTileLay
     }
     EnsureTexture();
 
-    const int32 DestWidth = Dest.Width();
-    const int32 DestHeight = Dest.Height();
-    const int32 SourceWidth = FMath::Max(1, Source.Width());
-    const int32 SourceHeight = FMath::Max(1, Source.Height());
-    // The decoded tile may not be TilePixels across if the service ever
-    // serves a different size, so map through the tile's own dimensions.
-    const double SourceScaleX = static_cast<double>(SrcWidth) / static_cast<double>(TilePixels);
-    const double SourceScaleY = static_cast<double>(SrcHeight) / static_cast<double>(TilePixels);
+    // Work in geography rather than in pixel rectangles: that is what lets a
+    // mercator tile land on the right rows of an equirectangular window,
+    // and it collapses the "coarse layer covering a deeper level" case into
+    // the same code path - such a tile simply covers more of the window.
+    const double TileLonMin = -180.0 + (Layer.Layout == EGeoTileLayout::WebMercator
+        ? static_cast<double>(Col) / static_cast<double>(1 << Level) * 360.0
+        : Col * GeographicTileSpan(Level));
+    const double TileLonSpan = Layer.Layout == EGeoTileLayout::WebMercator
+        ? 360.0 / static_cast<double>(1 << Level)
+        : GeographicTileSpan(Level);
+    const double TileLatTop = LatitudeForTileRow(Layer, Level, Row);
+    const double TileLatBottom = LatitudeForTileRow(Layer, Level, Row + 1);
 
-    for (int32 Y = 0; Y < DestHeight; ++Y)
+    // One tile edge maps to the same number of degrees on both axes, so a
+    // single pixel span describes the window even though it is not square.
+    const double PixelSpan = WindowSpanDegrees / static_cast<double>(TextureHeight);
+
+    // Only walk the window rows and columns this tile can reach.
+    const int32 FirstY = FMath::Max(0, FMath::FloorToInt32((WindowLatMax - TileLatTop) / PixelSpan));
+    const int32 LastY = FMath::Min(TextureHeight - 1, FMath::CeilToInt32((WindowLatMax - TileLatBottom) / PixelSpan));
+    const int32 FirstX = FMath::Max(0, FMath::FloorToInt32((TileLonMin - WindowLonMin) / PixelSpan));
+    const int32 LastX = FMath::Min(TextureWidth - 1, FMath::CeilToInt32((TileLonMin + TileLonSpan - WindowLonMin) / PixelSpan));
+    if (FirstY > LastY || FirstX > LastX)
     {
-        const int32 DestY = Dest.Min.Y + Y;
-        if (DestY < 0 || DestY >= TextureSize)
+        return;
+    }
+
+    for (int32 Y = FirstY; Y <= LastY; ++Y)
+    {
+        const double Latitude = WindowLatMax - (Y + 0.5) * PixelSpan;
+        // Fractional row within this tile, which is where the projection
+        // difference actually shows up.
+        const double RowInTile = TileRowForLatitude(Layer, Level, Latitude) - Row;
+        if (RowInTile < 0.0 || RowInTile >= 1.0)
         {
             continue;
         }
-        const double SourceY = (Source.Min.Y + (static_cast<double>(Y) * SourceHeight) / DestHeight) * SourceScaleY;
-        const int32 SrcY = FMath::Clamp(static_cast<int32>(SourceY), 0, SrcHeight - 1);
-        for (int32 X = 0; X < DestWidth; ++X)
+        const int32 SrcY = FMath::Clamp(static_cast<int32>(RowInTile * SrcHeight), 0, SrcHeight - 1);
+        for (int32 X = FirstX; X <= LastX; ++X)
         {
-            const int32 DestX = Dest.Min.X + X;
-            if (DestX < 0 || DestX >= TextureSize)
+            const double Longitude = WindowLonMin + (X + 0.5) * PixelSpan;
+            const double ColumnInTile = (Longitude - TileLonMin) / TileLonSpan;
+            if (ColumnInTile < 0.0 || ColumnInTile >= 1.0)
             {
                 continue;
             }
-            const double SourceX = (Source.Min.X + (static_cast<double>(X) * SourceWidth) / DestWidth) * SourceScaleX;
-            const int32 SrcX = FMath::Clamp(static_cast<int32>(SourceX), 0, SrcWidth - 1);
+            const int32 SrcX = FMath::Clamp(static_cast<int32>(ColumnInTile * SrcWidth), 0, SrcWidth - 1);
             const int64 SrcIndex = (static_cast<int64>(SrcY) * SrcWidth + SrcX) * 4;
-            // Where a sparse layer observed nothing, leave the coarser layer
+            const int64 DestIndex = static_cast<int64>(Y) * TextureWidth + X;
+
+            if (Layer.Encoding == EGeoTileEncoding::TerrariumElevation)
+            {
+                // Bilinear, unlike the colour path. Elevation tiles are
+                // magnified into the window (256-pixel sources against
+                // 512-pixel window tiles), and the material differentiates
+                // whatever lands here: nearest-neighbour leaves stair steps
+                // that the slope turns into hard ridges, which show up as
+                // streaks across otherwise smooth ground.
+                const double SampleX = ColumnInTile * SrcWidth - 0.5;
+                const double SampleY = RowInTile * SrcHeight - 0.5;
+                const int32 X0 = FMath::FloorToInt32(SampleX);
+                const int32 Y0 = FMath::FloorToInt32(SampleY);
+                const double FractionX = SampleX - X0;
+                const double FractionY = SampleY - Y0;
+                const double Top = FMath::Lerp(
+                    DecodeTerrariumMetres(Raw, SrcWidth, SrcHeight, X0, Y0),
+                    DecodeTerrariumMetres(Raw, SrcWidth, SrcHeight, X0 + 1, Y0), FractionX);
+                const double Bottom = FMath::Lerp(
+                    DecodeTerrariumMetres(Raw, SrcWidth, SrcHeight, X0, Y0 + 1),
+                    DecodeTerrariumMetres(Raw, SrcWidth, SrcHeight, X0 + 1, Y0 + 1), FractionX);
+                const double Metres = FMath::Lerp(Top, Bottom, FractionY);
+                const double Normalised = (Metres - ElevationFloorMetres) / (ElevationCeilingMetres - ElevationFloorMetres);
+                Heights[DestIndex] = static_cast<uint16>(FMath::Clamp(Normalised, 0.0, 1.0) * 65535.0);
+                continue;
+            }
+            // Where a sparse layer observed nothing, leave whatever is
             // underneath standing rather than punching a hole in the globe.
             if (Layer.bMayBeSparse && Raw[SrcIndex + 3] < 8)
             {
                 continue;
             }
-            Pixels[static_cast<int64>(DestY) * TextureSize + DestX] =
-                FColor(Raw[SrcIndex + 2], Raw[SrcIndex + 1], Raw[SrcIndex + 0], 255);
+            Pixels[DestIndex] = FColor(Raw[SrcIndex + 2], Raw[SrcIndex + 1], Raw[SrcIndex + 0], 255);
         }
     }
     bDirty = true;
@@ -346,7 +475,14 @@ void UGeoTileMosaic::PushToGpu()
     }
     FTexture2DMipMap& Mip = Texture->GetPlatformData()->Mips[0];
     void* Data = Mip.BulkData.Lock(LOCK_READ_WRITE);
-    FMemory::Memcpy(Data, Pixels.GetData(), Pixels.Num() * sizeof(FColor));
+    if (bElevation)
+    {
+        FMemory::Memcpy(Data, Heights.GetData(), Heights.Num() * sizeof(uint16));
+    }
+    else
+    {
+        FMemory::Memcpy(Data, Pixels.GetData(), Pixels.Num() * sizeof(FColor));
+    }
     Mip.BulkData.Unlock();
     Texture->UpdateResource();
     bDirty = false;

@@ -151,6 +151,30 @@ Note that this class of fault survives a casual look at a screenshot: a
 displaced Earth still renders as a completely convincing Earth. Only a
 named landmark at a known camera position settles it.
 
+## The globe renders as a grey or unrecognisable mass
+
+The Earth material failed to compile and Unreal substituted its default
+material. Packaging catches this now (`tools/package.ps1` fails the build),
+but if you are running an editor build or an older package, look for:
+
+```
+LogMaterial: Warning: Invalid shader map ID caching shaders for 'M_EarthSurface'
+LogMaterial: ... Failed to compile Material for platform PCD3D_SM6
+```
+
+The reason is on the following line of the *cook* log, not the client log.
+Three failures have actually happened here, all silent until cook time:
+
+| Cook message | Cause |
+| --- | --- |
+| `Sampler type` mismatch | A virtual texture bound to a plain `TextureSampleParameter2D`, or an sRGB texture on a `LinearColor` sampler. The Earth day/night textures are virtual; a parameter's fallback must not be. |
+| `Not enough components in (float3) for component mask 0011` | A `ComponentMask` reaching for `.ba` on a `VectorParameter`, whose default output is float3. Use the parameter's own `R`/`G`/`B`/`A` outputs and `AppendVector`. |
+| `(Node TextureSample) Missing input texture` | A `TextureObjectParameter` connected to the wrong input name. The texture object input on `TextureSample` is called `Tex`. |
+
+Note that a material failure is only a **warning** to the cook, which then
+exits 0. Exit code alone never showed this; the guard reads the captured
+output instead.
+
 ## Performance
 
 The renderer holds ~125 fps with 12 000 arcs on a desktop GPU. If it drags:

@@ -136,24 +136,44 @@ void AIonGlobeActor::BeginPlay()
         FParse::Value(FCommandLine::Get(), TEXT("IonTileBaseUrl="), TileBaseUrl);
         DetailImagery = NewObject<UGeoTileMosaic>(this);
         // Two layers, deliberately. Blue Marble is cloud-free and has no
-        // gaps, so it always covers the window; HLS is 30 m Landsat/Sentinel
-        // but only where there was a recent usable overpass, so it paints
-        // over the parts it actually observed and leaves the rest alone.
-        // "default" as the time value asks the service for its own newest
-        // date, which avoids guessing at a layer's processing latency (HLS
-        // runs about a week behind).
+        // gaps, so it always covers the window; HLS is 30 m Landsat and
+        // Sentinel-2 but only where there was a recent usable overpass, so
+        // it paints over the parts it actually observed and leaves the rest
+        // alone. "default" as the time value asks the service for its own
+        // newest date, which avoids guessing at a layer's processing
+        // latency (HLS runs about a week behind).
         FGeoTileLayer Base;
-        Base.Identifier = TEXT("BlueMarble_ShadedRelief_Bathymetry");
-        Base.MatrixSet = TEXT("500m");
+        Base.UrlTemplate = TileBaseUrl + TEXT("/BlueMarble_ShadedRelief_Bathymetry/default/default/500m/{z}/{y}/{x}.jpeg");
+        Base.CacheName = TEXT("bluemarble");
         Base.Extension = TEXT("jpeg");
         Base.MaxLevel = 7;
         FGeoTileLayer Detail;
-        Detail.Identifier = TEXT("HLS_S30_Nadir_BRDF_Adjusted_Reflectance");
-        Detail.MatrixSet = TEXT("31.25m");
+        Detail.UrlTemplate = TileBaseUrl + TEXT("/HLS_S30_Nadir_BRDF_Adjusted_Reflectance/default/default/31.25m/{z}/{y}/{x}.png");
+        Detail.CacheName = TEXT("hls-s30");
         Detail.Extension = TEXT("png");
         Detail.MaxLevel = 11;
         Detail.bMayBeSparse = true;
-        DetailImagery->Configure(TileBaseUrl, {Base, Detail});
+        DetailImagery->Configure({Base, Detail});
+
+        // Relief for the same window, from the AWS Open Data terrain tiles
+        // (the Mapzen "terrarium" encoding). This is a web mercator XYZ
+        // pyramid with 256-pixel tiles rather than GIBS's geographic 512s,
+        // which is exactly why the mosaic resolves each layer by ground
+        // resolution instead of by level number.
+        FString ElevationUrl = TEXT("https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png");
+        FParse::Value(FCommandLine::Get(), TEXT("IonElevationUrl="), ElevationUrl);
+        FGeoTileLayer Terrain;
+        Terrain.UrlTemplate = ElevationUrl;
+        Terrain.CacheName = TEXT("terrarium");
+        Terrain.Extension = TEXT("png");
+        // Level 12 is ~38 m/px at the equator, about where the imagery tops
+        // out; deeper mostly resamples SRTM's own 30 m posts.
+        Terrain.MaxLevel = 12;
+        Terrain.Layout = EGeoTileLayout::WebMercator;
+        Terrain.Encoding = EGeoTileEncoding::TerrariumElevation;
+        Terrain.NativeTilePixels = 256;
+        DetailElevation = NewObject<UGeoTileMosaic>(this);
+        DetailElevation->Configure({Terrain});
     }
 
     // Live weather: replace the packaged climatology cloud texture with the
@@ -316,6 +336,7 @@ void AIonGlobeActor::UpdateDetailImagery()
     if (SpanDegrees > MosaicSpanThresholdDegrees)
     {
         EarthMID->SetScalarParameterValue(TEXT("DetailBlend"), 0.0f);
+        EarthMID->SetScalarParameterValue(TEXT("ReliefBlend"), 0.0f);
         if (LastDetailLevel != -1)
         {
             LastDetailLevel = -1;
@@ -325,11 +346,21 @@ void AIonGlobeActor::UpdateDetailImagery()
     }
 
     int32 ScreenHeight = 1080;
+    double AspectRatio = 16.0 / 9.0;
     if (GEngine && GEngine->GameViewport && GEngine->GameViewport->Viewport)
     {
-        ScreenHeight = FMath::Max(1, GEngine->GameViewport->Viewport->GetSizeXY().Y);
+        const FIntPoint ViewportSize = GEngine->GameViewport->Viewport->GetSizeXY();
+        ScreenHeight = FMath::Max(1, ViewportSize.Y);
+        AspectRatio = static_cast<double>(FMath::Max(1, ViewportSize.X)) / static_cast<double>(ScreenHeight);
     }
-    if (DetailImagery->Update(Nadir.Latitude, Nadir.Longitude, SpanDegrees, ScreenHeight))
+    // East-west extent, in degrees of longitude rather than of arc: the
+    // window is measured in whole tiles of the geographic grid, whose
+    // columns are longitude. Meridians converge, so the same arc spans more
+    // longitude the further from the equator - which is exactly why a window
+    // sized only from the vertical span falls short of the frame.
+    const double CosLatitude = FMath::Max(0.05, FMath::Cos(FMath::DegreesToRadians(Nadir.Latitude)));
+    const double SpanLongitudeDegrees = FMath::Min(360.0, SpanDegrees * AspectRatio / CosLatitude);
+    if (DetailImagery->Update(Nadir.Latitude, Nadir.Longitude, SpanDegrees, SpanLongitudeDegrees, ScreenHeight))
     {
         const int32 Level = DetailImagery->GetLevel();
         if (Level != LastDetailLevel)
@@ -342,6 +373,10 @@ void AIonGlobeActor::UpdateDetailImagery()
                 Level, MetresPerPixel, Nadir.Latitude, Nadir.Longitude);
         }
     }
+    if (DetailElevation)
+    {
+        DetailElevation->Update(Nadir.Latitude, Nadir.Longitude, SpanDegrees, SpanLongitudeDegrees, ScreenHeight);
+    }
     if (UTexture2D* Mosaic = DetailImagery->GetTexture())
     {
         EarthMID->SetTextureParameterValue(TEXT("DetailMap"), Mosaic);
@@ -352,5 +387,21 @@ void AIonGlobeActor::UpdateDetailImagery()
             FVector2D(MosaicSpanThresholdDegrees * 0.75, MosaicSpanThresholdDegrees), FVector2D(1.0, 0.0), SpanDegrees);
         EarthMID->SetScalarParameterValue(TEXT("DetailBlend"),
             static_cast<float>(FadeOut) * DetailImagery->GetCoverage());
+    }
+    if (DetailElevation && DetailElevation->GetTexture())
+    {
+        EarthMID->SetTextureParameterValue(TEXT("ElevationMap"), DetailElevation->GetTexture());
+        EarthMID->SetVectorParameterValue(TEXT("ElevationBounds"), DetailElevation->GetBoundsUV());
+        // Convert a height difference between neighbouring texels into a
+        // slope: the material needs to know how far apart they are on the
+        // ground, and how many metres the 16-bit channel spans.
+        const double MetresPerPixel = DetailElevation->GetMetresPerPixel();
+        const double ChannelMetres = UGeoTileMosaic::ElevationCeilingMetres - UGeoTileMosaic::ElevationFloorMetres;
+        EarthMID->SetScalarParameterValue(TEXT("ElevationMetresPerTexel"),
+            MetresPerPixel > 0.0 ? static_cast<float>(ChannelMetres / MetresPerPixel) : 0.0f);
+        const double FadeOut = FMath::GetMappedRangeValueClamped(
+            FVector2D(MosaicSpanThresholdDegrees * 0.75, MosaicSpanThresholdDegrees), FVector2D(1.0, 0.0), SpanDegrees);
+        EarthMID->SetScalarParameterValue(TEXT("ReliefBlend"),
+            static_cast<float>(FadeOut) * DetailElevation->GetCoverage());
     }
 }

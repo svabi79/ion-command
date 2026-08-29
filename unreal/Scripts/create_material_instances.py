@@ -859,6 +859,133 @@ def build_earth_master(day_texture, night_texture) -> unreal.Material:
     MEL.connect_material_expressions(seam_clamped, "", detail_alpha, "A")
     MEL.connect_material_expressions(detail_blend, "", detail_alpha, "B")
 
+    # --- Terrain relief ---
+    # The globe mesh cannot carry this as geometry: one of its quads spans
+    # about 100 km and the closest orbit sees 43 km, so there is not a single
+    # vertex in frame to displace. The height field drives a surface normal
+    # instead, which costs three texture reads and makes every ridge and
+    # valley catch the real sun direction. The silhouette stays smooth - the
+    # honest limitation of doing it this way.
+    relief_bounds = vector(material, "ElevationBounds", unreal.LinearColor(0.0, 0.0, 1.0, 1.0), -1560, -420)
+    relief_min = expression(material, unreal.MaterialExpressionAppendVector, -1400, -420)
+    MEL.connect_material_expressions(relief_bounds, "R", relief_min, "A")
+    MEL.connect_material_expressions(relief_bounds, "G", relief_min, "B")
+    relief_span = expression(material, unreal.MaterialExpressionAppendVector, -1400, -340)
+    MEL.connect_material_expressions(relief_bounds, "B", relief_span, "A")
+    MEL.connect_material_expressions(relief_bounds, "A", relief_span, "B")
+    relief_local = expression(material, unreal.MaterialExpressionSubtract, -1280, -400)
+    MEL.connect_material_expressions(uv, "", relief_local, "A")
+    MEL.connect_material_expressions(relief_min, "", relief_local, "B")
+    relief_uv = expression(material, unreal.MaterialExpressionDivide, -1160, -400)
+    MEL.connect_material_expressions(relief_local, "", relief_uv, "A")
+    MEL.connect_material_expressions(relief_span, "", relief_uv, "B")
+
+    # One texture object, sampled three times. A TextureSampleParameter2D per
+    # tap would declare the same parameter three times over; the object
+    # parameter is bound once and shared.
+    # The default must be non-sRGB to match a LinearColor sampler, and must
+    # not be a virtual texture - both mismatches fail the material to compile
+    # at cook time, where the only symptom is a globe drawn with the default
+    # material.
+    relief_default = unreal.EditorAssetLibrary.load_asset("/Game/ION/Textures/T_CloudFraction")
+    if relief_default is None or relief_default.get_editor_property("srgb") or relief_default.get_editor_property("virtual_texture_streaming"):
+        raise RuntimeError("ElevationMap needs a non-sRGB, non-virtual fallback texture")
+    relief_object = expression(material, unreal.MaterialExpressionTextureObjectParameter, -1010, -300)
+    relief_object.set_editor_property("parameter_name", "ElevationMap")
+    relief_object.set_editor_property("texture", relief_default)
+    relief_object.set_editor_property("sampler_type", unreal.MaterialSamplerType.SAMPLERTYPE_LINEAR_COLOR)
+
+    slope_scale = scalar(material, "ElevationMetresPerTexel", 0.0, -760, 40)
+
+    # Forward differences one texel apart in the window's own UV space. The
+    # window texture is wider than tall (8x4 tiles), so a texel is a
+    # different fraction of the UV range on each axis - but the same distance
+    # on the ground, which is what lets one slope scale serve both.
+    texel_u = 1.0 / (8 * 512)
+    texel_v = 1.0 / (4 * 512)
+    taps = []
+    for index, (dx, dy) in enumerate([(0.0, 0.0), (texel_u, 0.0), (0.0, texel_v)]):
+        tap_uv = relief_uv
+        if dx != 0.0 or dy != 0.0:
+            offset = expression(material, unreal.MaterialExpressionConstant2Vector, -1010, -180 + index * 70)
+            offset.set_editor_property("r", dx)
+            offset.set_editor_property("g", dy)
+            tap_uv = expression(material, unreal.MaterialExpressionAdd, -900, -180 + index * 70)
+            MEL.connect_material_expressions(relief_uv, "", tap_uv, "A")
+            MEL.connect_material_expressions(offset, "", tap_uv, "B")
+        tap = expression(material, unreal.MaterialExpressionTextureSample, -760, -320 + index * 90)
+        # The texture object input is named "Tex"; anything else silently fails
+        # to connect and the material dies at cook with "Missing input texture".
+        MEL.connect_material_expressions(relief_object, "", tap, "Tex")
+        MEL.connect_material_expressions(tap_uv, "", tap, "UVs")
+        taps.append(tap)
+
+    # Height is stored normalised across a fixed metre range, so a difference
+    # between neighbours becomes a true slope (rise over run) once scaled by
+    # (range in metres / metres per texel), which the actor supplies. The
+    # taps are exactly one texel apart, so the run is one texel and there is
+    # no further division: a 30 degree hillside then produces a 30 degree
+    # normal, which is the whole point of driving this from real elevations
+    # rather than from a look-good constant.
+
+    slope_axes = []
+    for index in (1, 2):
+        difference = expression(material, unreal.MaterialExpressionSubtract, -600, -320 + index * 90)
+        MEL.connect_material_expressions(taps[0], "R", difference, "A")
+        MEL.connect_material_expressions(taps[index], "R", difference, "B")
+        scaled = expression(material, unreal.MaterialExpressionMultiply, -470, -320 + index * 90)
+        MEL.connect_material_expressions(difference, "", scaled, "A")
+        MEL.connect_material_expressions(slope_scale, "", scaled, "B")
+        slope_axes.append(scaled)
+
+    # Tangent-space normal: rising ground to the east tilts the surface west,
+    # and the mosaic's V axis runs south, so both differences enter directly.
+    slope_xy = expression(material, unreal.MaterialExpressionAppendVector, -340, -220)
+    MEL.connect_material_expressions(slope_axes[0], "", slope_xy, "A")
+    MEL.connect_material_expressions(slope_axes[1], "", slope_xy, "B")
+    slope_xyz = expression(material, unreal.MaterialExpressionAppendVector, -240, -220)
+    MEL.connect_material_expressions(slope_xy, "", slope_xyz, "A")
+    MEL.connect_material_expressions(constant(material, 1.0, -340, -150), "", slope_xyz, "B")
+    relief_normal = expression(material, unreal.MaterialExpressionNormalize, -150, -220)
+    MEL.connect_material_expressions(slope_xyz, "", relief_normal, "")
+
+    # Its own edge mask, not the imagery's. The two windows normally land on
+    # the same level and cover the same ground, but nothing guarantees it -
+    # they are limited by different sources - and borrowing the other one's
+    # mask would smear relief outside the height field it came from.
+    relief_centre = expression(material, unreal.MaterialExpressionSubtract, -900, 200)
+    MEL.connect_material_expressions(relief_uv, "", relief_centre, "A")
+    MEL.connect_material_expressions(constant(material, 0.5, -1010, 260), "", relief_centre, "B")
+    relief_abs = expression(material, unreal.MaterialExpressionAbs, -790, 200)
+    MEL.connect_material_expressions(relief_centre, "", relief_abs, "")
+    relief_distance = expression(material, unreal.MaterialExpressionMultiply, -690, 200)
+    MEL.connect_material_expressions(relief_abs, "", relief_distance, "A")
+    MEL.connect_material_expressions(constant(material, 2.0, -790, 265), "", relief_distance, "B")
+    relief_axis = expression(material, unreal.MaterialExpressionMax, -570, 200)
+    MEL.connect_material_expressions(mask(material, relief_distance, "r", -630, 160), "", relief_axis, "A")
+    MEL.connect_material_expressions(mask(material, relief_distance, "g", -630, 240), "", relief_axis, "B")
+    relief_inside = expression(material, unreal.MaterialExpressionOneMinus, -470, 200)
+    MEL.connect_material_expressions(relief_axis, "", relief_inside, "")
+    relief_ramp = expression(material, unreal.MaterialExpressionDivide, -400, 200)
+    MEL.connect_material_expressions(relief_inside, "", relief_ramp, "A")
+    MEL.connect_material_expressions(constant(material, 0.08, -470, 265), "", relief_ramp, "B")
+    relief_seam = expression(material, unreal.MaterialExpressionSaturate, -340, 200)
+    MEL.connect_material_expressions(relief_ramp, "", relief_seam, "")
+
+    # Fade with coverage and with the window, exactly like the imagery, so a
+    # half-filled height field never creases the globe.
+    relief_blend = scalar(material, "ReliefBlend", 0.0, -340, -90)
+    relief_alpha = expression(material, unreal.MaterialExpressionMultiply, -240, -90)
+    MEL.connect_material_expressions(relief_seam, "", relief_alpha, "A")
+    MEL.connect_material_expressions(relief_blend, "", relief_alpha, "B")
+    flat_normal = expression(material, unreal.MaterialExpressionConstant3Vector, -340, -20)
+    flat_normal.set_editor_property("constant", unreal.LinearColor(0.0, 0.0, 1.0, 1.0))
+    surface_normal = expression(material, unreal.MaterialExpressionLinearInterpolate, -80, -120)
+    MEL.connect_material_expressions(flat_normal, "", surface_normal, "A")
+    MEL.connect_material_expressions(relief_normal, "", surface_normal, "B")
+    MEL.connect_material_expressions(relief_alpha, "", surface_normal, "Alpha")
+    MEL.connect_material_property(surface_normal, "", unreal.MaterialProperty.MP_NORMAL)
+
     surface_colour = expression(material, unreal.MaterialExpressionLinearInterpolate, -180, -300)
     MEL.connect_material_expressions(day, "RGB", surface_colour, "A")
     MEL.connect_material_expressions(detail, "RGB", surface_colour, "B")

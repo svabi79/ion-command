@@ -49,6 +49,12 @@ private:
     // closest approach; below that altitude a tile window follows the camera
     // and supplies whatever resolution the current altitude calls for.
     UPROPERTY(Transient) TObjectPtr<UGeoTileMosaic> DetailImagery;
+    // Terrain relief for the same window. The globe mesh is far too coarse
+    // to displace at this scale - one quad spans ~100 km, and the closest
+    // orbit sees 43 km - so the height field drives a surface normal
+    // instead. The silhouette stays smooth; everything the light touches
+    // does not.
+    UPROPERTY(Transient) TObjectPtr<UGeoTileMosaic> DetailElevation;
     void UpdateDetailImagery();
     // Seconds since the window was last re-aimed. The camera moves every
     // frame; the tile service does not need to hear about it that often.
