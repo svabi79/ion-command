@@ -174,6 +174,15 @@ void AIonGlobeActor::BeginPlay()
         Terrain.NativeTilePixels = 256;
         DetailElevation = NewObject<UGeoTileMosaic>(this);
         DetailElevation->Configure({Terrain});
+
+        // Bound the cache once, on the way in. It only grows while the client
+        // runs, so there is no need to check it on the hot path.
+        // -IonTileCacheBudgetMB= overrides the budget, which is also how the
+        // trim is exercised: at the default the cache is normally well under
+        // it, so nothing would happen and nothing would be proven.
+        double CacheBudgetMB = static_cast<double>(UGeoTileMosaic::DefaultCacheBudgetBytes) / 1048576.0;
+        FParse::Value(FCommandLine::Get(), TEXT("IonTileCacheBudgetMB="), CacheBudgetMB);
+        UGeoTileMosaic::TrimCache(static_cast<int64>(FMath::Max(0.0, CacheBudgetMB) * 1048576.0));
     }
 
     // Live weather: replace the packaged climatology cloud texture with the

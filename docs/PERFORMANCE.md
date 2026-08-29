@@ -21,6 +21,7 @@ render slots in place:
 | 2026-08-28 | globe + HUD only, no arcs (`-IonPathsHidden`) | 117.7 |
 | 2026-08-28 | 12k arcs, cube segments, Nanite globe + virtual textures | **90.2** |
 | 2026-08-29 | as above, plus the tile window and terrain relief | **98.7** |
+| 2026-08-29 | closest orbit over JN47om, tile window active at level 10 | **102.2** |
 
 The 60 FPS target is met with 1.5x headroom, but this is a **regression against
 the 125.3 FPS measured on 2026-07-19 under the same fixture and hardware** —
@@ -36,14 +37,21 @@ previous run, which is within what a single measurement on a machine with
 other work on it can be trusted to say. Read it as "no regression", not as
 a gain.
 
-**What that row does not measure.** The benchmark flies the default distant
-view, where the tile window is switched off entirely because the global
-texture is already finer than any level worth fetching. So it exercises the
-three extra texture reads the Earth material now always performs, and
-nothing else: not the tile fetches, not the mosaic uploads, not the two
-4096x2048 window textures being resident. A close-orbit figure needs a
-fixture that pins the camera low (`-IonCameraDistance`), which `bench.ps1`
-does not currently take.
+The distant-view row does **not** exercise the tile window: it is switched
+off up there, because the global texture is already finer than any level
+worth fetching. It measures the three extra texture reads the Earth material
+now always performs, and nothing else.
+
+`bench.ps1` therefore takes `-CameraDistance`, `-CameraLatitude` and
+`-CameraLongitude`, and the close-orbit row is the same fixture flown at the
+closest approach with the window live (the client log confirms level 10 at
+61 m/px during the run). It comes out slightly **above** the distant view,
+which is not a paradox: at that altitude most of the 12,000 arcs are off
+screen, so the fill cost that dominates the distant view is largely gone.
+The honest reading is that the window costs nothing measurable in frame
+time - its cost is tile fetching and mosaic uploads, which are network and
+CPU work off the render thread, and which a steady camera does not provoke.
+A benchmark that panned continuously would.
 
 That is a deliberate trade: the high-resolution globe is what makes close-range
 zoom possible at all. It is recorded here as a cost, not hidden as an

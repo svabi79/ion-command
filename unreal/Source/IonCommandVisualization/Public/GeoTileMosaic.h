@@ -91,6 +91,11 @@ public:
     static constexpr int32 TextureWidth = TilesX * TilePixels;
     static constexpr int32 TextureHeight = TilesY * TilePixels;
 
+    // How much disk the tile cache may occupy before the oldest tiles are
+    // dropped. Roughly a thousand tiles at typical sizes, which covers a lot
+    // of revisiting without growing without limit.
+    static constexpr int64 DefaultCacheBudgetBytes = 512LL * 1024 * 1024;
+
     // Elevation range the 16-bit channel is scaled across. Earth's land runs
     // from the Dead Sea shore (-430 m) to Everest (8849 m); the margins keep
     // bathymetry near the coast and any future outlier inside the range.
@@ -98,6 +103,12 @@ public:
     static constexpr double ElevationCeilingMetres = 9500.0;
 
     void Configure(const TArray<FGeoTileLayer>& InLayers);
+
+    // Delete the oldest cached tiles until the cache is under the budget.
+    // Call once at startup: the cache only grows while the client runs, so
+    // trimming on the way in bounds it without touching the hot path.
+    // Returns the number of bytes reclaimed.
+    static int64 TrimCache(int64 BudgetBytes);
 
     // Re-aim the window. Center is degrees; SpanDegrees is the north-south
     // extent the camera can see and SpanLongitudeDegrees the east-west one,

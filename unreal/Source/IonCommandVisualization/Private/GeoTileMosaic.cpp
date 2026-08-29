@@ -6,6 +6,7 @@
 #include "IImageWrapperModule.h"
 #include "Interfaces/IHttpRequest.h"
 #include "Interfaces/IHttpResponse.h"
+#include "HAL/FileManager.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "Modules/ModuleManager.h"
@@ -251,6 +252,90 @@ void UGeoTileMosaic::BeginRegion(int32 Level, int32 ColMin, int32 RowMin)
     {
         RequestTile(Fetch.Layer, Fetch.Level, Fetch.Col, Fetch.Row);
     }
+}
+
+int64 UGeoTileMosaic::TrimCache(int64 BudgetBytes)
+{
+    const FString Root = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("TileCache"));
+    IFileManager& Files = IFileManager::Get();
+    if (!Files.DirectoryExists(*Root))
+    {
+        return 0;
+    }
+
+    struct FCachedTile
+    {
+        FString Path;
+        FDateTime Age;
+        int64 Size = 0;
+    };
+    TArray<FCachedTile> Tiles;
+    int64 Total = 0;
+
+    // Only files this class writes are candidates. The cache lives under
+    // Saved/, which holds plenty that is not ours, and a deletion sweep that
+    // trusts a directory path alone is one typo away from removing the wrong
+    // tree - so match the shape of the names as well.
+    TArray<FString> Found;
+    Files.FindFilesRecursive(Found, *Root, TEXT("*.*"), true, false);
+    for (const FString& Path : Found)
+    {
+        const FString Name = FPaths::GetCleanFilename(Path);
+        const FString Extension = FPaths::GetExtension(Name);
+        if (Extension != TEXT("png") && Extension != TEXT("jpeg") && Extension != TEXT("jpg"))
+        {
+            continue;
+        }
+        // "<level>_<row>_<col>.<ext>", all digits.
+        TArray<FString> Parts;
+        FPaths::GetBaseFilename(Name).ParseIntoArray(Parts, TEXT("_"), false);
+        if (Parts.Num() != 3 || !Parts.ContainsByPredicate([](const FString& P) { return !P.IsEmpty(); }))
+        {
+            continue;
+        }
+        bool bNumeric = true;
+        for (const FString& Part : Parts)
+        {
+            bNumeric &= !Part.IsEmpty() && Part.IsNumeric();
+        }
+        if (!bNumeric)
+        {
+            continue;
+        }
+        FCachedTile Tile;
+        Tile.Path = Path;
+        Tile.Size = Files.FileSize(*Path);
+        Tile.Age = Files.GetTimeStamp(*Path);
+        if (Tile.Size <= 0)
+        {
+            continue;
+        }
+        Total += Tile.Size;
+        Tiles.Add(MoveTemp(Tile));
+    }
+
+    if (Total <= BudgetBytes)
+    {
+        return 0;
+    }
+    // Oldest first. Timestamps are good enough here: a tile fetched long ago
+    // and never revisited is exactly what should go.
+    Tiles.Sort([](const FCachedTile& A, const FCachedTile& B) { return A.Age < B.Age; });
+    int64 Reclaimed = 0;
+    for (const FCachedTile& Tile : Tiles)
+    {
+        if (Total - Reclaimed <= BudgetBytes)
+        {
+            break;
+        }
+        if (Files.Delete(*Tile.Path, false, false, true))
+        {
+            Reclaimed += Tile.Size;
+        }
+    }
+    UE_LOG(LogTemp, Display, TEXT("ION COMMAND tile cache: %.1f MB over budget, reclaimed %.1f MB from %d files"),
+        (Total - BudgetBytes) / 1048576.0, Reclaimed / 1048576.0, Tiles.Num());
+    return Reclaimed;
 }
 
 FString UGeoTileMosaic::CacheFilePath(const FGeoTileLayer& Layer, int32 Level, int32 Col, int32 Row) const

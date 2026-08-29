@@ -309,9 +309,13 @@ therefore an axis-aligned rectangle in UV space and drops into the window
 without being resampled. That is the main reason for preferring GIBS over a
 Web Mercator source such as Esri or Bing, quite apart from their terms.
 
-Tiles are cached under `<Saved>/TileCache/<layer>/<time>/<level>_<row>_<col>`
-and reused across restarts. The cache is never evicted automatically; delete
-the directory to reclaim the space.
+Tiles are cached under `<Saved>/TileCache/<layer>/<level>_<row>_<col>` and
+reused across restarts. At startup the cache is trimmed to a disk budget
+(512 MB by default, `-IonTileCacheBudgetMB=` to change it) by deleting the
+oldest tiles first. The sweep only considers files matching the shape this
+code writes - `<digits>_<digits>_<digits>` with an image extension - because
+`Saved/` holds a great deal that is not ours and a deletion pass that trusts
+a directory path alone is one typo away from removing the wrong tree.
 
 Diagnostics: the client logs one line per level change, e.g.
 

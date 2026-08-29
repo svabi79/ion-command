@@ -37,7 +37,7 @@ one. All four fit the existing renderer.
 
 | Layer / feature | Basis | Blocker | Status |
 | --- | --- | --- | --- |
-| **Emergency squawks** (7500/7600/7700) | The live ADS-B stream already carries them | none — search and alerts shipped | `ready to build` |
+| **Emergency squawks** (7500/7600/7700) | The live ADS-B stream already carries them | none | `shipped` — `emergencySquawks` in the aviation domain tags 7500/7600/7700 with a red tint, double marker scale and a sticky `visual.emergency` flag; the point layer honours all three |
 | **Satellite passes over the own station** | SGP4 already runs locally in the collector (`orbital.celestrak`) | Needs a pass-prediction context plugin; the operator's own position is now reliable | `ready to build` |
 | **Brandmeister DMR last-heard** — who is speaking on which talkgroup | Brandmeister API | Shares the `hamradio` domain with wave 1 work | `ready` after wave 1 |
 | **Repeater directory** | RepeaterBook or a national register | Licence per source | `needs decision` |

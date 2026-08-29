@@ -3,7 +3,16 @@ param(
     [int]$ResX = 5120,
     [int]$ResY = 1440,
     # Alternative port so benchmarks never hijack an operator's live pair.
-    [int]$Port = 7810
+    [int]$Port = 7810,
+    # Camera placement. The default is the distant view, where the close-orbit
+    # tile window is switched off entirely - so the default run measures the
+    # arc renderer and the globe, and says nothing about tile streaming. Pass
+    # a low distance (1005 is the closest the wheel zoom reaches) to measure
+    # that instead, and a latitude/longitude over land so there is imagery to
+    # fetch.
+    [double]$CameraDistance = 0,
+    [double]$CameraLatitude = 0,
+    [double]$CameraLongitude = 0
 )
 
 # 10k-arc benchmark: streams 600 synthetic spots/s into the PACKAGED client
@@ -42,8 +51,15 @@ try {
     } while (-not $health -and (Get-Date) -lt $deadline)
     if (-not $health) { throw 'collector did not become healthy' }
 
+    $cameraArgs = @()
+    if ($CameraDistance -gt 0) { $cameraArgs += "-IonCameraDistance=$CameraDistance" }
+    if ($CameraLatitude -ne 0) { $cameraArgs += "-IonCameraLatitude=$CameraLatitude" }
+    if ($CameraLongitude -ne 0) { $cameraArgs += "-IonCameraLongitude=$CameraLongitude" }
+    if ($cameraArgs.Count -gt 0) { Write-Output "camera: $($cameraArgs -join ' ')" }
+
     & $clientExe -windowed "-ResX=$ResX" "-ResY=$ResY" -NoSplash `
         "-IonCollectorUrl=ws://127.0.0.1:$Port/ws/live" `
+        @cameraArgs `
         "-IonScreenshotAfter=$DurationSeconds" "-IonScreenshotFile=$screenshot" `
         -IonExitAfterScreenshot "-AbsLog=$benchLog" | Out-Null
 } finally {
