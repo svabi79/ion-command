@@ -20,6 +20,7 @@ render slots in place:
 | 2026-07-19 | 12k arcs, cube segments, engine-primitive globe | 125.3 |
 | 2026-08-28 | globe + HUD only, no arcs (`-IonPathsHidden`) | 117.7 |
 | 2026-08-28 | 12k arcs, cube segments, Nanite globe + virtual textures | **90.2** |
+| 2026-08-29 | as above, plus the tile window and terrain relief | **98.7** |
 
 The 60 FPS target is met with 1.5x headroom, but this is a **regression against
 the 125.3 FPS measured on 2026-07-19 under the same fixture and hardware** —
@@ -28,6 +29,21 @@ still only reaches 117.7 FPS, so most of the loss is fixed cost in the globe
 itself (a 158k-triangle Nanite mesh and two streaming virtual textures replacing
 the engine primitive and its plain 4K textures), not in the arc renderer. The
 12,000 arcs on top cost about 27 FPS.
+
+The 2026-08-29 row adds the close-orbit tile window and the terrain relief
+and does **not** cost anything measurable - it lands slightly above the
+previous run, which is within what a single measurement on a machine with
+other work on it can be trusted to say. Read it as "no regression", not as
+a gain.
+
+**What that row does not measure.** The benchmark flies the default distant
+view, where the tile window is switched off entirely because the global
+texture is already finer than any level worth fetching. So it exercises the
+three extra texture reads the Earth material now always performs, and
+nothing else: not the tile fetches, not the mosaic uploads, not the two
+4096x2048 window textures being resident. A close-orbit figure needs a
+fixture that pins the camera low (`-IonCameraDistance`), which `bench.ps1`
+does not currently take.
 
 That is a deliberate trade: the high-resolution globe is what makes close-range
 zoom possible at all. It is recorded here as a cost, not hidden as an

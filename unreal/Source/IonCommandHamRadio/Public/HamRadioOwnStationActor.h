@@ -32,6 +32,11 @@ public:
     UPROPERTY(EditAnywhere, Category="ION COMMAND|Station") double GlobeRadius = 1000.0;
 
 private:
+    // Where the marker sits above the surface. Follows the camera down so it
+    // never ends up above the viewer at close orbit.
+    double MarkerAltitude() const;
+    FVector PlaceOnGlobe(const struct FGeoPosition& Position, double Altitude) const;
+
     UPROPERTY(VisibleAnywhere) TObjectPtr<USceneComponent> SceneRoot;
     UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> Marker;
     UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> Halo;

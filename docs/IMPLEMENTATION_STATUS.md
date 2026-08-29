@@ -93,12 +93,20 @@ The component list is in [COMPONENTS.md](COMPONENTS.md) — not repeated here.
   fetched before a source build (`tools/fetch-earth-textures.py`). The day
   texture alone is a 147 MB PNG that compiles to a 165 MB virtual-texture
   asset, well past what belongs in git.
-- **Close-range zoom outruns the imagery.** The camera now descends to ~32 km,
-  but the best freely licensed global mosaic (NASA Blue Marble, 21600x10800)
-  is about 2 km per pixel, so the surface turns to mush below roughly 300 km.
-  The geometry, near clip plane and marker scaling are correct down there; the
-  data simply is not. Sharp low-altitude terrain needs a streamed tile service
-  (NASA GIBS, Sentinel-2), which is a separate piece of work.
+- **Close-range imagery needs the network.** Below roughly 1000 km the globe
+  stops relying on the packaged global texture and streams map tiles from
+  NASA GIBS into a window that follows the camera, down to ~30 m per pixel
+  (see DATA-SOURCES.md). Offline, or with `-IonNoTileImagery`, the close
+  approach falls back to the 2 km/pixel global texture and resolves into
+  coloured mush below roughly 300 km, which is the limit a single global
+  texture can reach at all.
+- **Relief is shaded, not displaced.** The height field drives a surface
+  normal, so terrain catches the light correctly at any zoom, but the
+  silhouette at the horizon stays smooth and terrain never occludes terrain.
+  The globe mesh has 400x200 quads - one quad spans ~100 km against a 43 km
+  frame at the closest orbit - so there is no vertex in view to displace.
+- **The tile cache is never evicted.** `<Saved>/TileCache` grows with every
+  place the operator visits and is only reclaimed by deleting the directory.
 - Aircraft coverage depends on the configured regions plus the global snapshot;
   the anonymous OpenSky poll is slow by design.
 

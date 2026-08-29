@@ -24,10 +24,10 @@ Priorities for the platform as a whole are in
 
 | Layer | Feed | Geometry | Credentials | Status |
 | --- | --- | --- | --- | --- |
-| **APRS-IS** — vehicles, balloons, digipeaters, weather stations | APRS-IS TCP stream | Point + Track | Callsign; read-only login works with passcode `-1` | `in progress` |
+| **APRS-IS** — vehicles, balloons, digipeaters, weather stations | APRS-IS TCP stream | Point + Track | Callsign; read-only login works with passcode `-1` | `shipped` — registered as `aprs.is` in live.json |
 | **AIS ships** — global maritime traffic | `aisstream.io` WebSocket | Point + Track | Free API key required | `shipped` — live-verified 2026-08-28 against European waters; disabled by default (needs an operator key) |
-| **Wildfires** — active fire detections | NASA FIRMS | Point | Free MAP_KEY may be required | `in progress` |
-| **DX cluster + WSPR** — announced DX and weak-signal propagation reports | DX cluster telnet, `wspr.live` | GreatCircle, Point | Callsign for the cluster login | `in progress` |
+| **Wildfires** — active fire detections | NASA FIRMS | Point | Free MAP_KEY may be required | `shipped` — registered as `wildfire.firms`, key-free tier |
+| **DX cluster + WSPR** — announced DX and weak-signal propagation reports | DX cluster telnet, `wspr.live` | GreatCircle, Point | Callsign for the cluster login | `shipped` — `hamradio.dxcluster` and `hamradio.wspr` |
 
 Rationale: aircraft and ships in motion, balloons climbing and drifting, and
 fires appearing and dying make the globe a living picture rather than a static
@@ -37,8 +37,8 @@ one. All four fit the existing renderer.
 
 | Layer / feature | Basis | Blocker | Status |
 | --- | --- | --- | --- |
-| **Emergency squawks** (7500/7600/7700) | The live ADS-B stream already carries them | Needs the watchlist/alert work to land | `ready` after search/alerts |
-| **Satellite passes over the own station** | SGP4 already runs locally in the collector | Needs a pass-prediction context plugin | `ready` |
+| **Emergency squawks** (7500/7600/7700) | The live ADS-B stream already carries them | none — search and alerts shipped | `ready to build` |
+| **Satellite passes over the own station** | SGP4 already runs locally in the collector (`orbital.celestrak`) | Needs a pass-prediction context plugin; the operator's own position is now reliable | `ready to build` |
 | **Brandmeister DMR last-heard** — who is speaking on which talkgroup | Brandmeister API | Shares the `hamradio` domain with wave 1 work | `ready` after wave 1 |
 | **Repeater directory** | RepeaterBook or a national register | Licence per source | `needs decision` |
 
