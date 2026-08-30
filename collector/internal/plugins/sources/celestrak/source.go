@@ -199,6 +199,24 @@ func (s *Source) Start(ctx context.Context, output chan<- plugins.RawRecord) err
 			if err == nil {
 				parsed = ParseTLESets(body)
 			}
+			if err == nil && len(parsed) > 0 {
+				s.storeTLECache(body)
+			} else if len(sets) == 0 {
+				// Nothing in memory and the service is unreachable. Elements
+				// change slowly, so yesterday's set still predicts today's
+				// passes to within a second or two - far better than showing
+				// nothing at all because a server is down or has firewalled
+				// us. Only ever used as a fallback, never in place of a
+				// successful fetch.
+				if cached, age, ok := s.loadTLECache(); ok {
+					if fromCache := ParseTLESets(cached); len(fromCache) > 0 {
+						sets = fromCache
+						lastRefresh = s.now()
+						s.logger.Warn("celestrak unreachable; using cached TLE set",
+							"satellites", len(sets), "ageHours", int(age.Hours()))
+					}
+				}
+			}
 			switch {
 			case err != nil || len(parsed) == 0:
 				consecutiveFailures++

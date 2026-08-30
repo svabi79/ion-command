@@ -595,11 +595,24 @@ def build_marker_icon_master(icon_texture) -> unreal.Material:
     presence = expression(material, unreal.MaterialExpressionSaturate, -580, 940)
     MEL.connect_material_expressions(presence_ramp, "", presence, "")
 
+    # The quad's UV maps the texture's top edge onto -up, not +up, so a glyph
+    # drawn nose-up in the atlas points backwards once it is aimed along a
+    # course. Every icon is mirrored this way, but only the aircraft is
+    # directional enough to show it. Negating the planar heading here fixes
+    # the aimed case without disturbing the default orientation that every
+    # other marker relies on.
+    # Measured, not guessed: collector/cmd/headingprobe serves four aircraft
+    # on courses 0/90/180/270, and before this every one of them pointed
+    # exactly opposite.
+    heading_flip = expression(material, unreal.MaterialExpressionMultiply, -560, 700)
+    MEL.connect_material_expressions(heading_planar, "", heading_flip, "A")
+    MEL.connect_material_expressions(constant(material, -1.0, -640, 760), "", heading_flip, "B")
+
     # up = Normalize(lerp(up_default, planar_heading, presence)): both inputs
     # finite, result non-zero, so no NaN regardless of heading.
     up_blend = expression(material, unreal.MaterialExpressionLinearInterpolate, -480, 660)
     MEL.connect_material_expressions(up_default, "", up_blend, "A")
-    MEL.connect_material_expressions(heading_planar, "", up_blend, "B")
+    MEL.connect_material_expressions(heading_flip, "", up_blend, "B")
     MEL.connect_material_expressions(presence, "", up_blend, "Alpha")
     up = expression(material, unreal.MaterialExpressionNormalize, -400, 660)
     MEL.connect_material_expressions(up_blend, "", up, "")

@@ -175,6 +175,46 @@ Note that a material failure is only a **warning** to the cook, which then
 exits 0. Exit code alone never showed this; the guard reads the captured
 output instead.
 
+## Aircraft point the wrong way
+
+Glyph orientation comes from `visual.headingDeg`, turned into a world vector
+by the point layer and handed to the material as instance custom data 7..9.
+To check it against an answer that is not in doubt, run the probe:
+
+```bash
+collector/bin/headingprobe.exe -addr 127.0.0.1:7899
+```
+
+then point a client at it:
+
+```bash
+IonCommand.exe -IonCollectorUrl=ws://127.0.0.1:7899/ws/live -IonCameraLatitude=47.5 -IonCameraLongitude=9.2 -IonCameraDistance=1120
+```
+
+It serves four aircraft on courses 0/90/180/270, arranged north/east/south/west
+around the centre. Every nose must point outward, away from the middle. If they
+all point inward the orientation is inverted; if they are all rotated the same
+way it is an offset; if the pattern is mirrored it is a sign error on one axis.
+
+This is worth doing rather than judging by eye on live traffic: real aircraft
+over a region often share a course, so a systematically wrong rotation can look
+plausible for a long time.
+
+## Tile seams: a visible step across a straight horizontal line
+
+Not a compositing bug. The close-orbit detail layer is HLS - individual
+Landsat and Sentinel-2 overpasses, not a blended mosaic - so neighbouring
+tiles were often photographed days apart under different sun angles, and the
+brightness genuinely steps at the tile boundary. Measured over one cached
+window: 59 of 97 vertical tile joins showed a mean edge step above 12 (of
+255), the worst 146.
+
+The base layer beneath it (Blue Marble) is seamless, so the effect only
+appears where HLS has coverage. Nothing in the mosaic code can remove it; it
+would take either a blended source (Sentinel-2 cloudless is one, but its
+licence is non-commercial) or per-tile histogram matching, which would alter
+the imagery rather than display it.
+
 ## Performance
 
 The renderer holds ~125 fps with 12 000 arcs on a desktop GPU. If it drags:
