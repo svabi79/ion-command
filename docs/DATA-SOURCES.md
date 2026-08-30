@@ -31,6 +31,7 @@ non-commercial only.
 | **AIS Stream (aisstream.io)** | Vessel AIS data from aisstream.io, free with a self-service API key. No commercial-use restriction or redistribution licence is published as of this writing; treated with the same hobby-scale, attributed posture as the other unlicensed feeds below until the operator confirms otherwise. Direct browser connections to the stream are against its terms — ION COMMAND already only connects from the collector process, never from client JavaScript, so this is satisfied by the existing architecture. See [below](#enabling-ais-ships-aisstreamio) for the full picture. | [aisstream.io](https://aisstream.io) · [docs](https://aisstream.io/documentation) |
 | **EUMETSAT** | Cloud imagery ©EUMETSAT 2026. Governed by the EUMETSAT Data Policy, not Creative Commons. | [Terms of use](https://www.eumetsat.int/about-us/terms-use) |
 | **AWS Terrain Tiles** | Elevation for the close-orbit relief, from the AWS Open Data terrain tiles (the Mapzen "terrarium" encoding), fetched at runtime and cached locally. No account or key. The underlying data is a public-domain composite — chiefly SRTM (NASA/USGS), the USGS 3DEP and NED, Canada's CDEM, and the EU's EU-DEM — assembled by Mapzen and hosted by the AWS Open Data programme. Individual source licences are permissive or public domain; credit "elevation data from the AWS Terrain Tiles, based on SRTM and national elevation datasets" where relief is shown to third parties. `-IonNoTileImagery` disables the fetch. | [registry.opendata.aws/terrain-tiles](https://registry.opendata.aws/terrain-tiles/) |
+| **Sentinel-2 cloudless (EOX)** | Close-orbit detail imagery, `s2cloudless-2025` from EOX's WMTS, fetched at runtime and cached locally. Licensed **CC BY-NC-SA 4.0 — non-commercial and share-alike**. Required credit, shown in the HUD: "EOxCloudless by EOX IT Services GmbH ... modified Copernicus Sentinel data 2025". **Any commercial use needs a licence from EOX**, and redistributing modified imagery carries the same share-alike terms. ION COMMAND only displays it and caches it locally for one operator, which is ordinary use; publishing derived imagery would not be. | [cloudless.eox.at](https://cloudless.eox.at) · [licence](https://cloudless.eox.at/documentation/license) |
 | **NASA GIBS** | Close-orbit map tiles from NASA's Global Imagery Browse Services, fetched at runtime below ~1000 km altitude and cached locally. Public service, no account or key. Base layer: `BlueMarble_ShadedRelief_Bathymetry` (NASA Earth Observatory). Detail layer: `HLS_S30_Nadir_BRDF_Adjusted_Reflectance` — Harmonized Landsat and Sentinel-2 at 30 m, which **contains modified Copernicus Sentinel-2 data** and NASA/USGS Landsat. Credit GIBS where imagery is shown to third parties. NASA does not endorse ION COMMAND. `-IonNoTileImagery` disables the fetch. | [GIBS docs](https://nasa-gibs.github.io/gibs-api-docs/) |
 | **NASA** | Day globe: Blue Marble Next Generation, NASA Earth Observatory (Reto Stockli, NASA/GSFC). Night: Black Marble 2016, NASA Earth Observatory/NOAA NCEI (Joshua Stevens, Suomi NPP VIIRS data, Miguel Román, NASA/GSFC). Clouds: NASA Earth Observatory Blue Marble (record 57747). Star map: NASA/GSFC Scientific Visualization Studio, *Deep Star Maps 2020*; Gaia DR2: ESA/Gaia/DPAC; also Hipparcos-2, Tycho-2, UCAC3; constellation figures based on those developed for the IAU by Alan MacRobert of Sky & Telescope (Roger Sinnott and Rick Fienberg). NASA does not endorse ION COMMAND. | [SVS 4851](https://svs.gsfc.nasa.gov/4851/) |
 | **AD1C** | DXCC prefix data from the Big CTY file by Jim Reisert, AD1C (version VER20260714). Full copyright and permission notice in [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md). | [country-files.com](https://www.country-files.com) |
@@ -290,24 +291,34 @@ nothing; leaving it fetches a new one.
 
 Two layers stack inside the window:
 
-| Layer | Tile matrix set | Deepest level | Ground resolution | Role |
-| --- | --- | --- | --- | --- |
-| `BlueMarble_ShadedRelief_Bathymetry` | `500m` | 7 | ~489 m/px | Base — cloud-free, no gaps, always covers the window |
-| `HLS_S30_Nadir_BRDF_Adjusted_Reflectance` | `31.25m` | 11 | ~30.6 m/px | Detail — only where there was a usable overpass |
+| Layer | Service | Grid | Deepest level | Ground resolution | Role |
+| --- | --- | --- | --- | --- | --- |
+| `BlueMarble_ShadedRelief_Bathymetry` | NASA GIBS | 288°/512 px | 7 | ~489 m/px | Base — cloud-free, no gaps, always covers the window |
+| `s2cloudless-2025` | EOX | 180°/256 px | 13 | ~9.6 m/px | Detail — seamless, cloud-free |
 
-HLS is real observation, not a mosaic, so it has holes: cloud, no recent
-overpass, polar night. Its empty pixels are skipped rather than composited,
-which leaves the base layer showing through instead of punching holes in the
-Earth. Both layers are requested with the time value `default`, which asks
-GIBS for its own newest date and avoids guessing at processing latency (HLS
-runs about a week behind).
+Both are EPSG:4326, whose tile pyramid is the same equirectangular
+convention the globe mesh's UVs already use: from the top-left corner
+(-180, 90), every level halving the previous span. A tile is therefore an
+axis-aligned rectangle in UV space and drops into the window without being
+resampled. That is the main reason for preferring these over a Web Mercator
+source such as Esri or Bing, quite apart from their terms.
 
-GIBS publishes in EPSG:4326, whose tile pyramid is the same equirectangular
-convention the globe mesh's UVs already use — level 0 is two 512-pixel tiles
-of 288 degrees each from (-180, 90), halving every level. A tile is
-therefore an axis-aligned rectangle in UV space and drops into the window
-without being resampled. That is the main reason for preferring GIBS over a
-Web Mercator source such as Esri or Bing, quite apart from their terms.
+The two services disagree on the grid, though — GIBS puts 288 degrees on a
+512-pixel tile at level 0, EOX 180 on 256 — so the root span and tile size
+are per-layer properties, and levels are never compared across layers, only
+ground resolutions.
+
+**Why not NASA HLS.** The detail layer was originally
+`HLS_S30_Nadir_BRDF_Adjusted_Reflectance` at 30 m, which is far more current
+(days old, against a yearly composite). It was dropped because it is raw
+overpasses rather than a blended mosaic: neighbouring tiles are photographed
+days apart under different sun angles, and the brightness visibly steps at
+the tile boundary. Measured over one cached window, 59 of 97 vertical tile
+joins stepped by more than 12 of 255 at the edge, the worst by 146. It also
+has holes wherever there was no recent usable overpass. Sentinel-2 cloudless
+is built to be seamless and cloud-free, which is what a globe wants.
+`-IonDetailTileUrl=` overrides the detail layer if you want the current
+imagery back at the cost of the seams.
 
 Tiles are cached under `<Saved>/TileCache/<layer>/<level>_<row>_<col>` and
 reused across restarts. At startup the cache is trimmed to a disk budget

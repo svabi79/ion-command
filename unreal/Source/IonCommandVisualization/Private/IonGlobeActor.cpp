@@ -135,24 +135,38 @@ void AIonGlobeActor::BeginPlay()
         FString TileBaseUrl = TEXT("https://gibs.earthdata.nasa.gov/wmts/epsg4326/best");
         FParse::Value(FCommandLine::Get(), TEXT("IonTileBaseUrl="), TileBaseUrl);
         DetailImagery = NewObject<UGeoTileMosaic>(this);
-        // Two layers, deliberately. Blue Marble is cloud-free and has no
-        // gaps, so it always covers the window; HLS is 30 m Landsat and
-        // Sentinel-2 but only where there was a recent usable overpass, so
-        // it paints over the parts it actually observed and leaves the rest
-        // alone. "default" as the time value asks the service for its own
-        // newest date, which avoids guessing at a layer's processing
-        // latency (HLS runs about a week behind).
+        // Two layers. Blue Marble covers the window at 489 m/px with no gaps
+        // and no clouds; Sentinel-2 cloudless carries the close-orbit detail
+        // at 10 m/px.
+        //
+        // The detail layer used to be NASA HLS, which is more current (days
+        // rather than a yearly composite) but is raw overpasses rather than
+        // a blended mosaic: neighbouring tiles are photographed days apart
+        // under different sun angles, and the brightness visibly steps at
+        // every tile boundary. Measured over one window, 59 of 97 vertical
+        // joins stepped by more than 12 of 255, the worst by 146. Sentinel-2
+        // cloudless is built to be seamless and cloud-free, which is what a
+        // globe wants; the cost is that it is a yearly composite.
+        //
+        // EOX serves it on the OGC WGS84 grid - 180 degrees over 256 pixels
+        // at level 0, against GIBS's 288 over 512 - which is why the grid is
+        // a per-layer property.
         FGeoTileLayer Base;
         Base.UrlTemplate = TileBaseUrl + TEXT("/BlueMarble_ShadedRelief_Bathymetry/default/default/500m/{z}/{y}/{x}.jpeg");
         Base.CacheName = TEXT("bluemarble");
         Base.Extension = TEXT("jpeg");
         Base.MaxLevel = 7;
+        FString DetailUrl = TEXT("https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2025/default/WGS84/{z}/{y}/{x}.jpg");
+        FParse::Value(FCommandLine::Get(), TEXT("IonDetailTileUrl="), DetailUrl);
         FGeoTileLayer Detail;
-        Detail.UrlTemplate = TileBaseUrl + TEXT("/HLS_S30_Nadir_BRDF_Adjusted_Reflectance/default/default/31.25m/{z}/{y}/{x}.png");
-        Detail.CacheName = TEXT("hls-s30");
-        Detail.Extension = TEXT("png");
-        Detail.MaxLevel = 11;
-        Detail.bMayBeSparse = true;
+        Detail.UrlTemplate = DetailUrl;
+        Detail.CacheName = TEXT("s2cloudless");
+        Detail.Extension = TEXT("jpeg");
+        // Level 13 is ~9.6 m/px, which is Sentinel-2's own resolution.
+        // Deeper levels exist but only magnify the same pixels.
+        Detail.MaxLevel = 13;
+        Detail.NativeTilePixels = 256;
+        Detail.RootSpanDegrees = 180.0;
         DetailImagery->Configure({Base, Detail});
 
         // Relief for the same window, from the AWS Open Data terrain tiles
@@ -306,6 +320,11 @@ void AIonGlobeActor::Tick(float DeltaSeconds)
     // Clouds drift slowly relative to the terrain; the geographic frame of
     // arcs and markers stays pinned to the Earth mesh itself.
     if (Clouds->IsVisible()) Clouds->AddLocalRotation(FRotator(0.0, DeltaSeconds * 0.06, 0.0));
+}
+
+FString AIonGlobeActor::ImageryAttribution()
+{
+    return TEXT("EOxCloudless by EOX IT Services GmbH (CC BY-NC-SA)  //  modified Copernicus Sentinel data 2025  //  NASA GIBS / Blue Marble");
 }
 
 void AIonGlobeActor::UpdateDetailImagery()

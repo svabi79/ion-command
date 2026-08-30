@@ -150,6 +150,7 @@ Useful when driving the client from a script or a video wall:
 | `-IonNoTileImagery` | keep the packaged global textures instead of fetching close-orbit map tiles. Use for deterministic captures and offline demos |
 | `-IonTileBaseUrl=` | override the WMTS endpoint the close-orbit tiles come from (default: NASA GIBS EPSG:4326) |
 | `-IonElevationUrl=` | override the terrain tile template used for relief (default: AWS Terrain Tiles) |
+| `-IonDetailTileUrl=` | override the close-orbit detail imagery (default: Sentinel-2 cloudless from EOX) |
 | `-IonTileCacheBudgetMB=` | disk budget for `<Saved>/TileCache`; the oldest tiles are deleted at startup once it is exceeded (default 512) |
 | `-IonMute` | no ambience audio |
 | `-IonCameraDistance=` `-IonCameraLongitude=` `-IonCameraLatitude=` | pin the camera (captures) |

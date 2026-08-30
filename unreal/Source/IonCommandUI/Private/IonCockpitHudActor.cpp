@@ -5,6 +5,7 @@
 #include "Engine/Engine.h"
 #include "Engine/Font.h"
 #include "EngineUtils.h"
+#include "IonGlobeActor.h"
 #include "GeoDataSubsystem.h"
 #include "GeoMathLibrary.h"
 #include "GeoPointLayerActor.h"
@@ -1173,6 +1174,9 @@ void AIonCockpitHudActor::DrawModeHint(float Scale, float Alpha)
 {
     const TCHAR* ModeName = Mode == EIonCockpitMode::Full ? TEXT("FULL") : TEXT("MIN");
     DrawTextAt(FString::Printf(TEXT("HUD %s // TAB   OVERLAYS // O   SEARCH // /   ALERTS // W"), ModeName), Canvas->SizeX - 18.0f * Scale, Canvas->SizeY - 26.0f * Scale, WithAlpha(CockpitDim, Alpha), 1.0f * Scale, true);
+    // Imagery credit, bottom left. A licence condition for the close-orbit
+    // tiles, so it is drawn whenever the HUD is, not tucked away in a menu.
+    DrawTextAt(AIonGlobeActor::ImageryAttribution(), 18.0f * Scale, Canvas->SizeY - 26.0f * Scale, WithAlpha(CockpitDim, Alpha * 0.9f), 0.95f * Scale);
 }
 
 // ---------------------------------------------------------------------

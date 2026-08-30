@@ -25,6 +25,12 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="ION COMMAND|Globe")
     double GlobeRadius = 1000.0;
 
+    // Credit line for the imagery in use. Sentinel-2 cloudless is CC
+    // BY-NC-SA, so naming the source is a licence condition rather than a
+    // courtesy, and it has to be visible to whoever sees the picture - not
+    // only in the documentation.
+    static FString ImageryAttribution();
+
 private:
     UPROPERTY(VisibleAnywhere) TObjectPtr<USceneComponent> SceneRoot;
     UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> Starfield;

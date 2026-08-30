@@ -9,7 +9,21 @@ namespace IonOperatorConfig
     {
         // Not under Saved/Config/<Platform>/: that directory is Unreal's own,
         // and it prunes files there on shutdown.
-        return FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("Config") / TEXT("IonOperator.ini"));
+        //
+        // Computed once and normalized. GConfig warns on every lookup with a
+        // non-normalized path, and the station marker reads this each frame,
+        // so an unnormalized path buries the log under hundreds of identical
+        // warnings per run - which is how a real message gets missed.
+        static const FString Path = []
+        {
+            const FString Resolved = FPaths::ConvertRelativePathToFull(
+                FPaths::ProjectSavedDir() / TEXT("Config") / TEXT("IonOperator.ini"));
+            // Returns the normalized path; it does not modify in place.
+            // Discarding the result compiles cleanly and does nothing, which
+            // is exactly how the warning survived a first attempt at this.
+            return FConfigCacheIni::NormalizeConfigIniPath(Resolved);
+        }();
+        return Path;
     }
 
     bool GetString(const TCHAR* Section, const TCHAR* Key, FString& OutValue)

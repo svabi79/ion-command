@@ -10,9 +10,11 @@ class UTexture2D;
 UENUM()
 enum class EGeoTileLayout : uint8
 {
-    // OGC WMTS geographic (EPSG:4326). Level 0 is two 512-pixel tiles of 288
-    // degrees each from the top-left corner (-180, 90); every level halves
-    // that span. Latitude is linear within a tile.
+    // OGC WMTS geographic (EPSG:4326), from the top-left corner (-180, 90),
+    // every level halving the previous span. Latitude is linear within a
+    // tile. The root span and tile size differ between services - GIBS uses
+    // 288 degrees over 512 pixels, EOX 180 over 256 - so both are per-layer
+    // rather than baked in here.
     Geographic,
     // XYZ web mercator (EPSG:3857), the {z}/{x}/{y} scheme. 2^z tiles each
     // way; latitude is non-linear within a tile and the poles beyond
@@ -55,6 +57,11 @@ struct FGeoTileLayer
     // means different ground resolutions, so levels are never compared
     // across layers - only resolutions are.
     UPROPERTY() int32 NativeTilePixels = 512;
+    // Degrees one tile spans at level 0, for Geographic layers. GIBS uses
+    // 288 (two tiles covering 360 with overlap at the seam); the OGC WGS84
+    // convention EOX follows uses 180 (exactly two tiles). Ignored for
+    // WebMercator, which is always 360 over 2^z.
+    UPROPERTY() double RootSpanDegrees = 288.0;
     // Tiles that may be partly or wholly empty where the source has no
     // observation; those pixels must not overwrite whatever is already in
     // the mosaic beneath them.
@@ -136,8 +143,15 @@ public:
     double GetMetresPerPixel() const;
 
 private:
-    // Degrees spanned by one tile edge at a level, in the geographic layout.
+    // Degrees spanned by one tile edge at a level, for the window's own
+    // grid. The window is laid out on the GIBS geometry whatever the layers
+    // use; layers are then resolved against it by ground resolution.
     static double GeographicTileSpan(int32 Level) { return 288.0 / static_cast<double>(1 << Level); }
+    // The same, for a specific layer's grid.
+    static double LayerTileSpan(const FGeoTileLayer& Layer, int32 Level)
+    {
+        return Layer.RootSpanDegrees / static_cast<double>(1 << Level);
+    }
     // Fractional tile row for a latitude, in whichever layout. This is the
     // only place the two projections differ.
     static double TileRowForLatitude(const FGeoTileLayer& Layer, int32 Level, double Latitude);

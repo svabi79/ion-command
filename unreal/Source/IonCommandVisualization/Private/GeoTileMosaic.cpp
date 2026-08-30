@@ -43,7 +43,7 @@ double UGeoTileMosaic::TileColumnForLongitude(const FGeoTileLayer& Layer, int32 
     {
         return (Longitude + 180.0) / 360.0 * static_cast<double>(1 << Level);
     }
-    return (Longitude + 180.0) / GeographicTileSpan(Level);
+    return (Longitude + 180.0) / LayerTileSpan(Layer, Level);
 }
 
 double UGeoTileMosaic::TileRowForLatitude(const FGeoTileLayer& Layer, int32 Level, double Latitude)
@@ -55,7 +55,7 @@ double UGeoTileMosaic::TileRowForLatitude(const FGeoTileLayer& Layer, int32 Leve
         const double Projected = FMath::Loge(FMath::Tan(Radians) + 1.0 / FMath::Cos(Radians));
         return (1.0 - Projected / PI) / 2.0 * static_cast<double>(1 << Level);
     }
-    return (90.0 - Latitude) / GeographicTileSpan(Level);
+    return (90.0 - Latitude) / LayerTileSpan(Layer, Level);
 }
 
 double UGeoTileMosaic::LatitudeForTileRow(const FGeoTileLayer& Layer, int32 Level, double Row)
@@ -65,7 +65,7 @@ double UGeoTileMosaic::LatitudeForTileRow(const FGeoTileLayer& Layer, int32 Leve
         const double Projected = PI * (1.0 - 2.0 * Row / static_cast<double>(1 << Level));
         return FMath::RadiansToDegrees(FMath::Atan(FMath::Sinh(Projected)));
     }
-    return 90.0 - Row * GeographicTileSpan(Level);
+    return 90.0 - Row * LayerTileSpan(Layer, Level);
 }
 
 double UGeoTileMosaic::GetMetresPerPixel() const
@@ -86,7 +86,7 @@ double UGeoTileMosaic::LayerDegreesPerPixel(const FGeoTileLayer& Layer, int32 Le
     {
         return 360.0 / static_cast<double>(1 << Level) / Pixels;
     }
-    return GeographicTileSpan(Level) / Pixels;
+    return LayerTileSpan(Layer, Level) / Pixels;
 }
 
 int32 UGeoTileMosaic::LayerLevelForResolution(const FGeoTileLayer& Layer, double TargetDegreesPerPixel)
@@ -215,10 +215,10 @@ void UGeoTileMosaic::BeginRegion(int32 Level, int32 ColMin, int32 RowMin)
         const int32 LayerLevel = LayerLevelForResolution(Layer, WindowSpanDegrees / static_cast<double>(TextureHeight));
         const int32 TilesAcross = Layer.Layout == EGeoTileLayout::WebMercator
             ? (1 << LayerLevel)
-            : FMath::CeilToInt32(360.0 / GeographicTileSpan(LayerLevel));
+            : FMath::CeilToInt32(360.0 / LayerTileSpan(Layer, LayerLevel));
         const int32 TilesDown = Layer.Layout == EGeoTileLayout::WebMercator
             ? (1 << LayerLevel)
-            : FMath::CeilToInt32(180.0 / GeographicTileSpan(LayerLevel));
+            : FMath::CeilToInt32(180.0 / LayerTileSpan(Layer, LayerLevel));
 
         // Which of this layer's tiles overlap the window? Ask in the layer's
         // own numbering rather than assuming it matches the window's.
@@ -470,10 +470,10 @@ void UGeoTileMosaic::CompositeTile(const TArray<uint8>& Bytes, const FGeoTileLay
     // the same code path - such a tile simply covers more of the window.
     const double TileLonMin = -180.0 + (Layer.Layout == EGeoTileLayout::WebMercator
         ? static_cast<double>(Col) / static_cast<double>(1 << Level) * 360.0
-        : Col * GeographicTileSpan(Level));
+        : Col * LayerTileSpan(Layer, Level));
     const double TileLonSpan = Layer.Layout == EGeoTileLayout::WebMercator
         ? 360.0 / static_cast<double>(1 << Level)
-        : GeographicTileSpan(Level);
+        : LayerTileSpan(Layer, Level);
     const double TileLatTop = LatitudeForTileRow(Layer, Level, Row);
     const double TileLatBottom = LatitudeForTileRow(Layer, Level, Row + 1);
 
