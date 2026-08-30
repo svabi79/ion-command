@@ -141,6 +141,10 @@ private:
     void OnLayerVisibilityChanged(const FString& LayerId, bool bVisible);
     UPROPERTY(VisibleAnywhere) TObjectPtr<USceneComponent> SceneRoot;
     UPROPERTY(VisibleAnywhere) TArray<TObjectPtr<UInstancedStaticMeshComponent>> PaletteMeshes;
+    // Arc brightness and thickness respond to camera distance; PaletteMaterials
+    // below already exists for the per-palette colour, so this rides on it.
+    void UpdateZoomResponse();
+    float LastZoomDim = -1.0f;
     UPROPERTY(VisibleAnywhere) TObjectPtr<UInstancedStaticMeshComponent> SelectionMesh;
     UPROPERTY(VisibleAnywhere) TObjectPtr<UInstancedStaticMeshComponent> EndpointMesh;
     UPROPERTY(Transient) TArray<TObjectPtr<UMaterialInstanceDynamic>> PaletteMaterials;

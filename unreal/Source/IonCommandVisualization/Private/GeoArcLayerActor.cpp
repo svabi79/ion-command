@@ -163,9 +163,50 @@ void AGeoArcLayerActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
     Super::EndPlay(EndPlayReason);
 }
 
+void AGeoArcLayerActor::UpdateZoomResponse()
+{
+    const APlayerController* Player = GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr;
+    if (!Player || !Player->PlayerCameraManager)
+    {
+        return;
+    }
+    // Distance from the camera to the surface it is looking at, which is what
+    // decides how large a fixed world size appears and how much of the arc
+    // weave is packed into the frame.
+    const double Altitude = FMath::Max(0.0, Player->PlayerCameraManager->GetCameraLocation().Length() - 1000.0);
+    // Normalised against the default orbit, so the view the operator already
+    // likes is exactly 1.0 and nothing about it changes.
+    const double Orbit = FMath::Clamp(Altitude / 2400.0, 0.0, 1.0);
+
+    // Thickness tracks the distance almost directly: that is what keeps a
+    // segment about the same width on screen instead of fattening as the
+    // camera descends. The floor stops it vanishing entirely.
+    const float ZoomThickness = static_cast<float>(FMath::Max(0.012, Orbit));
+    // Brightness falls faster than linearly. Additive arcs stack, and close
+    // in there are still thousands of them crossing the frame, so halving
+    // the distance has to do more than halve the light.
+    const float ZoomDim = static_cast<float>(FMath::Max(0.05, FMath::Pow(Orbit, 1.6)));
+
+    if (FMath::IsNearlyEqual(ZoomDim, LastZoomDim, 0.002f))
+    {
+        return;
+    }
+    LastZoomDim = ZoomDim;
+    for (int32 Index = 0; Index < PaletteMeshes.Num(); ++Index)
+    {
+        if (!PaletteMaterials.IsValidIndex(Index) || !PaletteMaterials[Index])
+        {
+            continue;
+        }
+        PaletteMaterials[Index]->SetScalarParameterValue(TEXT("ZoomDim"), ZoomDim);
+        PaletteMaterials[Index]->SetScalarParameterValue(TEXT("ZoomThickness"), ZoomThickness);
+    }
+}
+
 void AGeoArcLayerActor::Tick(float DeltaSeconds)
 {
     Super::Tick(DeltaSeconds);
+    UpdateZoomResponse();
     RefreshSelectionHighlight();
     const double Now = FPlatformTime::Seconds();
     if (Now - LastExpiryCheck < 3.0) return;

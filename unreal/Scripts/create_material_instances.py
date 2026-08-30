@@ -237,8 +237,61 @@ def build_signal_master() -> unreal.Material:
     MEL.connect_material_expressions(opacity, "", faded_opacity, "A")
     MEL.connect_material_expressions(fade, "", faded_opacity, "B")
 
-    MEL.connect_material_property(dimmed_emissive, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
-    MEL.connect_material_property(faded_opacity, "", unreal.MaterialProperty.MP_OPACITY)
+    # --- zoom response ---
+    # Arcs are additive and there are thousands of them. From orbit they
+    # overlap into a pleasing weave; at close range the same weave saturates
+    # to white and the globe disappears behind it. The actor drives these two
+    # from the camera distance: 1.0 at the default orbit, so the far view is
+    # untouched, falling away as the camera descends.
+    zoom_dim = scalar(material, "ZoomDim", 1.0, -650, 400)
+    zoom_emissive = expression(material, unreal.MaterialExpressionMultiply, 60, 40)
+    MEL.connect_material_expressions(dimmed_emissive, "", zoom_emissive, "A")
+    MEL.connect_material_expressions(zoom_dim, "", zoom_emissive, "B")
+    zoom_opacity = expression(material, unreal.MaterialExpressionMultiply, 60, 260)
+    MEL.connect_material_expressions(faded_opacity, "", zoom_opacity, "A")
+    MEL.connect_material_expressions(zoom_dim, "", zoom_opacity, "B")
+
+    # Thickness is a world size (a scaled cube), so a segment that reads as a
+    # hairline from orbit is kilometres wide on screen up close - the arcs
+    # appear to fatten as you zoom in. Rather than rewriting tens of
+    # thousands of instance transforms, squeeze the segment perpendicular to
+    # its own axis in the vertex shader, which costs nothing per frame.
+    zoom_thickness = scalar(material, "ZoomThickness", 1.0, -650, 500)
+    vertex_offset = expression(material, unreal.MaterialExpressionSubtract, -430, 560)
+    MEL.connect_material_expressions(
+        expression(material, unreal.MaterialExpressionWorldPosition, -560, 540), "", vertex_offset, "A")
+    MEL.connect_material_expressions(
+        expression(material, unreal.MaterialExpressionObjectPositionWS, -560, 620), "", vertex_offset, "B")
+    # The segment's own long axis, in world space: the cube is stretched
+    # along local Z by AppendArcTransforms.
+    axis_local = expression(material, unreal.MaterialExpressionConstant3Vector, -560, 700)
+    axis_local.set_editor_property("constant", unreal.LinearColor(0.0, 0.0, 1.0, 0.0))
+    axis_world = expression(material, unreal.MaterialExpressionTransform, -430, 700)
+    axis_world.set_editor_property("transform_source_type", unreal.MaterialVectorCoordTransformSource.TRANSFORMSOURCE_LOCAL)
+    axis_world.set_editor_property("transform_type", unreal.MaterialVectorCoordTransform.TRANSFORM_WORLD)
+    MEL.connect_material_expressions(axis_local, "", axis_world, "")
+    axis = expression(material, unreal.MaterialExpressionNormalize, -320, 700)
+    MEL.connect_material_expressions(axis_world, "", axis, "")
+    along = expression(material, unreal.MaterialExpressionDotProduct, -220, 640)
+    MEL.connect_material_expressions(vertex_offset, "", along, "A")
+    MEL.connect_material_expressions(axis, "", along, "B")
+    axial = expression(material, unreal.MaterialExpressionMultiply, -120, 660)
+    MEL.connect_material_expressions(axis, "", axial, "A")
+    MEL.connect_material_expressions(along, "", axial, "B")
+    # What is left is the offset across the segment - its thickness.
+    radial = expression(material, unreal.MaterialExpressionSubtract, -20, 580)
+    MEL.connect_material_expressions(vertex_offset, "", radial, "A")
+    MEL.connect_material_expressions(axial, "", radial, "B")
+    shrink = expression(material, unreal.MaterialExpressionSubtract, -220, 500)
+    MEL.connect_material_expressions(zoom_thickness, "", shrink, "A")
+    MEL.connect_material_expressions(constant(material, 1.0, -320, 460), "", shrink, "B")
+    thickness_wpo = expression(material, unreal.MaterialExpressionMultiply, 90, 560)
+    MEL.connect_material_expressions(radial, "", thickness_wpo, "A")
+    MEL.connect_material_expressions(shrink, "", thickness_wpo, "B")
+
+    MEL.connect_material_property(zoom_emissive, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    MEL.connect_material_property(zoom_opacity, "", unreal.MaterialProperty.MP_OPACITY)
+    MEL.connect_material_property(thickness_wpo, "", unreal.MaterialProperty.MP_WORLD_POSITION_OFFSET)
     MEL.recompile_material(material)
     save_asset(f"{MATERIAL_DIR}/M_HolographicSignal")
     return material
