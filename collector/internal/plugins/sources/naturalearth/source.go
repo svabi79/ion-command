@@ -17,7 +17,10 @@ import (
 	_ "embed"
 )
 
-//go:embed data/regions.json
+// Bundled next to this file. A path under data/ is swallowed by the
+// repo-root data/ gitignore (runtime caches) and cannot be go:embed'd.
+//
+//go:embed regions.json
 var bundledRegions []byte
 
 type feature struct {

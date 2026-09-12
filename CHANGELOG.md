@@ -10,6 +10,13 @@ superseded configurations, is in
 
 ## [Unreleased]
 
+### Fixed
+
+- **Natural Earth embed** after `#11`. The bundled `regions.json` extract
+  lived under a `data/` path that `.gitignore` swallows, so `go test ./...`
+  failed with `pattern data/regions.json: no matching files found`. The
+  extract now sits beside the package, matching `cty.dat`.
+
 ### Added
 
 - **OpenSky OAuth2** (`#9`). The retired HTTP basic-auth path is gone.
