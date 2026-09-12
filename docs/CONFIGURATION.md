@@ -24,13 +24,14 @@ Press **O** to open the overlay menu, then click **SETTINGS >**.
 | **MIN FLIGHT LEVEL** | Hides aircraft below this level (OFF / FL050 / FL100 / FL200 / FL300). The quickest way to thin out dense airspace — at FL100 the airport clutter disappears and only cruising traffic remains. |
 | **SHOW GROUND A/C** | Show or hide aircraft reported as on the ground. |
 | **INVERT ORBIT Y** | Flip the vertical orbit direction of a right-mouse drag. OFF matches the horizontal drag convention; ON restores the pre-0.9.1 direction. |
+| **SENSOR LOOK** | Camera post-process: OFF, FLIR white-hot, FLIR black-hot, Ironbow, NVG, CRT. Also **F1–F6**. Number keys 1–9 stay band presets. Missing materials are a no-op. |
 
 While a text field is focused all hotkeys are suspended, so typing a callsign
 cannot toggle layers.
 
 Values persist to `<Saved>/Config/IonOperator.ini` under `[IonCommand.Station]`
 (callsign, locator), `[IonCommand.Display]` (`MarkerLifetime`,
-`MinFlightLevelFt`, `ShowGround`), `[IonCommand.Input]` (`InvertOrbitY`) and
+`MinFlightLevelFt`, `ShowGround`, `SensorLook`), `[IonCommand.Input]` (`InvertOrbitY`) and
 `[IonCommand.Watchlist]` (`Query`).
 
 That file is the client's own, deliberately outside Unreal's config hierarchy.
@@ -205,7 +206,19 @@ Additional fields by type:
 | `wildfire.firms` | `satellite`, `boxWest`, `boxSouth`, `boxEast`, `boxNorth`, `lookBackHours`, `pollSeconds`, `mapKey` | VIIRS/MODIS thermal-anomaly detections. `satellite` is one of `VIIRS_SNPP` (default), `VIIRS_NOAA20`, `VIIRS_NOAA21`, `MODIS` — add one entry per satellite you want. The box defaults to one example area (US West) if all four `box*` fields are left at 0; it does not wrap the antimeridian. `mapKey` is optional — see below. |
 | `orbital.celestrak` | `pollSeconds` | TLEs, propagated with SGP4. |
 | `aviation.adsb` | `latitude`, `longitude`, `radiusNm`, `pollSeconds`, `routeLookup` | Regional circle around a point (max 250 nm). Add one entry per area you care about. `routeLookup: false` turns off the callsign → origin/destination enrichment (adsbdb.com); it is on by default. |
-| `aviation.opensky` | `pollSeconds`, `login` (see note) | One global snapshot per request. Anonymous access is credit-limited; the shipped default is 1800 s. |
+| `aviation.opensky` | `pollSeconds`, `clientId`, `clientSecret`, `credentialsFile` | One global snapshot per request. Anonymous access is credit-limited (100/day, 5 min floor, shipped 1800 s). OAuth2 client credentials from gitignored `local.json` switch the source to `oauth` (1000/day, 10 s floor). `login`/`password` are ignored. |
+| `aviation.gpsjam` | `pollSeconds`, `broker` (CSV base), `topic` (manifest URL) | Daily H3-resolution-4 GNSS interference. Floor one hour. |
+| `space.launchlibrary` | `pollSeconds`, `apiKey`, `broker`, `cacheDirectory` | Upcoming launches, 15 min floor. Optional `Authorization: Token`. |
+| `weather.openmeteo` | `latitude`, `longitude`, `pollSeconds` | Current weather at a 0.1° cell. Requires coordinates. |
+| `weather.openaq` | `apiKey`, `latitude`, `longitude`, `radiusNm`, `pollSeconds` | Air-quality stations. **Requires a free Explorer key** in `local.json`; refuse to start if enabled without one. |
+| `geography.naturalearth` | — | Bundled public-domain region labels. |
+| `geography.cables` | `pollSeconds`, `cacheDirectory` | TeleGeography cable map, 6 h floor, removable cache. |
+| `geophysics.eonet` | `pollSeconds` | NASA EONET open events. |
+| `geophysics.gdacs` | `pollSeconds` | GDACS disaster alerts. |
+| `maritime.portwatch` | `pollSeconds` | IMF PortWatch chokepoints, daily transits, and recent disruptions. |
+| `weather.nhc` | `pollSeconds` | NOAA NHC active storm centres. Floor five minutes. |
+| `space.pads` | `pollSeconds`, `apiKey`, `broker`, `cacheDirectory` | Earth spaceports from Launch Library 2. Floor six hours. |
+| `humanitarian.hapi` | `apiKey`, `pollSeconds` | UNHCR refugee host/origin countries. **Requires an HDX HAPI app identifier** in `local.json`; refuse to start if enabled without one. |
 | `hamradio.rbn` | `login` | Reverse Beacon Network telnet; **requires a real callsign**. Disabled by default. |
 | `aprs.is` | `login`, `filter`, `broker`, `latitude`/`longitude`/`radiusNm` | APRS-IS packet stream; **requires a real callsign**. Disabled by default. |
 | `wsjtx.udp` | `broker` (listen address) | Local WSJT-X UDP feed. |
@@ -291,11 +304,24 @@ reports, Objects, Items, and Mic-E (position and symbol, not course/speed);
 everything else (messages, status, telemetry, positionless weather,
 third-party) is intentionally skipped.
 
-**OpenSky authentication does not currently work.** The `login`/`password`
-fields use HTTP basic auth, which OpenSky retired in favour of OAuth2 client
-credentials. Anonymous access works and is what the shipped configuration uses;
-lowering `pollSeconds` without a working account will exhaust the anonymous
-credit budget.
+**OpenSky OAuth2 (optional).** Copy `collector/configs/local.json.example` to
+the gitignored `collector/configs/local.json` and put an OpenSky API client
+`clientId` / `clientSecret` on the `opensky-world` source (or point
+`credentialsFile` at the `credentials.json` OpenSky offers for download).
+The overlay is merged onto `live.json` at load time; tracked configs never
+carry secrets. Without credentials the source stays in `anon` mode. Lowering
+`pollSeconds` without credentials is rejected (5 minute anonymous floor).
+
+**OpenAQ (optional).** Same overlay: put an Explorer API key on
+`openaq-example`, then set `"enabled": true` on that source in `live.json`.
+The collector refuses to start if the source is enabled without a key.
+
+**HDX HAPI displacement (optional).** Mint an app identifier (application
+name + contact email, not a secret) from
+[HAPI's encode endpoint](https://hapi.humdata.org/api/v2/encode_app_identifier),
+put it on `hapi-displacement` as `apiKey` in `local.json`, then set
+`"enabled": true` on that source in `live.json`. The collector refuses to
+start if the source is enabled without an identifier.
 
 **Turn on recording** (`recording.enabled: true`) to capture a JSONL event log
 for later replay. Mind the volume — the live feeds produce several GB per hour;

@@ -469,15 +469,19 @@ def build_selected_path_master() -> unreal.Material:
 
 def build_marker_icon_master(icon_texture) -> unreal.Material:
     """Camera-facing pictogram markers: one instanced quad per marker. The
-    per-instance contract (GeoPointLayerActor sets 7 custom floats):
+    per-instance contract (GeoPointLayerActor sets 15 custom floats):
       0 = atlas tile index (4x2 grid, see generate_visual_sources.py)
       1..3 = RGB tint
-      4..6 = instance origin in world space (drives the billboard rotation;
-             passing it as data avoids relying on Local->World including the
-             instance transform, which is vertex-factory dependent).
-    Billboard math: T = vertex world pos - origin is the scaled local offset
-    (instances never rotate), and the vertex is re-aimed into the camera
-    plane via WPO = right*T.x + up*T.y - T."""
+      4..6 = interpolation origin in world space (billboard pivot)
+      7..9 = world heading
+      10..12 = world velocity (units/s) for option-A interpolation
+      13 = fix epoch (game seconds)
+      14 = interpolation duration (seconds)
+    Billboard math: T = vertex world pos - displaced_origin is the scaled
+    local offset (instances never rotate), and the vertex is re-aimed into
+    the camera plane via WPO = right*T.x + up*T.y - T. Displaced origin is
+    origin + velocity * saturate((Time - epoch) / max(duration, eps)) * duration
+    so the glyph rides the glide, not the parked instance."""
     material = ensure_material("M_MarkerIcon")
     material.set_editor_property("blend_mode", unreal.BlendMode.BLEND_ADDITIVE)
     material.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
@@ -554,14 +558,58 @@ def build_marker_icon_master(icon_texture) -> unreal.Material:
     MEL.connect_material_expressions(origin_xy, "", origin, "A")
     MEL.connect_material_expressions(origin_z, "", origin, "B")
 
+    # Option-A interpolation: displace the billboard origin in WPO so the
+    # parked instance glides between the last two fixes. Duration 0 keeps
+    # stationary markers exactly on the origin (saturate(x / eps) * 0 = 0).
+    vel_x = expression(material, unreal.MaterialExpressionPerInstanceCustomData, -1500, 1080)
+    vel_x.set_editor_property("data_index", 10)
+    vel_y = expression(material, unreal.MaterialExpressionPerInstanceCustomData, -1500, 1160)
+    vel_y.set_editor_property("data_index", 11)
+    vel_z = expression(material, unreal.MaterialExpressionPerInstanceCustomData, -1500, 1240)
+    vel_z.set_editor_property("data_index", 12)
+    vel_xy = expression(material, unreal.MaterialExpressionAppendVector, -1340, 1120)
+    MEL.connect_material_expressions(vel_x, "", vel_xy, "A")
+    MEL.connect_material_expressions(vel_y, "", vel_xy, "B")
+    velocity = expression(material, unreal.MaterialExpressionAppendVector, -1220, 1140)
+    MEL.connect_material_expressions(vel_xy, "", velocity, "A")
+    MEL.connect_material_expressions(vel_z, "", velocity, "B")
+    epoch = expression(material, unreal.MaterialExpressionPerInstanceCustomData, -1500, 1320)
+    epoch.set_editor_property("data_index", 13)
+    duration = expression(material, unreal.MaterialExpressionPerInstanceCustomData, -1500, 1400)
+    duration.set_editor_property("data_index", 14)
+    game_time = expression(material, unreal.MaterialExpressionTime, -1500, 1480)
+    elapsed_raw = expression(material, unreal.MaterialExpressionSubtract, -1340, 1400)
+    MEL.connect_material_expressions(game_time, "", elapsed_raw, "A")
+    MEL.connect_material_expressions(epoch, "", elapsed_raw, "B")
+    elapsed = expression(material, unreal.MaterialExpressionMax, -1220, 1400)
+    MEL.connect_material_expressions(elapsed_raw, "", elapsed, "A")
+    MEL.connect_material_expressions(constant(material, 0.0, -1340, 1480), "", elapsed, "B")
+    duration_safe = expression(material, unreal.MaterialExpressionMax, -1220, 1480)
+    MEL.connect_material_expressions(duration, "", duration_safe, "A")
+    MEL.connect_material_expressions(constant(material, 0.001, -1340, 1560), "", duration_safe, "B")
+    frac = expression(material, unreal.MaterialExpressionDivide, -1080, 1440)
+    MEL.connect_material_expressions(elapsed, "", frac, "A")
+    MEL.connect_material_expressions(duration_safe, "", frac, "B")
+    frac_clamped = expression(material, unreal.MaterialExpressionSaturate, -960, 1440)
+    MEL.connect_material_expressions(frac, "", frac_clamped, "")
+    travel = expression(material, unreal.MaterialExpressionMultiply, -840, 1440)
+    MEL.connect_material_expressions(frac_clamped, "", travel, "A")
+    MEL.connect_material_expressions(duration, "", travel, "B")
+    displacement = expression(material, unreal.MaterialExpressionMultiply, -720, 1200)
+    MEL.connect_material_expressions(velocity, "", displacement, "A")
+    MEL.connect_material_expressions(travel, "", displacement, "B")
+    marker_origin = expression(material, unreal.MaterialExpressionAdd, -600, 280)
+    MEL.connect_material_expressions(origin, "", marker_origin, "A")
+    MEL.connect_material_expressions(displacement, "", marker_origin, "B")
+
     world_pos = expression(material, unreal.MaterialExpressionWorldPosition, -1220, 400)
     local_offset = expression(material, unreal.MaterialExpressionSubtract, -1060, 340)
     MEL.connect_material_expressions(world_pos, "", local_offset, "A")
-    MEL.connect_material_expressions(origin, "", local_offset, "B")
+    MEL.connect_material_expressions(marker_origin, "", local_offset, "B")
 
     camera = expression(material, unreal.MaterialExpressionCameraPositionWS, -1220, 500)
     to_marker = expression(material, unreal.MaterialExpressionSubtract, -1060, 480)
-    MEL.connect_material_expressions(origin, "", to_marker, "A")
+    MEL.connect_material_expressions(marker_origin, "", to_marker, "A")
     MEL.connect_material_expressions(camera, "", to_marker, "B")
     forward = expression(material, unreal.MaterialExpressionNormalize, -940, 480)
     MEL.connect_material_expressions(to_marker, "", forward, "")
@@ -1130,6 +1178,143 @@ def create_instance(name, parent, color, opacity, intensity=None, rim_exponent=N
     save_asset(path)
 
 
+def _scene_color(material, x, y):
+    scene = expression(material, unreal.MaterialExpressionSceneTexture, x, y)
+    scene.set_editor_property("scene_texture_id", unreal.SceneTextureId.PPI_POST_PROCESS_INPUT0)
+    return scene
+
+
+def _luma(material, scene, x, y):
+    weights = expression(material, unreal.MaterialExpressionConstant3Vector, x, y)
+    weights.set_editor_property("constant", unreal.LinearColor(0.299, 0.587, 0.114, 0.0))
+    luma = expression(material, unreal.MaterialExpressionDotProduct, x + 180, y)
+    MEL.connect_material_expressions(scene, "Color", luma, "A")
+    MEL.connect_material_expressions(weights, "", luma, "B")
+    return luma
+
+
+def _finish_post_process(material, color_node, name: str):
+    material.set_editor_property("material_domain", unreal.MaterialDomain.MD_POST_PROCESS)
+    material.set_editor_property("blendable_location", unreal.BlendableLocation.BL_AFTER_TONEMAPPING)
+    MEL.connect_material_property(color_node, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    MEL.recompile_material(material)
+    save_asset(f"{MATERIAL_DIR}/{name}")
+    return material
+
+
+def build_sensor_mono(name: str, invert: bool, tint: unreal.LinearColor) -> unreal.Material:
+    """FLIR white-hot / black-hot: luminance remapped through a single tint."""
+    material = ensure_material(name)
+    scene = _scene_color(material, -800, 0)
+    luma = _luma(material, scene, -800, 160)
+    if invert:
+        luma = expression(material, unreal.MaterialExpressionOneMinus, -480, 160)
+        MEL.connect_material_expressions(_luma(material, scene, -800, 240), "", luma, "")
+    color = expression(material, unreal.MaterialExpressionConstant3Vector, -480, 0)
+    color.set_editor_property("constant", tint)
+    out = expression(material, unreal.MaterialExpressionMultiply, -280, 40)
+    MEL.connect_material_expressions(color, "", out, "A")
+    MEL.connect_material_expressions(luma, "", out, "B")
+    return _finish_post_process(material, out, name)
+
+
+def build_sensor_ironbow() -> unreal.Material:
+    """Seven-stop ironbow: black, indigo, magenta, red, orange, yellow, white."""
+    material = ensure_material("M_SensorIronbow")
+    scene = _scene_color(material, -1100, 0)
+    luma = _luma(material, scene, -1100, 160)
+    stops = [
+        (0.00, unreal.LinearColor(0.00, 0.00, 0.00, 1.0)),
+        (0.16, unreal.LinearColor(0.02, 0.00, 0.35, 1.0)),
+        (0.33, unreal.LinearColor(0.55, 0.00, 0.55, 1.0)),
+        (0.50, unreal.LinearColor(0.90, 0.04, 0.04, 1.0)),
+        (0.66, unreal.LinearColor(1.00, 0.45, 0.00, 1.0)),
+        (0.83, unreal.LinearColor(1.00, 0.95, 0.15, 1.0)),
+        (1.00, unreal.LinearColor(1.00, 1.00, 1.00, 1.0)),
+    ]
+    current = None
+    for index, (edge, color) in enumerate(stops):
+        stop = expression(material, unreal.MaterialExpressionConstant3Vector, -800, -200 + index * 80)
+        stop.set_editor_property("constant", color)
+        if current is None:
+            current = stop
+            continue
+        prev_edge = stops[index - 1][0]
+        span = max(edge - prev_edge, 1e-4)
+        threshold = expression(material, unreal.MaterialExpressionConstant, -620, -200 + index * 80)
+        threshold.set_editor_property("r", prev_edge)
+        over = expression(material, unreal.MaterialExpressionSubtract, -500, -200 + index * 80)
+        MEL.connect_material_expressions(luma, "", over, "A")
+        MEL.connect_material_expressions(threshold, "", over, "B")
+        gain = expression(material, unreal.MaterialExpressionConstant, -500, -140 + index * 80)
+        gain.set_editor_property("r", 1.0 / span)
+        alpha = expression(material, unreal.MaterialExpressionSaturate, -360, -200 + index * 80)
+        scaled = expression(material, unreal.MaterialExpressionMultiply, -420, -200 + index * 80)
+        MEL.connect_material_expressions(over, "", scaled, "A")
+        MEL.connect_material_expressions(gain, "", scaled, "B")
+        MEL.connect_material_expressions(scaled, "", alpha, "")
+        blended = expression(material, unreal.MaterialExpressionLinearInterpolate, -240, -200 + index * 80)
+        MEL.connect_material_expressions(current, "", blended, "A")
+        MEL.connect_material_expressions(stop, "", blended, "B")
+        MEL.connect_material_expressions(alpha, "", blended, "Alpha")
+        current = blended
+    return _finish_post_process(material, current, "M_SensorIronbow")
+
+
+def build_sensor_nvg() -> unreal.Material:
+    material = ensure_material("M_SensorNvg")
+    scene = _scene_color(material, -800, 0)
+    luma = _luma(material, scene, -800, 160)
+    lift = expression(material, unreal.MaterialExpressionPower, -520, 160)
+    MEL.connect_material_expressions(luma, "", lift, "Base")
+    MEL.connect_material_expressions(constant(material, 0.85, -640, 240), "", lift, "Exponent")
+    green = expression(material, unreal.MaterialExpressionConstant3Vector, -520, 0)
+    green.set_editor_property("constant", unreal.LinearColor(0.15, 1.0, 0.22, 1.0))
+    out = expression(material, unreal.MaterialExpressionMultiply, -320, 40)
+    MEL.connect_material_expressions(green, "", out, "A")
+    MEL.connect_material_expressions(lift, "", out, "B")
+    return _finish_post_process(material, out, "M_SensorNvg")
+
+
+def build_sensor_crt() -> unreal.Material:
+    material = ensure_material("M_SensorCrt")
+    scene = _scene_color(material, -900, 0)
+    luma = _luma(material, scene, -900, 200)
+    phosphor = expression(material, unreal.MaterialExpressionConstant3Vector, -700, -80)
+    phosphor.set_editor_property("constant", unreal.LinearColor(0.35, 1.0, 0.45, 1.0))
+    tinted = expression(material, unreal.MaterialExpressionMultiply, -520, 0)
+    MEL.connect_material_expressions(phosphor, "", tinted, "A")
+    MEL.connect_material_expressions(luma, "", tinted, "B")
+    screen = expression(material, unreal.MaterialExpressionScreenPosition, -900, 360)
+    y = mask(material, screen, "g", -760, 360)
+    scale = constant(material, 540.0, -760, 440)
+    scaled = expression(material, unreal.MaterialExpressionMultiply, -640, 380)
+    MEL.connect_material_expressions(y, "", scaled, "A")
+    MEL.connect_material_expressions(scale, "", scaled, "B")
+    wave = expression(material, unreal.MaterialExpressionSine, -520, 380)
+    MEL.connect_material_expressions(scaled, "", wave, "")
+    scan = expression(material, unreal.MaterialExpressionMultiply, -400, 380)
+    MEL.connect_material_expressions(wave, "", scan, "A")
+    MEL.connect_material_expressions(constant(material, 0.08, -520, 460), "", scan, "B")
+    dim = expression(material, unreal.MaterialExpressionSubtract, -280, 200)
+    MEL.connect_material_expressions(constant(material, 1.0, -400, 280), "", dim, "A")
+    MEL.connect_material_expressions(scan, "", dim, "B")
+    out = expression(material, unreal.MaterialExpressionMultiply, -160, 40)
+    MEL.connect_material_expressions(tinted, "", out, "A")
+    MEL.connect_material_expressions(dim, "", out, "B")
+    return _finish_post_process(material, out, "M_SensorCrt")
+
+
+def build_sensor_looks() -> None:
+    """Post-process sensor looks. Independent graphs (issue #8), not a
+    port of any third-party GLSL. Missing assets are a C++ no-op."""
+    build_sensor_mono("M_SensorFlirWhite", invert=False, tint=unreal.LinearColor(1.0, 1.0, 1.0, 1.0))
+    build_sensor_mono("M_SensorFlirBlack", invert=True, tint=unreal.LinearColor(1.0, 1.0, 1.0, 1.0))
+    build_sensor_ironbow()
+    build_sensor_nvg()
+    build_sensor_crt()
+
+
 def main() -> None:
     ensure_directory(MATERIAL_DIR)
     ensure_directory(TEXTURE_DIR)
@@ -1189,6 +1374,7 @@ def main() -> None:
     create_instance("MI_Console", signal, unreal.LinearColor(0.0, 0.16, 0.42, 1.0), 0.30, intensity=0.5)
 
     build_heat_master()
+    build_sensor_looks()
 
     if unreal.EditorAssetLibrary.does_asset_exist("/Game/ION/Maps/L_CommandDeck"):
         unreal.EditorLevelLibrary.load_level("/Game/ION/Maps/L_CommandDeck")

@@ -27,7 +27,19 @@ non-commercial only.
 | **Blitzortung.org** | Lightning data courtesy of Blitzortung.org and its volunteer station operators. Private and entertainment use only; **commercial use is prohibited**; raw data access is intended for **participating station operators**. Not an official information service and **not a warning system** — never rely on it for safety decisions. See the note below. | [blitzortung.org](https://www.blitzortung.org) |
 | **adsb.lol** | Aircraft data from adsb.lol, licensed **ODbL 1.0**. Redistributing recorded ADS-B data means releasing that data under ODbL. Consider feeding adsb.lol to give back. | [adsb.lol](https://www.adsb.lol) · [ODbL](https://opendatacommons.org/licenses/odbl/1-0/) |
 | **adsbdb** | Flight-route data (callsign → origin/destination airport) from adsbdb.com, a free community API (MIT-licensed service). The route data itself is **the work of David Taylor, Edinburgh and Jim Mason, Glasgow, and "may not be copied, published, or incorporated into other databases without the explicit permission of David J Taylor, Edinburgh"**. ION COMMAND displays routes to a single local operator and does not publish or redistribute them; recording is off by default, and any local recording is private and rotates within a size cap. If you intend to publish, share, or otherwise redistribute recorded route data, ask for permission first, or set `routeLookup: false`. Lookups are cached and globally spaced to stay hobby-scale. Routes are filed schedules, not clearances — an aircraft may actually be going somewhere else. | [adsbdb.com](https://www.adsbdb.com) · [source](https://github.com/mrjackwills/adsbdb) |
-| **OpenSky Network** | Aircraft data from the OpenSky Network. Licensed for **non-profit research and education only**; commercial or operational use requires written permission from OpenSky. Conditions pass through to downstream users. Cite: Schäfer, M., Strohmeier, M., Lenders, V., Martinovic, I., Wilhelm, M., *Bringing Up OpenSky: A Large-scale ADS-B Sensor Network for Research*, IPSN 2014, pp. 83–94. | [Terms of use](https://opensky-network.org/about/terms-of-use) |
+| **OpenSky Network** | Aircraft data from the OpenSky Network. Licensed for **non-profit research and education only**; commercial or operational use requires written permission from OpenSky. Conditions pass through to downstream users. Cite: Schäfer, M., Strohmeier, M., Lenders, V., Martinovic, I., Wilhelm, M., *Bringing Up OpenSky: A Large-scale ADS-B Sensor Network for Research*, IPSN 2014, pp. 83–94. Authenticated access uses OAuth2 client credentials (basic auth is retired). | [Terms of use](https://opensky-network.org/about/terms-of-use) |
+| **The Space Devs / Launch Library 2** | Upcoming orbital launches from The Space Devs Launch Library 2. Anonymous access is limited to 15 calls/hour. Optional API token via `Authorization: Token`. | [ll.thespacedevs.com](https://ll.thespacedevs.com) |
+| **Open-Meteo** | Current weather. Required credit, shown in the HUD: "Weather data by Open-Meteo.com". | [open-meteo.com](https://open-meteo.com) · [license](https://open-meteo.com/en/license) |
+| **OpenAQ** | Air-quality station locations from OpenAQ v3. Requires a free Explorer API key (`X-API-Key`). Disabled until the operator supplies one in `local.json`. | [openaq.org](https://openaq.org) |
+| **Natural Earth** | Named geographic labels from a bundled public-domain extract of Natural Earth 10m cultural and marine regions. | [naturalearthdata.com](https://www.naturalearthdata.com) |
+| **TeleGeography** | Submarine cable routes and landing points from the public cable map. Licensed **CC BY-NC-SA 3.0**; required credit, shown in the HUD. The collector caches a removable local copy under `data/cables/`. | [submarinecablemap.com](https://www.submarinecablemap.com) |
+| **NASA EONET** | Open natural events from NASA's Earth Observatory Natural Event Tracker. Public API; NASA does not endorse this project. | [eonet.gsfc.nasa.gov](https://eonet.gsfc.nasa.gov) |
+| **GDACS** | Disaster alerts from the Global Disaster Alert and Coordination System (European Commission / UN). Public GeoJSON search. | [gdacs.org](https://www.gdacs.org) |
+| **gpsjam.org** | Daily ADS-B-derived GNSS interference hexes. Public CSV; hex centres are decoded locally and are approximate at globe scale. | [gpsjam.org](https://gpsjam.org) |
+| **IMF PortWatch** | Maritime chokepoint locations, daily transit counts, and recent disruption events from the IMF PortWatch public ArcGIS FeatureServer. | [portwatch.imf.org](https://portwatch.imf.org) |
+| **NOAA / NHC** | Active tropical-cyclone centres from the National Hurricane Center `CurrentStorms.json` feed (public domain, US Government work). Atlantic and eastern Pacific only; forecast cones stay out of scope until the renderer has Area geometry. NOAA does not endorse this project. | [nhc.noaa.gov](https://www.nhc.noaa.gov) |
+| **The Space Devs / Launch Library 2 (locations)** | Earth spaceport coordinates from the same Launch Library 2 catalogue as upcoming launches. Anonymous access is limited to 15 calls/hour; this source polls daily. | [ll.thespacedevs.com](https://ll.thespacedevs.com) |
+| **UNHCR / HDX HAPI** | Current-year refugee totals (population group REF, all ages and genders) from the OCHA Humanitarian API. Host and origin countries with at least 100,000 people are placed at public-domain country centroids. Requires a free app identifier (application name + email, not a secret). Licensed **CC BY-IGO**; credit UNHCR and HDX HAPI. Disabled until the operator supplies an identifier in `local.json`. | [hapi.humdata.org](https://hapi.humdata.org) · [HAPI docs](https://docs.humdata.org/build/hdx-apis/hapi/how-to-query-hapi) |
 | **AIS Stream (aisstream.io)** | Vessel AIS data from aisstream.io, free with a self-service API key. No commercial-use restriction or redistribution licence is published as of this writing; treated with the same hobby-scale, attributed posture as the other unlicensed feeds below until the operator confirms otherwise. Direct browser connections to the stream are against its terms — ION COMMAND already only connects from the collector process, never from client JavaScript, so this is satisfied by the existing architecture. See [below](#enabling-ais-ships-aisstreamio) for the full picture. | [aisstream.io](https://aisstream.io) · [docs](https://aisstream.io/documentation) |
 | **EUMETSAT** | Cloud imagery ©EUMETSAT 2026. Governed by the EUMETSAT Data Policy, not Creative Commons. | [Terms of use](https://www.eumetsat.int/about-us/terms-use) |
 | **AWS Terrain Tiles** | Elevation for the close-orbit relief, from the AWS Open Data terrain tiles (the Mapzen "terrarium" encoding), fetched at runtime and cached locally. No account or key. The underlying data is a public-domain composite — chiefly SRTM (NASA/USGS), the USGS 3DEP and NED, Canada's CDEM, and the EU's EU-DEM — assembled by Mapzen and hosted by the AWS Open Data programme. Individual source licences are permissive or public domain; credit "elevation data from the AWS Terrain Tiles, based on SRTM and national elevation datasets" where relief is shown to third parties. `-IonNoTileImagery` disables the fetch. | [registry.opendata.aws/terrain-tiles](https://registry.opendata.aws/terrain-tiles/) |
@@ -55,7 +67,19 @@ What each source actually does, in the order it appears in `live.json`:
 | `wildfire.firms` | firms.modaps.eosdis.nasa.gov global per-satellite CSV snapshot (no key), or the MAP_KEY-scoped Area API when `mapKey` is set | 10800 s (floor 1800 s) | `wildfire.detection` | yes — one example area (US West) |
 | `orbital.celestrak` | celestrak.org `gp.php` TLEs, SGP4-propagated locally | TLE refresh 6 h, positions 10 s | `orbital.position` | yes |
 | `aviation.adsb` | adsb.lol `/v2/point/<lat>/<lon>/<nm>`; route lookups via api.adsbdb.com (cached, global 2 s gate, `routeLookup: false` disables) | 60 s, global 4 s request gate | `aviation.aircraft` | yes (one example circle) |
-| `aviation.opensky` | opensky-network.org `/api/states/all` | 1800 s anonymous | `aviation.aircraft` | yes |
+| `aviation.opensky` | opensky-network.org `/api/states/all` (OAuth2 bearer or anonymous) | 1800 s anonymous; 60 s typical with OAuth | `aviation.aircraft` | yes |
+| `aviation.gpsjam` | gpsjam.org `/data/manifest.csv` + `{date}-h3_4.csv` | 86400 s (floor 3600 s) | `aviation.interference` | yes |
+| `space.launchlibrary` | ll.thespacedevs.com `/2.3.0/launches/upcoming/` | 900 s (floor 900 s) | `space.launch` | yes |
+| `weather.openmeteo` | api.open-meteo.com `/v1/forecast` current | 300 s (floor 300 s) | `weather.observation` | yes (one example cell) |
+| `weather.openaq` | api.openaq.org `/v3/locations` | 900 s | `weather.airquality` | **no** (needs Explorer API key) |
+| `geography.naturalearth` | bundled `regions.json` | once at start | `geography.region` | yes |
+| `geography.cables` | submarinecablemap.com GeoJSON cables + landings | 86400 s (floor 6 h) | `geography.cable`, `geography.landing` | yes |
+| `geophysics.eonet` | eonet.gsfc.nasa.gov `/api/v3/events?status=open` | 900 s | `geophysics.event` | yes |
+| `geophysics.gdacs` | gdacs.org SEARCH GeoJSON | 600 s | `geophysics.event` | yes |
+| `maritime.portwatch` | IMF PortWatch ArcGIS FeatureServer (chokepoints + disruptions) | 21600 s | `maritime.chokepoint`, `maritime.disruption` | yes |
+| `weather.nhc` | nhc.noaa.gov `CurrentStorms.json` | 600 s (floor 300 s) | `weather.storm` | yes |
+| `space.pads` | ll.thespacedevs.com `/2.3.0/locations/` | 86400 s (floor 6 h) | `space.pad` | yes |
+| `humanitarian.hapi` | hapi.humdata.org refugees-persons-of-concern | 86400 s (floor 6 h) | `humanitarian.displacement` | **no** (needs app identifier) |
 | `hamradio.rbn` | telnet `telnet.reversebeacon.net` | streaming | `hamradio` spots | **no** (needs your callsign) |
 | `aprs.is` | TCP `rotate.aprs2.net:14580`, read-only login (passcode `-1`) | streaming | `aprs` → `aprs.station`, `aprs.object` | **no** (needs your callsign) |
 | `wsjtx.udp` | local UDP listener | streaming | `hamradio` | no |
@@ -207,8 +231,11 @@ these wrong silently produces a globe full of wrong ships:
   backoff honouring `Retry-After`.
 - CelesTrak failures back off from 5 minutes to 2 hours and **stop entirely**
   after repeated failures, as their usage policy requires.
-- OpenSky is polled every 30 minutes anonymously to stay inside the credit
-  budget; the last snapshot is retained and replayed to new clients instead of
+- OpenSky is polled every 30 minutes anonymously (100 requests/day) or at
+  the operator-chosen interval when OAuth2 credentials are present in
+  `local.json` (1000 requests/day). Tokens are cached and refreshed before
+  `expires_in`; a 401 retries once, then reports `oauth_invalid_credentials`.
+  The last snapshot is retained and replayed to new clients instead of
   re-fetching.
 - FIRMS regenerates its NRT snapshots roughly once an hour; the source polls
   every **three hours by default** (floor: thirty minutes, enforced whether or
@@ -371,9 +398,9 @@ terraces once the material takes a slope from it.
 
 ## Known gaps
 
-- **OpenSky authentication**: the `login`/`password` fields use HTTP basic
-  auth, which OpenSky has retired in favour of OAuth2 client credentials.
-  Anonymous access still works; authenticated access currently does not.
+- Provider catalogs on public OSINT dashboards were used only as a list of
+  which upstream APIs exist. Every source here talks to the upstream
+  provider directly from Go; no third-party dashboard code is vendored.
 - **FIRMS MAP_KEY (Area API) path**: implemented and unit-tested — URL
   construction and CSV parsing, since the Area API returns the same column
   shape as the no-key snapshots — but not exercised against a real key (none

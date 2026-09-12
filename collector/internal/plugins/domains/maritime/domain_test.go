@@ -410,3 +410,20 @@ func encodeRawRecord(t *testing.T, payload map[string]any, observed time.Time) p
 		Payload:          encoded,
 	}
 }
+
+func TestDisruptionNormalizes(t *testing.T) {
+	payload, _ := json.Marshal(map[string]any{
+		"kind": "disruption", "eventId": "99", "title": "Red Sea", "category": "Conflict",
+		"alertLevel": "RED", "country": "Yemen", "latitude": 14.5, "longitude": 42.8,
+	})
+	messages, err := New().Normalize(context.Background(), plugins.RawRecord{
+		SourcePluginID: "portwatch", SourceInstanceID: "t", OriginalID: "x", Domain: "maritime",
+		ObservedUTC: time.Now().UTC(), Payload: payload,
+	})
+	if err != nil || len(messages) != 1 || messages[0].SemanticType != "maritime.disruption" {
+		t.Fatalf("%v %#v", err, messages)
+	}
+	if err := messages[0].Validate(); err != nil {
+		t.Fatal(err)
+	}
+}

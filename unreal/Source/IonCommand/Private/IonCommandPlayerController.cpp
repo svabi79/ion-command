@@ -100,6 +100,12 @@ void AIonCommandPlayerController::SetupInputComponent()
     InputComponent->BindAction(TEXT("ToggleOverlayMenu"), IE_Pressed, this, &AIonCommandPlayerController::ToggleOverlayMenu);
     InputComponent->BindAction(TEXT("OpenSearch"), IE_Pressed, this, &AIonCommandPlayerController::OpenSearchOverlay);
     InputComponent->BindAction(TEXT("ToggleWatchlist"), IE_Pressed, this, &AIonCommandPlayerController::ToggleWatchlist);
+    for (int32 Look = 0; Look <= 5; ++Look)
+    {
+        FInputActionBinding Binding(*FString::Printf(TEXT("SensorLook%d"), Look), IE_Pressed);
+        Binding.ActionDelegate.GetDelegateForManualSet().BindWeakLambda(this, [this, Look] { SetSensorLook(Look); });
+        InputComponent->AddActionBinding(Binding);
+    }
 }
 
 void AIonCommandPlayerController::OpenSearchOverlay()
@@ -117,6 +123,15 @@ void AIonCommandPlayerController::ToggleWatchlist()
     if (AIonCockpitHudActor* Cockpit = Cast<AIonCockpitHudActor>(GetHUD()))
     {
         Cockpit->ToggleWatchPanel();
+    }
+}
+
+void AIonCommandPlayerController::SetSensorLook(int32 Index)
+{
+    if (IsTypingText()) return;
+    if (AIonCommandCameraPawn* Camera = Cast<AIonCommandCameraPawn>(GetPawn()))
+    {
+        Camera->SetSensorLook(Index);
     }
 }
 

@@ -235,7 +235,7 @@ private:
     struct FSettingsRow
     {
         FString Label;
-        FString Key;   // callsign, grid, lifetime, minfl, ground, invertY, close
+        FString Key;   // callsign, grid, lifetime, minfl, ground, invertY, sensor, close
         FString Value; // display string
         bool bText = false;
         FVector2D Min = FVector2D::ZeroVector;

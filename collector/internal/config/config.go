@@ -47,12 +47,26 @@ type Source struct {
 	Broker          string  `json:"broker,omitempty"`
 	Topic           string  `json:"topic,omitempty"`
 	ClientID        string  `json:"clientId,omitempty"`
+	// ClientSecret pairs with ClientID for OAuth2 client-credentials
+	// sources (OpenSky). Never commit a real value; put it in the
+	// gitignored local.json overlay.
+	ClientSecret string `json:"clientSecret,omitempty"`
+	// CredentialsFile is an optional path to a provider-supplied
+	// credentials JSON (OpenSky's downloadable credentials.json). The
+	// file may use clientId/clientSecret or client_id/client_secret.
+	CredentialsFile string `json:"credentialsFile,omitempty"`
 	PollSeconds     int     `json:"pollSeconds,omitempty"`
 	// Login is the callsign or account used by sources that authenticate
-	// (e.g. the RBN telnet feed, or an OpenSky account).
+	// (e.g. the RBN telnet feed).
 	Login string `json:"login,omitempty"`
-	// Password pairs with Login for HTTP basic-auth sources (OpenSky).
+	// Password pairs with Login for sources that still use a password
+	// (none of the shipped live sources; kept for operator overlays).
 	Password string `json:"password,omitempty"`
+	// CacheDirectory is a local on-disk cache for poll sources that
+	// honour a tight provider budget (Launch Library) or keep a
+	// removable third-party copy (submarine cables). Empty means the
+	// source's own default under data/.
+	CacheDirectory string `json:"cacheDirectory,omitempty"`
 	// Filter is a server-side subscription filter for streaming sources that
 	// support one (e.g. APRS-IS "filter" spec syntax, such as
 	// "r/50.0/8.0/300"). Empty means the source's own sane default; the
@@ -149,7 +163,68 @@ func Load(path string) (Config, error) {
 	if !filepath.IsAbs(cfg.Recording.Directory) {
 		cfg.Recording.Directory = filepath.Clean(filepath.Join(filepath.Dir(path), cfg.Recording.Directory))
 	}
+	if err := applyLocalOverlay(&cfg, path); err != nil {
+		return Config{}, err
+	}
 	return cfg, cfg.Validate()
+}
+
+// applyLocalOverlay merges secret-bearing fields from a sibling local.json
+// onto matching source IDs. The overlay is gitignored; tracked configs
+// (live.json, default.json) must never carry credentials. Loading
+// local.json itself as the primary file is a no-op here.
+func applyLocalOverlay(cfg *Config, configPath string) error {
+	if strings.EqualFold(filepath.Base(configPath), "local.json") {
+		return nil
+	}
+	overlayPath := filepath.Join(filepath.Dir(configPath), "local.json")
+	data, err := os.ReadFile(overlayPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("read local overlay: %w", err)
+	}
+	var overlay Config
+	if err := json.Unmarshal(data, &overlay); err != nil {
+		return fmt.Errorf("decode local overlay: %w", err)
+	}
+	byID := make(map[string]int, len(cfg.Sources))
+	for i, source := range cfg.Sources {
+		byID[source.ID] = i
+	}
+	for _, extra := range overlay.Sources {
+		index, ok := byID[extra.ID]
+		if !ok {
+			continue
+		}
+		dst := &cfg.Sources[index]
+		if extra.ClientID != "" {
+			dst.ClientID = extra.ClientID
+		}
+		if extra.ClientSecret != "" {
+			dst.ClientSecret = extra.ClientSecret
+		}
+		if extra.CredentialsFile != "" {
+			dst.CredentialsFile = extra.CredentialsFile
+		}
+		if extra.ApiKey != "" {
+			dst.ApiKey = extra.ApiKey
+		}
+		if extra.MapKey != "" {
+			dst.MapKey = extra.MapKey
+		}
+		if extra.Password != "" {
+			dst.Password = extra.Password
+		}
+		if extra.Login != "" {
+			dst.Login = extra.Login
+		}
+		if extra.PollSeconds > 0 {
+			dst.PollSeconds = extra.PollSeconds
+		}
+	}
+	return nil
 }
 
 func (c Config) Validate() error {

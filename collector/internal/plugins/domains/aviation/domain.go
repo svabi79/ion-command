@@ -30,7 +30,8 @@ type rawAircraft struct {
 	GsKt          float64 `json:"gsKt"`
 	Track         float64 `json:"track"`
 	OnGround      bool    `json:"onGround"`
-	ValidSeconds  int     `json:"validSeconds"`
+	ValidSeconds      int `json:"validSeconds"`
+	LastContactAgeSec int `json:"lastContactAgeSec"`
 	// Filed route, when the source resolved one for the callsign.
 	RouteOriginCode string `json:"routeOriginCode"`
 	RouteOriginCity string `json:"routeOriginCity"`
@@ -51,6 +52,12 @@ func (d *Domain) ID() string     { return "domain.aviation" }
 func (d *Domain) Domain() string { return "aviation" }
 
 func (d *Domain) Normalize(_ context.Context, record plugins.RawRecord) ([]events.Envelope, error) {
+	var kind struct {
+		Kind string `json:"kind"`
+	}
+	if json.Unmarshal(record.Payload, &kind) == nil && kind.Kind == "interference" {
+		return d.normalizeInterference(record)
+	}
 	var raw rawAircraft
 	if err := json.Unmarshal(record.Payload, &raw); err != nil {
 		return nil, fmt.Errorf("decode aircraft record: %w", err)
@@ -96,12 +103,12 @@ func (d *Domain) Normalize(_ context.Context, record plugins.RawRecord) ([]event
 	if raw.OriginCountry != "" {
 		details = append(details, raw.OriginCountry)
 	}
-	kind := raw.Kind
-	if kind == "" {
-		kind = "aircraft"
+	airKind := raw.Kind
+	if airKind == "" {
+		airKind = "aircraft"
 	}
-	if kind != "aircraft" {
-		details = append(details, strings.ToUpper(kind))
+	if airKind != "aircraft" {
+		details = append(details, strings.ToUpper(airKind))
 	}
 	event.Properties = map[string]any{
 		"hexId":              raw.Hex,
@@ -110,7 +117,7 @@ func (d *Domain) Normalize(_ context.Context, record plugins.RawRecord) ([]event
 		"trackDeg":           raw.Track,
 		"onGround":           raw.OnGround,
 		"visual.markerScale": 0.9,
-		"visual.icon":        kind,
+		"visual.icon":        airKind,
 		// True altitude is visually imperceptible at globe scale (10 km on
 		// a 6371 km sphere); render it exaggerated, honest numbers stay in
 		// the tooltip.
@@ -133,6 +140,9 @@ func (d *Domain) Normalize(_ context.Context, record plugins.RawRecord) ([]event
 		event.Properties["visual.headingDeg"] = raw.Track
 		event.Properties["visual.speedMps"] = raw.GsKt * 0.514444
 	}
+	if raw.LastContactAgeSec > 0 {
+		event.Properties["visual.lastContactAgeSec"] = raw.LastContactAgeSec
+	}
 	if len(details) > 0 {
 		event.Properties["display.secondary"] = strings.Join(details, "  //  ")
 	}
@@ -142,6 +152,42 @@ func (d *Domain) Normalize(_ context.Context, record plugins.RawRecord) ([]event
 		origin := strings.TrimSpace(raw.RouteOriginCode + " " + raw.RouteOriginCity)
 		destination := strings.TrimSpace(raw.RouteDestCode + " " + raw.RouteDestCity)
 		event.Properties["display.tertiary"] = origin + "  >  " + destination
+	}
+	measured := true
+	event.Quality.Measured = &measured
+	return []events.Envelope{event}, nil
+}
+
+func (d *Domain) normalizeInterference(record plugins.RawRecord) ([]events.Envelope, error) {
+	var raw struct {
+		H3            string  `json:"h3"`
+		Latitude      float64 `json:"latitude"`
+		Longitude     float64 `json:"longitude"`
+		Level         string  `json:"level"`
+		Pct           float64 `json:"pct"`
+		TotalAircraft int     `json:"totalAircraft"`
+	}
+	if err := json.Unmarshal(record.Payload, &raw); err != nil || raw.H3 == "" {
+		return nil, fmt.Errorf("decode interference cell")
+	}
+	event := events.NewEnvelope(record.OriginalID, "aviation", "aviation.interference", events.MessageObservation,
+		events.SourceRef{PluginID: record.SourcePluginID, InstanceID: record.SourceInstanceID, OriginalID: record.OriginalID},
+		record.ObservedUTC)
+	event.EntityID = "aviation:interference:" + raw.H3
+	event.Geometry = events.Point(raw.Longitude, raw.Latitude, 0)
+	validUntil := record.ObservedUTC.Add(36 * time.Hour)
+	event.Time.ValidUntilUTC = &validUntil
+	tint := "1.0,0.75,0.15"
+	if raw.Level == "high" {
+		tint = "1.0,0.2,0.1"
+	}
+	event.Properties = map[string]any{
+		"visual.icon":        "drone",
+		"visual.markerScale": 1.2,
+		"visual.tint":        tint,
+		"display.title":      strings.ToUpper(raw.Level) + " GNSS interference",
+		"display.primary":    fmt.Sprintf("%.1f%% low-accuracy reports", raw.Pct),
+		"display.secondary":  fmt.Sprintf("%d aircraft", raw.TotalAircraft),
 	}
 	measured := true
 	event.Quality.Measured = &measured

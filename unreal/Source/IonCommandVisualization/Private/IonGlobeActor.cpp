@@ -324,7 +324,7 @@ void AIonGlobeActor::Tick(float DeltaSeconds)
 
 FString AIonGlobeActor::ImageryAttribution()
 {
-    return TEXT("EOxCloudless by EOX IT Services GmbH (CC BY-NC-SA)  //  modified Copernicus Sentinel data 2025  //  NASA GIBS / Blue Marble");
+    return TEXT("EOxCloudless by EOX IT Services GmbH (CC BY-NC-SA)  //  modified Copernicus Sentinel data 2025  //  Weather data by Open-Meteo.com  //  submarine cables © TeleGeography  //  NASA GIBS / Blue Marble");
 }
 
 void AIonGlobeActor::UpdateDetailImagery()

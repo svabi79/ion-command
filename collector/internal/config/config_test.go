@@ -32,3 +32,43 @@ func TestLoadReplacesDefaultSourcesCompletely(t *testing.T) {
 		t.Fatalf("source inherited default fields: %+v", source)
 	}
 }
+
+func TestLoadMergesLocalOverlaySecrets(t *testing.T) {
+	dir := t.TempDir()
+	live := filepath.Join(dir, "live.json")
+	overlay := filepath.Join(dir, "local.json")
+	liveBody := `{
+  "server": { "listenAddress": "127.0.0.1:7810", "writeTimeoutSeconds": 10 },
+  "pipeline": { "queueCapacity": 16, "clientQueueCapacity": 16, "workerCount": 1 },
+  "recording": { "enabled": false, "directory": "data", "flushIntervalSeconds": 1 },
+  "sources": [
+    { "id": "opensky-world", "type": "aviation.opensky", "enabled": true, "pollSeconds": 1800 },
+    { "id": "openaq-example", "type": "weather.openaq", "enabled": false }
+  ]
+}`
+	overlayBody := `{
+  "sources": [
+    { "id": "opensky-world", "clientId": "cid", "clientSecret": "csecret", "pollSeconds": 60 },
+    { "id": "openaq-example", "apiKey": "aq-key" }
+  ]
+}`
+	if err := os.WriteFile(live, []byte(liveBody), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(overlay, []byte(overlayBody), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(live)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if cfg.Sources[0].ClientID != "cid" || cfg.Sources[0].ClientSecret != "csecret" {
+		t.Fatalf("opensky overlay not applied: %+v", cfg.Sources[0])
+	}
+	if cfg.Sources[0].PollSeconds != 60 {
+		t.Fatalf("poll overlay %d", cfg.Sources[0].PollSeconds)
+	}
+	if cfg.Sources[1].ApiKey != "aq-key" {
+		t.Fatalf("openaq overlay not applied: %+v", cfg.Sources[1])
+	}
+}

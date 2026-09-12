@@ -51,10 +51,10 @@ These unlock several layers at once and should be planned together with the
 | --- | --- | --- |
 | **Satellite footprints** — who can hear which satellite now | Derived from SGP4 | `Area` |
 | **Grayline as a real surface** rather than an implied line | Derived from solar geometry | `Area` |
-| **Precipitation radar** | RainViewer or national services | `Field` / raster |
+| **Precipitation radar** | RainViewer or national services | `Field` / raster — no clean hobby-globe API/terms found; left deferred |
 | **Ionospheric maps** (foF2, MUF, TEC) | Already fetched from KC2G as soundings | `Field` / raster |
-| **Tropical storm tracks and cones** | NOAA NHC | `Track` + `Area` |
-| **Submarine cables** — context for global connectivity | TeleGeography | `LineString` (static) |
+| **Tropical storm tracks and cones** | NOAA NHC | `Track` + `Area` — **centre points shipped** as `weather.nhc` / `weather.storm`; cones still blocked |
+| **Submarine cables** — context for global connectivity | TeleGeography | `LineString` (static) — **shipped** as GreatCircle + landing points (`geography.cables`) |
 
 ## Wave 4 — the operator's own receiver
 
@@ -66,6 +66,21 @@ no public service can offer.
 
 Blocked on a decision about the interface the receiver exposes (file, socket,
 HTTP) and on which detection semantics are worth normalising.
+
+## Deferred leftovers
+
+These stay deferred (cones/rasters need renderer work; the rest need a
+cleaner licence or API than we have today):
+
+| Candidate | Why deferred |
+| --- | --- |
+| ReliefWeb disasters | API requires a pre-approved `appname` since November 2025; overlaps GDACS/EONET |
+| ACLED conflict events | Keyed + terms; only acceptable as `local.json` fail-closed, and the globe already has GDACS |
+| RainViewer radar | Needs `Field` / raster geometry; terms not a clean hobby overlay |
+| Nuclear facilities / undersea pipelines | No properly licensed, attributable, removable global point bundle found. GEM oil/gas trackers are CC BY 4.0 but download is registration-gated and operator-mediated — not a runtime fetch |
+| JMA / JTWC western-Pacific centres | No stable documented JSON comparable to NHC `CurrentStorms.json` |
+| WMO SWIC CAP list | `wmo_all.json` has no coordinates without a second lookup |
+| News / Telegram / webcams / markets | Out of product scope |
 
 ## Rules for every new layer
 

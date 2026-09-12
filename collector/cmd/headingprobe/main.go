@@ -13,11 +13,13 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"math"
 	"net/http"
 	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/ion-command/ion-command/collector/internal/events"
+	"github.com/ion-command/ion-command/collector/internal/motion"
 )
 
 type probe struct {
@@ -42,6 +44,22 @@ func main() {
 		{"EAST-090", 90, *lat, *lon + spread*1.5},
 		{"SOUTH-180", 180, *lat - spread, *lon},
 		{"WEST-270", 270, *lat, *lon - spread*1.5},
+	}
+	// Extra aircraft for issue #7: a cruising mover, a turning track,
+	// and a hover that must hold its last course despite heading noise.
+	type mover struct {
+		name    string
+		heading float64
+		speedKt float64
+		lat     float64
+		lon     float64
+		turnDps float64
+		hover   bool
+	}
+	movers := []mover{
+		{name: "MOVE-090", heading: 90, speedKt: 420, lat: *lat + spread*0.4, lon: *lon - spread},
+		{name: "TURN-045", heading: 45, speedKt: 280, lat: *lat - spread*0.4, lon: *lon + spread, turnDps: 3},
+		{name: "HOVER-000", heading: 0, speedKt: 0, lat: *lat, lon: *lon, hover: true},
 	}
 
 	upgrader := websocket.Upgrader{CheckOrigin: func(*http.Request) bool { return true }}
@@ -76,6 +94,50 @@ func main() {
 					"display.title":        p.name,
 					"display.primary":      fmt.Sprintf("course %.0f", p.heading),
 				}
+				payload, err := json.Marshal(envelope)
+				if err != nil {
+					continue
+				}
+				if err := connection.WriteMessage(websocket.TextMessage, payload); err != nil {
+					log.Println("write:", err)
+					return
+				}
+			}
+			const dt = 2.0
+			for index := range movers {
+				m := &movers[index]
+				if m.hover {
+					m.heading = float64((tick * 37) % 360)
+				} else if m.turnDps != 0 {
+					m.heading = motion.NormalizeDeg(m.heading + m.turnDps*dt)
+				}
+				if m.speedKt > 1 {
+					distanceDeg := (m.speedKt * 0.514444 * dt) / 111320.0
+					rad := m.heading * math.Pi / 180
+					m.lat += distanceDeg * math.Cos(rad)
+					m.lon += distanceDeg * math.Sin(rad) / math.Max(0.2, math.Cos(m.lat*math.Pi/180))
+				}
+				envelope := events.NewEnvelope(
+					fmt.Sprintf("mover-%d-%d", index, tick),
+					"aviation", "aviation.aircraft", events.MessageObservation,
+					events.SourceRef{PluginID: "headingprobe", InstanceID: "probe", OriginalID: m.name},
+					now)
+				envelope.EntityID = "aviation:aircraft:" + m.name
+				envelope.Geometry = events.Point(m.lon, m.lat, 10000)
+				validUntil := now.Add(30 * time.Second)
+				envelope.Time.ValidUntilUTC = &validUntil
+				props := map[string]any{
+					"visual.icon":          "aircraft",
+					"visual.markerScale":   3.0,
+					"visual.headingDeg":    m.heading,
+					"visual.altitudeScale": 1,
+					"display.title":        m.name,
+					"display.primary":      fmt.Sprintf("course %.0f  //  %.0f KT", m.heading, m.speedKt),
+				}
+				if m.speedKt > 1 {
+					props["visual.speedMps"] = m.speedKt * 0.514444
+				}
+				envelope.Properties = props
 				payload, err := json.Marshal(envelope)
 				if err != nil {
 					continue

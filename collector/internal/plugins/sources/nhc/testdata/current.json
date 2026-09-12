@@ -1,0 +1,25 @@
+{
+  "activeStorms": [
+    {
+      "id": "ep142026",
+      "name": "Norbert",
+      "classification": "TS",
+      "intensity": "55",
+      "pressure": "996",
+      "latitudeNumeric": 17.2,
+      "longitudeNumeric": -126.6,
+      "movementDir": 285,
+      "movementSpeed": 12,
+      "lastUpdate": "2026-09-12T03:00:00.000Z"
+    },
+    {
+      "id": "bad-coords",
+      "name": "Skip",
+      "classification": "TD",
+      "intensity": "30",
+      "pressure": "1008",
+      "latitudeNumeric": 91,
+      "longitudeNumeric": 0
+    }
+  ]
+}

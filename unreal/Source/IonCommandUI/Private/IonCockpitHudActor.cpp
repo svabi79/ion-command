@@ -927,6 +927,16 @@ void AIonCockpitHudActor::CycleSetting(const FString& Key)
         PersistSetting(TEXT("IonCommand.Input"), TEXT("InvertOrbitY"), bInvert ? TEXT("False") : TEXT("True"));
         return;
     }
+    if (Key == TEXT("sensor"))
+    {
+        static const TCHAR* Options[] = {TEXT("None"), TEXT("FlirWhite"), TEXT("FlirBlack"), TEXT("Ironbow"), TEXT("Nvg"), TEXT("Crt")};
+        FString Current = TEXT("None");
+        IonOperatorConfig::GetString(TEXT("IonCommand.Display"), TEXT("SensorLook"), Current);
+        int32 Index = 0;
+        for (int32 i = 0; i < 6; ++i) if (Current == Options[i]) { Index = i; break; }
+        PersistSetting(TEXT("IonCommand.Display"), TEXT("SensorLook"), Options[(Index + 1) % 6]);
+        return;
+    }
     AGeoPointLayerActor* PointLayer = FindPointLayer();
     if (!PointLayer) return;
     if (Key == TEXT("lifetime"))
@@ -1031,6 +1041,14 @@ void AIonCockpitHudActor::DrawSettings(float Scale, float Alpha)
     const bool bGround = PointLayer ? PointLayer->GetShowGroundAircraft() : true;
     bool bInvertY = false;
     IonOperatorConfig::GetBool(TEXT("IonCommand.Input"), TEXT("InvertOrbitY"), bInvertY);
+    FString SensorLook = TEXT("None");
+    IonOperatorConfig::GetString(TEXT("IonCommand.Display"), TEXT("SensorLook"), SensorLook);
+    FString SensorLabel = TEXT("OFF");
+    if (SensorLook == TEXT("FlirWhite")) SensorLabel = TEXT("FLIR WHITE");
+    else if (SensorLook == TEXT("FlirBlack")) SensorLabel = TEXT("FLIR BLACK");
+    else if (SensorLook == TEXT("Ironbow")) SensorLabel = TEXT("IRONBOW");
+    else if (SensorLook == TEXT("Nvg")) SensorLabel = TEXT("NVG");
+    else if (SensorLook == TEXT("Crt")) SensorLabel = TEXT("CRT");
 
     SettingsRows.Reset();
     SettingsRows.Add({TEXT("CALLSIGN"), TEXT("callsign"), Callsign, true});
@@ -1039,6 +1057,7 @@ void AIonCockpitHudActor::DrawSettings(float Scale, float Alpha)
     SettingsRows.Add({TEXT("MIN FLIGHT LEVEL"), TEXT("minfl"), MinFt <= 0.0 ? FString(TEXT("OFF")) : FString::Printf(TEXT("FL%03.0f"), MinFt / 100.0), false});
     SettingsRows.Add({TEXT("SHOW GROUND A/C"), TEXT("ground"), bGround ? FString(TEXT("ON")) : FString(TEXT("OFF")), false});
     SettingsRows.Add({TEXT("INVERT ORBIT Y"), TEXT("invertY"), bInvertY ? FString(TEXT("ON")) : FString(TEXT("OFF")), false});
+    SettingsRows.Add({TEXT("SENSOR LOOK"), TEXT("sensor"), SensorLabel, false});
     SettingsRows.Add({TEXT("CLOSE"), TEXT("close"), FString(), false});
 
     const float RowHeight = 30.0f * Scale;

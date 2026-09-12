@@ -1,0 +1,82 @@
+// Package humanitarian normalizes country-level displacement aggregates
+// into canonical point annotations.
+package humanitarian
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"time"
+
+	"github.com/ion-command/ion-command/collector/internal/events"
+	"github.com/ion-command/ion-command/collector/internal/plugins"
+)
+
+type Domain struct{}
+
+func New() *Domain               { return &Domain{} }
+func (d *Domain) ID() string     { return "domain.humanitarian" }
+func (d *Domain) Domain() string { return "humanitarian" }
+
+func (d *Domain) Normalize(_ context.Context, record plugins.RawRecord) ([]events.Envelope, error) {
+	var raw struct {
+		Country     string  `json:"country"`
+		Name        string  `json:"name"`
+		Role        string  `json:"role"`
+		Population  int     `json:"population"`
+		Latitude    float64 `json:"latitude"`
+		Longitude   float64 `json:"longitude"`
+		Attribution string  `json:"attribution"`
+	}
+	if err := json.Unmarshal(record.Payload, &raw); err != nil || raw.Country == "" {
+		return nil, fmt.Errorf("decode displacement record")
+	}
+	event := events.NewEnvelope(record.OriginalID, "humanitarian", "humanitarian.displacement", events.MessageAnnotation,
+		events.SourceRef{PluginID: record.SourcePluginID, InstanceID: record.SourceInstanceID, OriginalID: record.OriginalID},
+		record.ObservedUTC)
+	event.EntityID = "humanitarian:" + raw.Role + ":" + raw.Country
+	event.Geometry = events.Point(raw.Longitude, raw.Latitude, 0)
+	validUntil := record.ObservedUTC.Add(30 * 24 * time.Hour)
+	event.Time.ValidUntilUTC = &validUntil
+	title := raw.Name
+	if title == "" {
+		title = raw.Country
+	}
+	primary := raw.Role
+	if raw.Population > 0 {
+		primary = fmt.Sprintf("%s  //  %s", formatPopulation(raw.Population), raw.Role)
+	}
+	event.Properties = map[string]any{
+		"visual.icon":        "station",
+		"visual.markerScale": markerScale(raw.Population),
+		"display.title":      title,
+		"display.primary":    primary,
+		"display.secondary":  raw.Attribution,
+	}
+	measured := true
+	event.Quality.Measured = &measured
+	return []events.Envelope{event}, nil
+}
+
+func formatPopulation(n int) string {
+	if n >= 1000000 {
+		return fmt.Sprintf("%.1fM", float64(n)/1000000)
+	}
+	if n >= 1000 {
+		return fmt.Sprintf("%.0fk", float64(n)/1000)
+	}
+	return fmt.Sprintf("%d", n)
+}
+
+func markerScale(n int) float64 {
+	switch {
+	case n >= 2000000:
+		return 2.0
+	case n >= 500000:
+		return 1.6
+	case n >= 100000:
+		return 1.2
+	default:
+		return 0.9
+	}
+}

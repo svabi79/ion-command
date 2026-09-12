@@ -9,6 +9,7 @@
 #include "GeoReplaySubsystem.h"
 #include "Misc/CommandLine.h"
 #include "IonOperatorConfig.h"
+#include "Materials/MaterialInterface.h"
 #include "Misc/ConfigCacheIni.h"
 #include "Misc/Parse.h"
 #include "GeoSelectionSubsystem.h"
@@ -98,6 +99,80 @@ void AIonCommandCameraPawn::BeginPlay()
     {
         Selection->OnSelectionChanged.AddDynamic(this, &AIonCommandCameraPawn::HandleSelectionChanged);
     }
+    FString SavedLook;
+    if (IonOperatorConfig::GetString(TEXT("IonCommand.Display"), TEXT("SensorLook"), SavedLook))
+    {
+        const TArray<FString> Names = {TEXT("None"), TEXT("FlirWhite"), TEXT("FlirBlack"), TEXT("Ironbow"), TEXT("Nvg"), TEXT("Crt")};
+        const int32 Found = Names.IndexOfByKey(SavedLook);
+        if (Found != INDEX_NONE) SensorLookIndex = Found;
+    }
+    ApplySensorLookBlendables();
+}
+
+namespace
+{
+    const TCHAR* SensorLookAsset(int32 Index)
+    {
+        switch (Index)
+        {
+        case 1: return TEXT("/Game/ION/Materials/M_SensorFlirWhite.M_SensorFlirWhite");
+        case 2: return TEXT("/Game/ION/Materials/M_SensorFlirBlack.M_SensorFlirBlack");
+        case 3: return TEXT("/Game/ION/Materials/M_SensorIronbow.M_SensorIronbow");
+        case 4: return TEXT("/Game/ION/Materials/M_SensorNvg.M_SensorNvg");
+        case 5: return TEXT("/Game/ION/Materials/M_SensorCrt.M_SensorCrt");
+        default: return nullptr;
+        }
+    }
+
+    const TCHAR* SensorLookName(int32 Index)
+    {
+        switch (Index)
+        {
+        case 1: return TEXT("FlirWhite");
+        case 2: return TEXT("FlirBlack");
+        case 3: return TEXT("Ironbow");
+        case 4: return TEXT("Nvg");
+        case 5: return TEXT("Crt");
+        default: return TEXT("None");
+        }
+    }
+}
+
+FString AIonCommandCameraPawn::SensorLookLabel(int32 Index)
+{
+    switch (Index)
+    {
+    case 1: return TEXT("FLIR WHITE");
+    case 2: return TEXT("FLIR BLACK");
+    case 3: return TEXT("IRONBOW");
+    case 4: return TEXT("NVG");
+    case 5: return TEXT("CRT");
+    default: return TEXT("OFF");
+    }
+}
+
+void AIonCommandCameraPawn::SetSensorLook(int32 Index)
+{
+    SensorLookIndex = FMath::Clamp(Index, 0, 5);
+    IonOperatorConfig::SetString(TEXT("IonCommand.Display"), TEXT("SensorLook"), SensorLookName(SensorLookIndex));
+    ApplySensorLookBlendables();
+}
+
+void AIonCommandCameraPawn::ApplySensorLookBlendables()
+{
+    if (!Camera) return;
+    Camera->PostProcessSettings.WeightedBlendables.Array.Reset();
+    if (const TCHAR* Path = SensorLookAsset(SensorLookIndex))
+    {
+        if (UMaterialInterface* Material = LoadObject<UMaterialInterface>(nullptr, Path))
+        {
+            FWeightedBlendable Blend;
+            Blend.Object = Material;
+            Blend.Weight = 1.0f;
+            Camera->PostProcessSettings.WeightedBlendables.Array.Add(Blend);
+        }
+    }
+    AppliedSensorLook = SensorLookName(SensorLookIndex);
 }
 
 void AIonCommandCameraPawn::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -127,6 +202,18 @@ void AIonCommandCameraPawn::SetupPlayerInputComponent(UInputComponent* PlayerInp
 void AIonCommandCameraPawn::Tick(float DeltaSeconds)
 {
     Super::Tick(DeltaSeconds);
+    FString SavedLook;
+    if (IonOperatorConfig::GetString(TEXT("IonCommand.Display"), TEXT("SensorLook"), SavedLook) && SavedLook != AppliedSensorLook)
+    {
+        const TArray<FString> Names = {TEXT("None"), TEXT("FlirWhite"), TEXT("FlirBlack"), TEXT("Ironbow"), TEXT("Nvg"), TEXT("Crt")};
+        const int32 Found = Names.IndexOfByKey(SavedLook);
+        if (Found != INDEX_NONE && Found != SensorLookIndex)
+        {
+            SensorLookIndex = Found;
+            ApplySensorLookBlendables();
+        }
+        AppliedSensorLook = SavedLook;
+    }
     if (!bFocusInterpolating || bOrbiting) return;
     const FRotator ActorRotation = GetActorRotation();
     const FRotator ArmRotation = SpringArm->GetRelativeRotation();

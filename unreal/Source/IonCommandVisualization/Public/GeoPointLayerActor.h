@@ -37,6 +37,16 @@ struct FRenderedGeoPoint
     // the marker between sightings. Zero heading = static marker.
     FVector HeadingWorld = FVector::ZeroVector;
     double SpeedUnitsPerSecond = 0.0;
+    // Option-A interpolation (issue #7): the marker is one poll behind.
+    // PreviousLocation + InterpolateVelocity * clamp(now - PreviousFixSeconds,
+    // 0, InterpolateDuration) is the displayed position. The instance stays
+    // parked at the interpolation origin; M_MarkerIcon's WPO does the glide.
+    FVector PreviousLocation = FVector::ZeroVector;
+    FVector InterpolateVelocity = FVector::ZeroVector;
+    double PreviousFixSeconds = 0.0;
+    double CurrentFixSeconds = 0.0;
+    double InterpolateDuration = 0.0;
+    double LastContactAgeSec = 0.0;
     // Altitude is kept re-derivable so the exaggeration toggle can recompute
     // every marker: unit radial at the surface point, true altitude, and the
     // domain-declared visual exaggeration factor.
@@ -121,9 +131,8 @@ public:
     // observations (lightning strikes) fade much sooner than entities.
     UPROPERTY(EditAnywhere, Category="ION COMMAND|Layer") double MarkerLifetimeSeconds = 300.0;
     UPROPERTY(EditAnywhere, Category="ION COMMAND|Layer") double ObservationLifetimeSeconds = 30.0;
-    // Moving markers trigger a coalesced dead-reckoning pass once their
-    // rendered position lags by this many world units (0.25 = ~1.6 km ground
-    // distance), at most every MovementRebuildSeconds.
+    // Kept for config compatibility. Marker glide is material-driven
+    // (custom-data velocity * time) rather than a 1.6 km CPU hop.
     UPROPERTY(EditAnywhere, Category="ION COMMAND|Layer") double MovementTolerance = 0.25;
     UPROPERTY(EditAnywhere, Category="ION COMMAND|Layer") double MovementRebuildSeconds = 2.0;
 
@@ -132,8 +141,12 @@ private:
     void BuildEditorPreview();
     void OnLayerVisibilityChanged(const FString& LayerId, bool bVisible);
     // One instance's worth of custom data for the pictogram material:
-    // icon index, RGB tint, world origin (billboard pivot).
+    // 0 icon, 1-3 RGB, 4-6 origin, 7-9 heading, 10-12 velocity, 13 epoch,
+    // 14 duration. Billboard and WPO interpolation both use the displaced
+    // origin so the glyph rides the glide, not the parked instance.
     static void AppendCustomData(TArray<float>& Out, const FRenderedGeoPoint& Point);
+    static FVector InterpolationOrigin(const FRenderedGeoPoint& Point);
+    FVector ComputeRenderedLocation(const FRenderedGeoPoint& Point, double NowSeconds) const;
     // Single source of truth for marker expiry, shared by the render path,
     // the batched cleanup sweep, and the hover pick so they never disagree.
     bool IsExpired(const FRenderedGeoPoint& Point, double NowSeconds) const;

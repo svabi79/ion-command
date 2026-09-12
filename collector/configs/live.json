@@ -15,7 +15,20 @@
       "spaceweather.state",
       "ionosphere.sounding",
       "aviation.aircraft",
-      "maritime.vessel"
+      "aviation.interference",
+      "maritime.vessel",
+      "maritime.chokepoint",
+      "maritime.disruption",
+      "space.launch",
+      "weather.observation",
+      "weather.airquality",
+      "weather.storm",
+      "geography.region",
+      "geography.cable",
+      "geography.landing",
+      "geophysics.event",
+      "space.pad",
+      "humanitarian.displacement"
     ]
   },
   "recording": {
@@ -124,6 +137,82 @@
       "type": "aprs.is",
       "enabled": false,
       "login": "NOCALL"
+    },
+    {
+      "id": "launchlibrary-upcoming",
+      "type": "space.launchlibrary",
+      "enabled": true,
+      "pollSeconds": 900
+    },
+    {
+      "id": "openmeteo-example",
+      "type": "weather.openmeteo",
+      "enabled": true,
+      "latitude": 50.0,
+      "longitude": 8.0,
+      "pollSeconds": 300
+    },
+    {
+      "id": "openaq-example",
+      "type": "weather.openaq",
+      "enabled": false,
+      "latitude": 50.0,
+      "longitude": 8.0,
+      "radiusNm": 50,
+      "pollSeconds": 900
+    },
+    {
+      "id": "naturalearth-regions",
+      "type": "geography.naturalearth",
+      "enabled": true
+    },
+    {
+      "id": "telegeography-cables",
+      "type": "geography.cables",
+      "enabled": true,
+      "pollSeconds": 86400
+    },
+    {
+      "id": "eonet-open",
+      "type": "geophysics.eonet",
+      "enabled": true,
+      "pollSeconds": 900
+    },
+    {
+      "id": "gdacs-alerts",
+      "type": "geophysics.gdacs",
+      "enabled": true,
+      "pollSeconds": 600
+    },
+    {
+      "id": "gpsjam-daily",
+      "type": "aviation.gpsjam",
+      "enabled": true,
+      "pollSeconds": 86400
+    },
+    {
+      "id": "portwatch-chokepoints",
+      "type": "maritime.portwatch",
+      "enabled": true,
+      "pollSeconds": 21600
+    },
+    {
+      "id": "nhc-storms",
+      "type": "weather.nhc",
+      "enabled": true,
+      "pollSeconds": 600
+    },
+    {
+      "id": "launchlibrary-pads",
+      "type": "space.pads",
+      "enabled": true,
+      "pollSeconds": 86400
+    },
+    {
+      "id": "hapi-displacement",
+      "type": "humanitarian.hapi",
+      "enabled": false,
+      "pollSeconds": 86400
     }
   ]
 }
