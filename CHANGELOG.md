@@ -10,6 +10,19 @@ superseded configurations, is in
 
 ## [Unreleased]
 
+### Fixed
+
+- **Natural Earth embed** after `#11`. The bundled `regions.json` extract
+  lived under a `data/` path that `.gitignore` swallows, so `go test ./...`
+  failed with `pattern data/regions.json: no matching files found`. The
+  extract now sits beside the package, matching `cty.dat`.
+- **Sensor-look materials on UE 5.8** after `#11` / `#8`. The rebuild
+  script used `BlendableLocation.BL_AFTER_TONEMAPPING`, which 5.8 renamed
+  to `BL_SCENE_COLOR_AFTER_TONEMAPPING`. Resolve that slot (with a
+  getattr fallback) so bloom stays in the remapped scene color. Leftover
+  transient rebuild maps are reused instead of `NewLevel` refusing an
+  existing destination.
+
 ### Added
 
 - **OpenSky OAuth2** (`#9`). The retired HTTP basic-auth path is gone.

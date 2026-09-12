@@ -2,7 +2,10 @@
 collector/bin/
 collector/coverage.out
 
-# Runtime data
+# Runtime caches (collector writes cables, recordings, etc. here).
+# Bundled plugin assets must not live under any directory named data/;
+# that pattern is recursive and hid naturalearth's go:embed extract after #11.
+# Keep extracts beside their Go package (see naturalearth/regions.json).
 data/
 collector/data/
 *.log

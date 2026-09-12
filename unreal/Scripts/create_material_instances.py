@@ -6,7 +6,7 @@ import unreal
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from _ion_common import ensure_directory, save_asset
+from _ion_common import discard_rebuild_level, ensure_directory, open_empty_rebuild_level, save_asset
 
 
 MATERIAL_DIR = "/Game/ION/Materials"
@@ -1193,9 +1193,30 @@ def _luma(material, scene, x, y):
     return luma
 
 
+def _blendable_after_tonemapping():
+    """Issue #8: remap after the tonemapper so bloom is already in scene color.
+
+    UE 5.8 renamed BL_AFTER_TONEMAPPING to BL_SCENE_COLOR_AFTER_TONEMAPPING
+    (probed on Jan's engine). Older bindings still expose the old name.
+    """
+    locations = unreal.BlendableLocation
+    for name in (
+        "BL_SCENE_COLOR_AFTER_TONEMAPPING",
+        "BL_AFTER_TONEMAPPING",
+    ):
+        value = getattr(locations, name, None)
+        if value is not None:
+            return value
+    available = [item for item in dir(locations) if item.startswith("BL_")]
+    raise RuntimeError(
+        "BlendableLocation has no after-tonemapping slot; "
+        f"available: {available}"
+    )
+
+
 def _finish_post_process(material, color_node, name: str):
     material.set_editor_property("material_domain", unreal.MaterialDomain.MD_POST_PROCESS)
-    material.set_editor_property("blendable_location", unreal.BlendableLocation.BL_AFTER_TONEMAPPING)
+    material.set_editor_property("blendable_location", _blendable_after_tonemapping())
     MEL.connect_material_property(color_node, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
     MEL.recompile_material(material)
     save_asset(f"{MATERIAL_DIR}/{name}")
@@ -1321,8 +1342,7 @@ def main() -> None:
 
     # Release every level reference to the ION materials before rebuilding
     # them: a loaded command-deck level roots the assets and deletion asserts.
-    unreal.EditorLevelLibrary.new_level("/Game/ION/Maps/L_TransientRebuild")
-    unreal.SystemLibrary.collect_garbage()
+    open_empty_rebuild_level("/Game/ION/Maps/L_TransientRebuild")
 
     day = import_texture(SOURCE_DIR / "NASA" / "bluemarble-21600.png", "T_EarthDay", virtual_texture=True)
     night = import_texture(SOURCE_DIR / "NASA" / "earthatnight-13500.png", "T_EarthNight", virtual_texture=True)
@@ -1378,8 +1398,7 @@ def main() -> None:
 
     if unreal.EditorAssetLibrary.does_asset_exist("/Game/ION/Maps/L_CommandDeck"):
         unreal.EditorLevelLibrary.load_level("/Game/ION/Maps/L_CommandDeck")
-    if unreal.EditorAssetLibrary.does_asset_exist("/Game/ION/Maps/L_TransientRebuild"):
-        unreal.EditorAssetLibrary.delete_asset("/Game/ION/Maps/L_TransientRebuild")
+    discard_rebuild_level("/Game/ION/Maps/L_TransientRebuild")
     unreal.log("ION COMMAND: visual material bootstrap complete")
 
 
