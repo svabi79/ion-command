@@ -330,7 +330,9 @@ void AIonCockpitHudActor::ForgetHitRects()
 {
     MenuRows.Reset();
     SettingsRows.Reset();
-    EditingRow = -1;
+    // Hit-rects only. Clearing EditingRow here discarded an in-progress
+    // commit: Enter then saw an empty row list and snapped the field back
+    // to the packaged default without writing IonOperator.ini.
     SearchResultRows.Reset();
     // The search panel has no per-row editing state to fall back to (unlike
     // settings), so forgetting its hit-rects closes it outright rather than
@@ -348,7 +350,15 @@ void AIonCockpitHudActor::DrawHUD()
     // Clear the hit-rects on every path that skips drawing, so a click never
     // lands on a stale invisible row and silently toggles a layer or changes a
     // setting (audit finding #5, issue #2).
-    if (!Canvas || Mode == EIonCockpitMode::Hidden) { ForgetHitRects(); return; }
+    if (!Canvas || Mode == EIonCockpitMode::Hidden)
+    {
+        if (bSettingsOpen && EditingRow >= 0)
+        {
+            SettingsTextControl(1);
+        }
+        ForgetHitRects();
+        return;
+    }
     const double NowSeconds = FPlatformTime::Seconds();
     AdvanceRateBuckets(static_cast<int64>(NowSeconds));
     if (NowSeconds - LastAggregateSeconds > 0.5)
@@ -885,6 +895,8 @@ void AIonCockpitHudActor::OpenSettings()
     bSearchOpen = false;
     bWatchPanelOpen = false;
     EditingRow = -1;
+    EditingKey.Reset();
+    bReplaceOnNextChar = false;
 }
 
 void AIonCockpitHudActor::PersistSetting(const TCHAR* Section, const TCHAR* Field, const FString& Value)
@@ -969,8 +981,8 @@ void AIonCockpitHudActor::CycleSetting(const FString& Key)
 
 void AIonCockpitHudActor::CommitTextField(const FString& Key, const FString& Value)
 {
-    const FString Clean = Value.TrimStartAndEnd().ToUpper();
-    if (Clean.IsEmpty()) return;
+    const FString Clean = IonOperatorConfig::NormalizeText(Value);
+    if (!IonOperatorConfig::CanCommitText(Clean)) return;
     if (Key == TEXT("callsign"))
     {
         PersistSetting(TEXT("IonCommand.Station"), TEXT("Callsign"), Clean);
@@ -979,6 +991,15 @@ void AIonCockpitHudActor::CommitTextField(const FString& Key, const FString& Val
     {
         PersistSetting(TEXT("IonCommand.Station"), TEXT("Locator"), Clean);
     }
+    // Keep the on-screen row in sync before the next DrawSettings. A click
+    // on the same row in this frame used to reload the stale default.
+    for (FSettingsRow& Row : SettingsRows)
+    {
+        if (Row.Key == Key)
+        {
+            Row.Value = Clean;
+        }
+    }
     // The reticle and the own-station actor re-read the ini every frame, so
     // callsign/grid changes apply live; the values also persist for restart.
 }
@@ -986,30 +1007,32 @@ void AIonCockpitHudActor::CommitTextField(const FString& Key, const FString& Val
 void AIonCockpitHudActor::SettingsTextChar(TCHAR Character)
 {
     if (EditingRow < 0) return;
-    // Callsign/grid: uppercase letters, digits, and the slash used in
-    // portable callsigns / some locators.
-    const TCHAR Up = FChar::ToUpper(Character);
-    if ((Up >= 'A' && Up <= 'Z') || (Up >= '0' && Up <= '9') || Up == '/')
-    {
-        if (EditBuffer.Len() < 10) EditBuffer.AppendChar(Up);
-    }
+    IonOperatorConfig::TypeIntoBuffer(EditBuffer, Character, bReplaceOnNextChar, 10);
 }
 
 void AIonCockpitHudActor::SettingsTextControl(int32 Control)
 {
-    if (EditingRow < 0 || !SettingsRows.IsValidIndex(EditingRow)) { EditingRow = -1; return; }
+    if (EditingRow < 0 && EditingKey.IsEmpty()) return;
     if (Control == 0) // backspace
     {
+        bReplaceOnNextChar = false;
         if (EditBuffer.Len() > 0) EditBuffer.LeftChopInline(1);
     }
     else if (Control == 1) // commit
     {
-        CommitTextField(SettingsRows[EditingRow].Key, EditBuffer);
+        const FString Key = !EditingKey.IsEmpty()
+            ? EditingKey
+            : (SettingsRows.IsValidIndex(EditingRow) ? SettingsRows[EditingRow].Key : FString());
+        CommitTextField(Key, EditBuffer);
         EditingRow = -1;
+        EditingKey.Reset();
+        bReplaceOnNextChar = false;
     }
     else // cancel
     {
         EditingRow = -1;
+        EditingKey.Reset();
+        bReplaceOnNextChar = false;
     }
 }
 
@@ -1019,13 +1042,45 @@ bool AIonCockpitHudActor::HandleSettingsClick(const FVector2D& ScreenPosition)
     {
         const FSettingsRow& Row = SettingsRows[Index];
         if (ScreenPosition.X < Row.Min.X || ScreenPosition.X > Row.Max.X || ScreenPosition.Y < Row.Min.Y || ScreenPosition.Y > Row.Max.Y) continue;
-        if (Row.Key == TEXT("close")) { EditingRow = -1; bSettingsOpen = false; }
-        else if (Row.bText) { EditingRow = Index; EditBuffer = Row.Value; }
-        else { EditingRow = -1; CycleSetting(Row.Key); }
+        if (Row.Key == TEXT("close"))
+        {
+            if (EditingRow >= 0) SettingsTextControl(1);
+            EditingRow = -1;
+            EditingKey.Reset();
+            bSettingsOpen = false;
+        }
+        else if (Row.bText)
+        {
+            if (EditingRow == Index)
+            {
+                return true;
+            }
+            if (EditingRow >= 0)
+            {
+                SettingsTextControl(1);
+            }
+            EditingRow = Index;
+            EditingKey = Row.Key;
+            EditBuffer = Row.Value;
+            bReplaceOnNextChar = true;
+        }
+        else
+        {
+            if (EditingRow >= 0) SettingsTextControl(1);
+            EditingRow = -1;
+            EditingKey.Reset();
+            CycleSetting(Row.Key);
+        }
         return true;
     }
-    // Click outside any row closes the panel.
+    // Click outside any row closes the panel. Commit first so Enter-then-
+    // activate (or a stray click) cannot throw away a typed identity.
+    if (EditingRow >= 0)
+    {
+        SettingsTextControl(1);
+    }
     EditingRow = -1;
+    EditingKey.Reset();
     bSettingsOpen = false;
     return true;
 }
@@ -1208,11 +1263,16 @@ void AIonCockpitHudActor::DrawModeHint(float Scale, float Alpha)
 
 void AIonCockpitHudActor::OpenSearch()
 {
+    if (bSettingsOpen && EditingRow >= 0)
+    {
+        SettingsTextControl(1);
+    }
     bSearchOpen = true;
     bSettingsOpen = false;
     bOverlayMenuOpen = false;
     bWatchPanelOpen = false;
     EditingRow = -1;
+    EditingKey.Reset();
     SearchQuery.Reset();
     SearchHighlightIndex = 0;
     CachedSearchResults.Reset();
@@ -1423,10 +1483,15 @@ void AIonCockpitHudActor::ToggleWatchPanel()
     bWatchPanelOpen = !bWatchPanelOpen;
     if (bWatchPanelOpen)
     {
+        if (bSettingsOpen && EditingRow >= 0)
+        {
+            SettingsTextControl(1);
+        }
         bSettingsOpen = false;
         bOverlayMenuOpen = false;
         bSearchOpen = false;
         EditingRow = -1;
+        EditingKey.Reset();
         // Opening the panel is the operator looking at the alerts: clear the
         // at-a-glance unseen badge the same way a notification tray would.
         // Individual rows stay visually distinguished (dot color) so nothing

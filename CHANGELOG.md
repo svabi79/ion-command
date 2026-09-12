@@ -12,6 +12,23 @@ superseded configurations, is in
 
 ### Fixed
 
+- **Detail imagery felt serial even with a warm TileCache.** `BeginRegion`
+  decoded every cached tile on the game thread and fired every miss as an
+  HTTP request at once. A wall-resolution window is hundreds of tiles; that
+  hitch plus Unreal's low per-host connection cap looked like a cold
+  download every zoom. Cache hits now drain a few per frame (warm paint
+  first), downloads stay at 8 in flight, abandoned requests are cancelled
+  on region change, and cache paths are absolute so `Saved/TileCache` is
+  actually consulted. GPU upload is still dirty-CPU + one `UpdateTexture2D`
+  per frame (`#13`). Zoom and 5120×1440 are unchanged.
+- **SETTINGS callsign/locator snapped back to N0CALL on Enter.** The
+  operator ini was written through GConfig but never loaded from disk on
+  the next get — `GetString` on a path that is not already cached is a
+  miss, so the packaged `N0CALL`/`JN00AA` defaults came back. Enter also
+  abandoned the edit when hit-rects had been cleared, and typing appended
+  onto the placeholder. The operator file is now owned and reloaded; the
+  first keystroke replaces the default; commit no longer depends on the
+  hit-rect row list.
 - **Natural Earth embed** after `#11`. The bundled `regions.json` extract
   lived under a `data/` path that `.gitignore` swallows, so `go test ./...`
   failed with `pattern data/regions.json: no matching files found`. The

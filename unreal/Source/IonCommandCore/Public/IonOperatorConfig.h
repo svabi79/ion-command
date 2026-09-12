@@ -14,10 +14,19 @@
 // placeholder grid square, asserting a position the operator never set.
 //
 // The file is plain ini and safe to write by hand before first launch.
+//
+// Reads go through an owned FConfigFile that is loaded from disk on first
+// use. GConfig->GetString(customPath) does not load a file that is not
+// already in its cache, so a previous session's IonOperator.ini was ignored
+// and the packaged Game defaults came back.
 namespace IonOperatorConfig
 {
     // Absolute path of the operator ini (…/Saved/Config/IonOperator.ini).
     IONCOMMANDCORE_API FString IniPath();
+
+    // Drop in-memory state and read the operator ini from disk again.
+    // First Get/Set already loads; this is for tests and an external rewrite.
+    IONCOMMANDCORE_API void Reload();
 
     // Reads Section/Key from the operator ini, falling back to the packaged
     // Game hierarchy so existing installs and DefaultGame.ini keep working.
@@ -34,4 +43,11 @@ namespace IonOperatorConfig
     IONCOMMANDCORE_API bool GetBool(const TCHAR* Section, const TCHAR* Key, bool& OutValue);
     IONCOMMANDCORE_API bool GetArray(const TCHAR* Section, const TCHAR* Key, TArray<FString>& OutValues);
     IONCOMMANDCORE_API void SetArray(const TCHAR* Section, const TCHAR* Key, const TArray<FString>& Values);
+
+    // Settings-panel text field. First typed character replaces the previous
+    // value so confirming a typed identity cannot save the leftover default.
+    IONCOMMANDCORE_API FString NormalizeText(const FString& Value);
+    IONCOMMANDCORE_API bool CanCommitText(const FString& Clean);
+    IONCOMMANDCORE_API bool IsTextFieldChar(TCHAR Character);
+    IONCOMMANDCORE_API void TypeIntoBuffer(FString& Buffer, TCHAR Character, bool& bReplaceAll, int32 MaxLen);
 }

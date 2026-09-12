@@ -85,4 +85,41 @@ bool FGeoTileMosaicUploadDecisionIsSafeTest::RunTest(const FString& Parameters)
     return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FGeoTileMosaicPumpBudgetTest,
+    "IONCOMMAND.Visualization.TileMosaic.PumpBudget",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FGeoTileMosaicPumpBudgetTest::RunTest(const FString& Parameters)
+{
+    int32 CacheReads = 0;
+    int32 DownloadStarts = 0;
+
+    UGeoTileMosaic::DecidePumpBudget(400, 200, 0, CacheReads, DownloadStarts);
+    TestEqual(TEXT("warm cache is drained a few tiles per frame, not all at once"),
+        CacheReads, UGeoTileMosaic::MaxCacheLoadsPerPump);
+    TestEqual(TEXT("cold cache starts a bounded parallel batch"),
+        DownloadStarts, UGeoTileMosaic::MaxInFlightDownloads);
+
+    UGeoTileMosaic::DecidePumpBudget(3, 50, 7, CacheReads, DownloadStarts);
+    TestEqual(TEXT("leftover warm tiles still paint this frame"), CacheReads, 3);
+    TestEqual(TEXT("in-flight slots are not oversubscribed"), DownloadStarts, 1);
+
+    UGeoTileMosaic::DecidePumpBudget(0, 10, UGeoTileMosaic::MaxInFlightDownloads, CacheReads, DownloadStarts);
+    TestEqual(TEXT("full HTTP pool starts nothing more"), DownloadStarts, 0);
+    TestEqual(TEXT("no cache work when the queue is downloads-only"), CacheReads, 0);
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FGeoTileMosaicCacheKeyTest,
+    "IONCOMMAND.Visualization.TileMosaic.CacheKey",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FGeoTileMosaicCacheKeyTest::RunTest(const FString& Parameters)
+{
+    const FString Path = UGeoTileMosaic::MakeCacheRelativePath(TEXT("s2cloudless"), 5, 20, 10, TEXT("jpeg"));
+    const FString Expected = FString(TEXT("TileCache")) / TEXT("s2cloudless") / TEXT("5_10_20.jpeg");
+    TestEqual(TEXT("cache key is layer/level_row_col.ext"), Path, Expected);
+    TestTrue(TEXT("write and read use the same name"),
+        Path == UGeoTileMosaic::MakeCacheRelativePath(TEXT("s2cloudless"), 5, 20, 10, TEXT("jpeg")));
+    return true;
+}
+
 #endif

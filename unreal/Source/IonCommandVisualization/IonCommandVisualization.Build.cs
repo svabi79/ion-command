@@ -5,8 +5,8 @@ public class IonCommandVisualization : ModuleRules
     public IonCommandVisualization(ReadOnlyTargetRules Target) : base(Target)
     {
         PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
-        PublicDependencyModuleNames.AddRange(new[] { "Core", "CoreUObject", "Engine", "IonCommandCore", "IonCommandData" });
-        PrivateDependencyModuleNames.AddRange(new[] { "Niagara", "RenderCore", "RHI", "HTTP", "ImageWrapper" });
+        PublicDependencyModuleNames.AddRange(new[] { "Core", "CoreUObject", "Engine", "HTTP", "IonCommandCore", "IonCommandData" });
+        PrivateDependencyModuleNames.AddRange(new[] { "Niagara", "RenderCore", "RHI", "ImageWrapper" });
     }
 }
 

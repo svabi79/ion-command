@@ -4,7 +4,7 @@ ION COMMAND has two halves that are configured separately:
 
 | Part | What it does | Where it is configured |
 | --- | --- | --- |
-| **Client** (the globe) | rendering, your station identity, display filters | in-app **SETTINGS** panel → written to `Saved/Config/Windows/Game.ini` |
+| **Client** (the globe) | rendering, your station identity, display filters | in-app **SETTINGS** panel → written to `Saved/Config/IonOperator.ini` |
 | **Collector** (the data feed) | which services are polled, how often, recording | `collector/configs/live.json` (installed copy: `<install>\collector\configs\live.json`) |
 
 Client settings apply immediately. Collector settings need a collector restart.
@@ -18,7 +18,7 @@ Press **O** to open the overlay menu, then click **SETTINGS >**.
 
 | Row | Meaning |
 | --- | --- |
-| **CALLSIGN** | Your callsign. Click the row and type; **Enter** saves, **Esc** cancels. Drives the "you are here" reticle and the *MY RX/TX* path filter. |
+| **CALLSIGN** | Your callsign. Click the row and type (first keystroke replaces the placeholder); **Enter** saves, **Esc** cancels. Drives the "you are here" reticle and the *MY RX/TX* path filter. |
 | **GRID LOCATOR** | Your Maidenhead locator, e.g. `JO62qm`. Moves the home marker and reticle immediately. |
 | **MARKER LIFETIME** | How long a marker stays after its last sighting (60 / 120 / 300 / 600 / 1200 s). Lower = tidier globe, higher = longer trails of activity. |
 | **MIN FLIGHT LEVEL** | Hides aircraft below this level (OFF / FL050 / FL100 / FL200 / FL300). The quickest way to thin out dense airspace — at FL100 the airport clutter disappears and only cruising traffic remains. |
