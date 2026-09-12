@@ -284,6 +284,17 @@ void AIonGlobeActor::Tick(float DeltaSeconds)
         DetailCheckTimer = 0.0;
         UpdateDetailImagery();
     }
+    // One in-place GPU copy per mosaic per frame. Tiles only dirty the CPU
+    // window; rebuilding the RHI texture on every arrival is what page-
+    // faulted the D3D12 Copy Engine at wall resolution.
+    if (DetailImagery)
+    {
+        DetailImagery->FlushPendingUpload();
+    }
+    if (DetailElevation)
+    {
+        DetailElevation->FlushPendingUpload();
+    }
     const UGeoTimelineSubsystem* Timeline = GetGameInstance() ? GetGameInstance()->GetSubsystem<UGeoTimelineSubsystem>() : nullptr;
     const FDateTime TimelineUtc = Timeline ? Timeline->GetTimelineUtc() : FDateTime::UtcNow();
     const FGeoPosition Subsolar = UGeoMathLibrary::SolarSubpoint(TimelineUtc);

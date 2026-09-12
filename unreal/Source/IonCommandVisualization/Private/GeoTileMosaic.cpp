@@ -1,5 +1,6 @@
 #include "GeoTileMosaic.h"
 
+#include "Async/Async.h"
 #include "Engine/Texture2D.h"
 #include "HttpModule.h"
 #include "IImageWrapper.h"
@@ -10,6 +11,10 @@
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "Modules/ModuleManager.h"
+#include "RHI.h"
+#include "RHICommandList.h"
+#include "RenderingThread.h"
+#include "TextureResource.h"
 
 namespace
 {
@@ -432,9 +437,14 @@ void UGeoTileMosaic::EnsureTexture()
         return;
     }
     Texture->SRGB = !bElevation;
+    Texture->NeverStream = true;
     Texture->AddressX = TA_Clamp;
     Texture->AddressY = TA_Clamp;
     Texture->Filter = TF_Bilinear;
+    // Once, at creation. UpdateResource releases and rebuilds the RHI
+    // texture; calling it again while a copy is in flight is what hung
+    // the D3D12 Copy Engine on far zoom. Later pixels go through
+    // FlushPendingUpload, which writes into this same resource.
     Texture->UpdateResource();
 }
 
@@ -459,6 +469,11 @@ void UGeoTileMosaic::CompositeTile(const TArray<uint8>& Bytes, const FGeoTileLay
     const int32 SrcWidth = Wrapper->GetWidth();
     const int32 SrcHeight = Wrapper->GetHeight();
     if (SrcWidth <= 0 || SrcHeight <= 0)
+    {
+        return;
+    }
+    const int64 ExpectedRaw = static_cast<int64>(SrcWidth) * SrcHeight * 4;
+    if (Raw.Num() < ExpectedRaw)
     {
         return;
     }
@@ -512,10 +527,18 @@ void UGeoTileMosaic::CompositeTile(const TArray<uint8>& Bytes, const FGeoTileLay
             }
             const int32 SrcX = FMath::Clamp(static_cast<int32>(ColumnInTile * SrcWidth), 0, SrcWidth - 1);
             const int64 SrcIndex = (static_cast<int64>(SrcY) * SrcWidth + SrcX) * 4;
-            const int64 DestIndex = static_cast<int64>(Y) * TextureWidth + X;
+            const int32 DestIndex = Y * TextureWidth + X;
+            if (SrcIndex < 0 || SrcIndex + 3 >= Raw.Num())
+            {
+                continue;
+            }
 
             if (Layer.Encoding == EGeoTileEncoding::TerrariumElevation)
             {
+                if (!Heights.IsValidIndex(DestIndex))
+                {
+                    continue;
+                }
                 // Bilinear, unlike the colour path. Elevation tiles are
                 // magnified into the window (256-pixel sources against
                 // 512-pixel window tiles), and the material differentiates
@@ -539,6 +562,10 @@ void UGeoTileMosaic::CompositeTile(const TArray<uint8>& Bytes, const FGeoTileLay
                 Heights[DestIndex] = static_cast<uint16>(FMath::Clamp(Normalised, 0.0, 1.0) * 65535.0);
                 continue;
             }
+            if (!Pixels.IsValidIndex(DestIndex))
+            {
+                continue;
+            }
             // Where a sparse layer observed nothing, leave whatever is
             // underneath standing rather than punching a hole in the globe.
             if (Layer.bMayBeSparse && Raw[SrcIndex + 3] < 8)
@@ -548,27 +575,125 @@ void UGeoTileMosaic::CompositeTile(const TArray<uint8>& Bytes, const FGeoTileLay
             Pixels[DestIndex] = FColor(Raw[SrcIndex + 2], Raw[SrcIndex + 1], Raw[SrcIndex + 0], 255);
         }
     }
+    // Mark dirty only. A cached region can land tens or hundreds of tiles
+    // in one BeginRegion, and each used to rebuild the GPU texture. The
+    // actor ticks FlushPendingUpload once per frame instead.
     bDirty = true;
-    PushToGpu();
 }
 
-void UGeoTileMosaic::PushToGpu()
+EGeoMosaicUploadDecision UGeoTileMosaic::DecideUpload(bool bDirty, bool bResourceReady, bool bUploadInFlight,
+                                                      int64 CpuPixels, int64 ExpectedPixels)
 {
-    if (!bDirty || !Texture || !Texture->GetPlatformData() || Texture->GetPlatformData()->Mips.Num() == 0)
+    if (!bDirty)
+    {
+        return EGeoMosaicUploadDecision::NoWork;
+    }
+    if (ExpectedPixels <= 0 || CpuPixels != ExpectedPixels)
+    {
+        return EGeoMosaicUploadDecision::SkipInvalid;
+    }
+    if (!bResourceReady || bUploadInFlight)
+    {
+        return EGeoMosaicUploadDecision::RetryLater;
+    }
+    return EGeoMosaicUploadDecision::Upload;
+}
+
+void UGeoTileMosaic::FlushPendingUpload()
+{
+    if (bDirty && !Texture)
+    {
+        EnsureTexture();
+    }
+    const int64 ExpectedPixels = static_cast<int64>(TextureWidth) * TextureHeight;
+    const int64 CpuPixels = bElevation ? static_cast<int64>(Heights.Num()) : static_cast<int64>(Pixels.Num());
+    FTextureResource* Resource = Texture ? Texture->GetResource() : nullptr;
+    FRHITexture* TextureRHI = Resource ? Resource->GetTextureRHI() : nullptr;
+    const EGeoMosaicUploadDecision Decision = DecideUpload(
+        bDirty, TextureRHI != nullptr, bUploadInFlight, CpuPixels, ExpectedPixels);
+    if (Decision == EGeoMosaicUploadDecision::NoWork || Decision == EGeoMosaicUploadDecision::RetryLater)
     {
         return;
     }
-    FTexture2DMipMap& Mip = Texture->GetPlatformData()->Mips[0];
-    void* Data = Mip.BulkData.Lock(LOCK_READ_WRITE);
-    if (bElevation)
+    if (Decision == EGeoMosaicUploadDecision::SkipInvalid)
     {
-        FMemory::Memcpy(Data, Heights.GetData(), Heights.Num() * sizeof(uint16));
+        UE_LOG(LogTemp, Warning, TEXT("ION COMMAND detail mosaic: skipped GPU upload (cpu %lld px, expected %lld)"),
+            CpuPixels, ExpectedPixels);
+        bDirty = false;
+        return;
     }
-    else
+
+    const FIntVector GpuSize = TextureRHI->GetSizeXYZ();
+    if (GpuSize.X != TextureWidth || GpuSize.Y != TextureHeight)
     {
-        FMemory::Memcpy(Data, Pixels.GetData(), Pixels.Num() * sizeof(FColor));
+        UE_LOG(LogTemp, Warning, TEXT("ION COMMAND detail mosaic: skipped GPU upload (rhi %dx%d, expected %dx%d)"),
+            GpuSize.X, GpuSize.Y, TextureWidth, TextureHeight);
+        bDirty = false;
+        return;
     }
-    Mip.BulkData.Unlock();
-    Texture->UpdateResource();
+
+    const int32 BytesPerPixel = bElevation ? static_cast<int32>(sizeof(uint16)) : static_cast<int32>(sizeof(FColor));
+    const int64 ByteCount = ExpectedPixels * BytesPerPixel;
+    const uint8* Source = bElevation
+        ? reinterpret_cast<const uint8*>(Heights.GetData())
+        : reinterpret_cast<const uint8*>(Pixels.GetData());
+    if (!Source || ByteCount <= 0)
+    {
+        bDirty = false;
+        return;
+    }
+
+    // Staging so compositing can keep writing the CPU window while the Copy
+    // Engine reads this buffer. The texture RHI stays the one created at
+    // init - we never UpdateResource again, which is what page-faulted.
+    TArray<uint8> Staging;
+    Staging.SetNumUninitialized(static_cast<int32>(ByteCount));
+    FMemory::Memcpy(Staging.GetData(), Source, ByteCount);
+
     bDirty = false;
+    bUploadInFlight = true;
+    TWeakObjectPtr<UGeoTileMosaic> WeakThis(this);
+    const uint32 Pitch = static_cast<uint32>(TextureWidth * BytesPerPixel);
+    const uint32 Width = static_cast<uint32>(TextureWidth);
+    const uint32 Height = static_cast<uint32>(TextureHeight);
+
+    ENQUEUE_RENDER_COMMAND(IonMosaicUpload)(
+        [TextureRHI, Staging = MoveTemp(Staging), Pitch, Width, Height, WeakThis](FRHICommandListImmediate& RHICmdList)
+        {
+            const int32 ExpectedBytes = static_cast<int32>(Height) * static_cast<int32>(Pitch);
+            const bool bOk = TextureRHI != nullptr && Staging.GetData() != nullptr
+                && TextureRHI->GetSizeXYZ().X == static_cast<int32>(Width)
+                && TextureRHI->GetSizeXYZ().Y == static_cast<int32>(Height)
+                && Staging.Num() == ExpectedBytes;
+            if (bOk)
+            {
+                const FUpdateTextureRegion2D Region(0, 0, 0, 0, Width, Height);
+                RHICmdList.UpdateTexture2D(TextureRHI, 0, Region, Pitch, Staging.GetData());
+            }
+            AsyncTask(ENamedThreads::GameThread, [WeakThis, bOk]()
+            {
+                if (UGeoTileMosaic* Self = WeakThis.Get())
+                {
+                    Self->bUploadInFlight = false;
+                    if (!bOk)
+                    {
+                        Self->bDirty = true;
+                    }
+                }
+            });
+        });
+}
+
+void UGeoTileMosaic::BeginDestroy()
+{
+    // The in-flight render command holds the texture resource pointer.
+    // Flush it before UTexture tears that resource down, or teardown
+    // itself becomes the same Copy Engine page-fault as the old per-tile
+    // UpdateResource path.
+    if (bUploadInFlight && IsInGameThread())
+    {
+        FlushRenderingCommands();
+        bUploadInFlight = false;
+    }
+    Super::BeginDestroy();
 }
