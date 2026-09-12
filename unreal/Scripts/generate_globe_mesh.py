@@ -25,7 +25,7 @@ import unreal
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from _ion_common import ensure_directory, save_asset
+from _ion_common import discard_rebuild_level, ensure_directory, open_empty_rebuild_level, save_asset
 
 
 MESH_DIR = "/Game/ION/Meshes"
@@ -154,8 +154,7 @@ def main() -> None:
     # Release any level reference to this asset before rebuild, same
     # constraint create_material_instances.py works around: replacing an
     # asset referenced by a loaded level can assert in UE 5.8.
-    unreal.EditorLevelLibrary.new_level("/Game/ION/Maps/L_TransientMeshRebuild")
-    unreal.SystemLibrary.collect_garbage()
+    open_empty_rebuild_level("/Game/ION/Maps/L_TransientMeshRebuild")
 
     if unreal.EditorAssetLibrary.does_asset_exist(asset_path):
         if not unreal.EditorAssetLibrary.delete_asset(asset_path):
@@ -211,8 +210,7 @@ def main() -> None:
 
     if unreal.EditorAssetLibrary.does_asset_exist("/Game/ION/Maps/L_CommandDeck"):
         unreal.EditorLevelLibrary.load_level("/Game/ION/Maps/L_CommandDeck")
-    if unreal.EditorAssetLibrary.does_asset_exist("/Game/ION/Maps/L_TransientMeshRebuild"):
-        unreal.EditorAssetLibrary.delete_asset("/Game/ION/Maps/L_TransientMeshRebuild")
+    discard_rebuild_level("/Game/ION/Maps/L_TransientMeshRebuild")
     unreal.log(f"ION COMMAND: globe mesh ready at {asset_path}")
 
 
