@@ -1,0 +1,14 @@
+{
+  "sources": [
+    {
+      "id": "opensky-world",
+      "clientId": "YOUR_OPENSKY_CLIENT_ID",
+      "clientSecret": "YOUR_OPENSKY_CLIENT_SECRET",
+      "pollSeconds": 60
+    },
+    {
+      "id": "openaq-example",
+      "apiKey": "YOUR_OPENAQ_API_KEY"
+    }
+  ]
+}

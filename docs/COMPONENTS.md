@@ -27,7 +27,16 @@ messages itself — that is the domain's job.
 | `wildfire.firms` | NASA FIRMS VIIRS/MODIS thermal anomalies | HTTP poll | **on** (one example area) | no (optional free MAP_KEY for the scoped Area API) | attribution required; see below |
 | `orbital.celestrak` | CelesTrak TLEs (SGP4 locally) | HTTP poll | **on** | no | usage policy: stop on non-200 |
 | `aviation.adsb` | adsb.lol point query; callsign→route enrichment via adsbdb.com (`routeLookup`) | HTTP poll | **on** (one example region) | no | ODbL 1.0 |
-| `aviation.opensky` | OpenSky global state snapshot | HTTP poll | **on** | optional | non-profit research/education only |
+| `aviation.opensky` | OpenSky global state snapshot (OAuth2 or anonymous) | HTTP poll | **on** | optional (`clientId`/`clientSecret` in gitignored `local.json`) | non-profit research/education only |
+| `aviation.gpsjam` | gpsjam.org daily GNSS-interference H3 grid | HTTP poll | **on** | no | public daily CSV; hex centres are approximate at globe scale |
+| `space.launchlibrary` | The Space Devs Launch Library 2 upcoming launches | HTTP poll | **on** | optional (`apiKey` as `Authorization: Token`) | 15 calls/hour anonymous; 15 min floor |
+| `weather.openmeteo` | Open-Meteo current weather at a configured cell | HTTP poll | **on** (one example cell) | no | attribution required: "Weather data by Open-Meteo.com" |
+| `weather.openaq` | OpenAQ v3 air-quality stations near a point | HTTP poll | **off** (needs a free API key) | **yes** (Explorer API key in `local.json`) | fail-closed without a key |
+| `geography.naturalearth` | Named regions from a bundled Natural Earth extract | in-process | **on** | no | public domain |
+| `geography.cables` | TeleGeography submarine-cable map | HTTP poll | **on** | no | CC BY-NC-SA 3.0; removable on-disk cache |
+| `geophysics.eonet` | NASA EONET open natural events | HTTP poll | **on** | no | public NASA API |
+| `geophysics.gdacs` | GDACS disaster alerts | HTTP poll | **on** | no | public GeoJSON search |
+| `maritime.portwatch` | IMF PortWatch chokepoints and daily transits | HTTP poll | **on** | no | public ArcGIS FeatureServer |
 | `hamradio.rbn` | Reverse Beacon Network | telnet | off | **yes** (your callsign) | no published licence |
 | `hamradio.dxcluster` | DX cluster spots (DXSpider / AR-Cluster / CC Cluster) | telnet | off | **yes** (your callsign) | no published licence; no single canonical node - address is configured |
 | `hamradio.wspr` | WSPR reception reports via wspr.live | HTTP poll | **on** | no | non-commercial use only; 20 req/min |
@@ -47,14 +56,16 @@ envelope. Domains own the vocabulary; nothing above them does.
 | --- | --- | --- |
 | `hamradio` | `radio.reception`, `radio.station` | `pskreporter.mqtt`, `hamradio.rbn`, `wsjtx.udp`, `hamradio.dxcluster`, `hamradio.wspr` |
 | `aprs` | `aprs.station`, `aprs.object` | `aprs.is` |
-| `aviation` | `aviation.aircraft` | `aviation.adsb`, `aviation.opensky` |
-| `weather` | `weather.lightning` | `lightning.blitzortung` |
+| `aviation` | `aviation.aircraft`, `aviation.interference` | `aviation.adsb`, `aviation.opensky`, `aviation.gpsjam` |
+| `weather` | `weather.lightning`, `weather.observation`, `weather.airquality` | `lightning.blitzortung`, `weather.openmeteo`, `weather.openaq` |
 | `spaceweather` | `spaceweather.state` | `spaceweather.swpc` |
 | `ionosphere` | `ionosphere.sounding` | `ionosonde.kc2g` |
-| `geophysics` | `geophysics.earthquake` | `earthquake.usgs` |
+| `geophysics` | `geophysics.earthquake`, `geophysics.event` | `earthquake.usgs`, `geophysics.eonet`, `geophysics.gdacs` |
 | `orbital` | `orbital.position` | `orbital.celestrak` |
+| `space` | `space.launch` | `space.launchlibrary` |
+| `geography` | `geography.region`, `geography.cable`, `geography.landing` | `geography.naturalearth`, `geography.cables` |
 | `wildfire` | `wildfire.detection` | `wildfire.firms` |
-| `maritime` | `maritime.vessel` | `ais.aisstream` |
+| `maritime` | `maritime.vessel`, `maritime.chokepoint` | `ais.aisstream`, `maritime.portwatch` |
 
 ## Context plugins
 

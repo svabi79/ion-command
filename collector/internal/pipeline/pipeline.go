@@ -141,10 +141,23 @@ func (p *Pipeline) publish(message events.Envelope) {
 
 func (p *Pipeline) Sources() []SourceState {
 	p.stateMu.RLock()
-	defer p.stateMu.RUnlock()
 	result := make([]SourceState, 0, len(p.sourceStates))
 	for _, state := range p.sourceStates {
 		result = append(result, state)
+	}
+	p.stateMu.RUnlock()
+	reporters := make(map[string]plugins.StatusReporter)
+	for _, source := range p.registry.Sources() {
+		if reporter, ok := source.(plugins.StatusReporter); ok {
+			reporters[source.ID()] = reporter
+		}
+	}
+	for i := range result {
+		if reporter, ok := reporters[result[i].ID]; ok {
+			if reason := reporter.StatusReason(); reason != "" {
+				result[i].Message = reason
+			}
+		}
 	}
 	return result
 }

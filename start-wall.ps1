@@ -3,9 +3,8 @@
 #   powershell -ExecutionPolicy Bypass -File .\start-wall.ps1
 #
 # Starts the collector (if it is not already answering) and the packaged client
-# from dist\windows. Uses collector\configs\local.json when present so your
-# personal setup (home QTH, RBN callsign) stays out of the repository, and
-# falls back to the neutral live.json.
+# from dist\windows. Always loads collector\configs\live.json; secrets from a
+# sibling gitignored local.json are merged onto matching source IDs.
 #
 # Options:
 #   -ResX / -ResY        wall resolution (default 5120x1440)
@@ -27,8 +26,8 @@ $collector = Join-Path $repo 'collector\bin\ion-collector.exe'
 $client    = Join-Path $repo 'dist\windows\IonCommand.exe'
 $configDir = Join-Path $repo 'dist\windows\IonCommand\Saved\Config\Windows'
 
-# Personal config first, neutral default second.
-$configName = if (Test-Path (Join-Path $repo 'collector\configs\local.json')) { 'configs/local.json' } else { 'configs/live.json' }
+# live.json is the source list; gitignored local.json overlays secrets.
+$configName = 'configs/live.json'
 
 # Only write the station override when explicitly asked; the settings panel
 # persists callsign/locator on its own.

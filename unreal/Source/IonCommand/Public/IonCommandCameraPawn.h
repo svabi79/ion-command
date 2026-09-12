@@ -20,6 +20,13 @@ public:
     // Restarts the ease toward the current selection, e.g. for the F key.
     void FocusOnSelection();
 
+    // Sensor looks (issue #8): F1–F6 and the SETTINGS row. Missing
+    // post-process materials are a no-op so a client built before the
+    // editor script ran still starts.
+    void SetSensorLook(int32 Index);
+    int32 GetSensorLook() const { return SensorLookIndex; }
+    static FString SensorLookLabel(int32 Index);
+
 protected:
     virtual void BeginPlay() override;
     virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
@@ -40,6 +47,9 @@ private:
     UPROPERTY(VisibleAnywhere) TObjectPtr<USceneComponent> SceneRoot;
     UPROPERTY(VisibleAnywhere) TObjectPtr<USpringArmComponent> SpringArm;
     UPROPERTY(VisibleAnywhere) TObjectPtr<UCameraComponent> Camera;
+    void ApplySensorLookBlendables();
+    int32 SensorLookIndex = 0;
+    FString AppliedSensorLook;
     bool bOrbiting = false;
     bool bFocusInterpolating = false;
     float FocusTargetYaw = 0.0f;

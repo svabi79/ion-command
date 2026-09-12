@@ -28,6 +28,12 @@ func (d *Domain) ID() string     { return "domain.geophysics" }
 func (d *Domain) Domain() string { return "geophysics" }
 
 func (d *Domain) Normalize(_ context.Context, record plugins.RawRecord) ([]events.Envelope, error) {
+	var kind struct {
+		Kind string `json:"kind"`
+	}
+	if json.Unmarshal(record.Payload, &kind) == nil && kind.Kind == "event" {
+		return d.normalizeEvent(record)
+	}
 	var raw rawQuake
 	if err := json.Unmarshal(record.Payload, &raw); err != nil {
 		return nil, fmt.Errorf("decode earthquake record: %w", err)
@@ -56,6 +62,46 @@ func (d *Domain) Normalize(_ context.Context, record plugins.RawRecord) ([]event
 		"display.title":      fmt.Sprintf("M %.1f Earthquake", raw.Magnitude),
 		"display.primary":    raw.Place,
 		"display.secondary":  fmt.Sprintf("depth %.0f km", raw.DepthKm),
+	}
+	measured := true
+	event.Quality.Measured = &measured
+	return []events.Envelope{event}, nil
+}
+
+func (d *Domain) normalizeEvent(record plugins.RawRecord) ([]events.Envelope, error) {
+	var raw struct {
+		EventID    string  `json:"eventId"`
+		Title      string  `json:"title"`
+		Category   string  `json:"category"`
+		AlertLevel string  `json:"alertLevel"`
+		Longitude  float64 `json:"longitude"`
+		Latitude   float64 `json:"latitude"`
+		Provider   string  `json:"provider"`
+	}
+	if err := json.Unmarshal(record.Payload, &raw); err != nil || raw.EventID == "" {
+		return nil, fmt.Errorf("decode geophysics event")
+	}
+	event := events.NewEnvelope(record.OriginalID, "geophysics", "geophysics.event", events.MessageObservation,
+		events.SourceRef{PluginID: record.SourcePluginID, InstanceID: record.SourceInstanceID, OriginalID: record.OriginalID},
+		record.ObservedUTC)
+	event.EntityID = "geophysics:event:" + raw.EventID
+	event.Geometry = events.Point(raw.Longitude, raw.Latitude, 0)
+	validUntil := record.ObservedUTC.Add(24 * time.Hour)
+	event.Time.ValidUntilUTC = &validUntil
+	icon := "earthquake"
+	if raw.Category == "wildfires" || raw.Category == "WF" {
+		icon = "wildfire"
+	}
+	primary := raw.Category
+	if raw.AlertLevel != "" {
+		primary = raw.AlertLevel + "  //  " + raw.Category
+	}
+	event.Properties = map[string]any{
+		"visual.icon":        icon,
+		"visual.markerScale": 1.3,
+		"display.title":      raw.Title,
+		"display.primary":    primary,
+		"display.secondary":  raw.Provider,
 	}
 	measured := true
 	event.Quality.Measured = &measured

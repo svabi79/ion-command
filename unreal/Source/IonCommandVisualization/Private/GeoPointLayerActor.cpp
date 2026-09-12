@@ -87,11 +87,15 @@ namespace
             {TEXT("weather"), TEXT("lightning")},
             {TEXT("ionosphere"), TEXT("sounding")},
             {TEXT("geophysics"), TEXT("earthquake")},
+            {TEXT("space"), TEXT("satellite")},
+            {TEXT("geography"), TEXT("station")},
+            {TEXT("maritime"), TEXT("vessel")},
+            {TEXT("wildfire"), TEXT("wildfire")},
         };
         return Fallback;
     }
 
-    constexpr int32 MarkerCustomFloats = 10;
+    constexpr int32 MarkerCustomFloats = 15;
 
     // World-space compass heading at a globe position, from the ANALYTIC
     // tangent frame of the pinned sphere convention
@@ -135,19 +139,31 @@ bool AGeoPointLayerActor::IsExpired(const FRenderedGeoPoint& Point, double NowSe
     return NowSeconds - Point.LastSeenSeconds > (Point.bObservation ? ObservationLifetimeSeconds : MarkerLifetimeSeconds);
 }
 
+FVector AGeoPointLayerActor::InterpolationOrigin(const FRenderedGeoPoint& Point)
+{
+    return Point.InterpolateDuration > 0.0 ? Point.PreviousLocation : Point.Location;
+}
+
 void AGeoPointLayerActor::AppendCustomData(TArray<float>& Out, const FRenderedGeoPoint& Point)
 {
+    const FVector Origin = InterpolationOrigin(Point);
     Out.Add(Point.IconIndex);
     Out.Add(Point.Color.R);
     Out.Add(Point.Color.G);
     Out.Add(Point.Color.B);
-    // Billboard pivot: the position the instance is actually drawn at.
-    Out.Add(static_cast<float>(Point.RenderedLocation.X));
-    Out.Add(static_cast<float>(Point.RenderedLocation.Y));
-    Out.Add(static_cast<float>(Point.RenderedLocation.Z));
+    // Billboard pivot: interpolation start. M_MarkerIcon displaces this
+    // by velocity * clamp(Time - epoch, 0, duration).
+    Out.Add(static_cast<float>(Origin.X));
+    Out.Add(static_cast<float>(Origin.Y));
+    Out.Add(static_cast<float>(Origin.Z));
     Out.Add(static_cast<float>(Point.HeadingWorld.X));
     Out.Add(static_cast<float>(Point.HeadingWorld.Y));
     Out.Add(static_cast<float>(Point.HeadingWorld.Z));
+    Out.Add(static_cast<float>(Point.InterpolateVelocity.X));
+    Out.Add(static_cast<float>(Point.InterpolateVelocity.Y));
+    Out.Add(static_cast<float>(Point.InterpolateVelocity.Z));
+    Out.Add(static_cast<float>(Point.PreviousFixSeconds));
+    Out.Add(static_cast<float>(Point.InterpolateDuration));
 }
 
 void AGeoPointLayerActor::OnConstruction(const FTransform& Transform)
@@ -253,22 +269,36 @@ void AGeoPointLayerActor::Submit(const FGeoMessageEnvelope& Message)
             SpeedUnitsPerSecond = FCString::Atod(*SpeedProperty) / 6371000.0 * GlobeRadius;
         }
     }
+    double LastContactAgeSec = 0.0;
+    const FString AgeProperty = Message.Properties.FindRef(TEXT("visual.lastContactAgeSec"));
+    if (!AgeProperty.IsEmpty())
+    {
+        LastContactAgeSec = FMath::Max(0.0, FCString::Atod(*AgeProperty));
+    }
     if (int32* ExistingIndex = EntityToPoint.Find(EntityKey))
     {
         FRenderedGeoPoint& Point = ActivePoints[*ExistingIndex];
+        const double PreviousSeen = Point.LastSeenSeconds;
         Point.LastSeenSeconds = NowSeconds;
-        // Any marker whose rendered position has drifted past the tolerance
-        // needs a refresh - the altitude proxy that used to gate this froze
-        // low/ground movers whose feed omitted speed (audit finding #6). The
-        // tolerance alone already suppresses stationary jitter. Keyed by
-        // entity id (not index) so a later swap-and-pop removal elsewhere
-        // can never make this refer to the wrong point - see
-        // DirtyEntityKeys's declaration.
-        if (!Point.RenderedLocation.Equals(Location, MovementTolerance))
+        // Option A: park the instance at the previous authoritative fix
+        // and let the material interpolate toward this one. No 1.6 km
+        // CPU hop — custom data carries velocity + epoch instead.
+        if (!Point.Location.Equals(Location, UE_KINDA_SMALL_NUMBER))
         {
-            DirtyEntityKeys.Add(EntityKey);
+            Point.PreviousLocation = Point.Location;
+            Point.PreviousFixSeconds = Point.CurrentFixSeconds > 0.0 ? Point.CurrentFixSeconds : PreviousSeen;
+            const double Dt = FMath::Max(NowSeconds - Point.PreviousFixSeconds, 0.05);
+            Point.InterpolateDuration = Dt;
+            Point.InterpolateVelocity = (Location - Point.PreviousLocation) / Dt;
+            if (Point.RenderSlot != INDEX_NONE)
+            {
+                const FVector Scale(MarkerScale * CurrentZoomFactor * Point.Scale);
+                MarkerInstances->UpdateInstanceTransform(Point.RenderSlot, FTransform(FQuat::Identity, Point.PreviousLocation, Scale), true, false, true);
+            }
         }
         Point.Location = Location;
+        Point.CurrentFixSeconds = NowSeconds;
+        Point.LastContactAgeSec = LastContactAgeSec;
         Point.RadialDirection = Radial;
         Point.AltitudeMeters = Position.AltitudeMeters;
         Point.DeclaredAltitudeScale = DeclaredAltitudeScale;
@@ -323,6 +353,14 @@ void AGeoPointLayerActor::Submit(const FGeoMessageEnvelope& Message)
         if (!NewSecondary.IsEmpty()) Point.Secondary = NewSecondary;
         const FString NewTertiary = Message.Properties.FindRef(TEXT("display.tertiary"));
         if (!NewTertiary.IsEmpty()) Point.Tertiary = NewTertiary;
+        Point.RenderedLocation = ComputeRenderedLocation(Point, NowSeconds);
+        if (Point.InterpolateDuration > 0.0) bHasKinematicPoints = true;
+        if (Point.RenderSlot != INDEX_NONE)
+        {
+            TArray<float> CustomData;
+            AppendCustomData(CustomData, Point);
+            MarkerInstances->SetCustomData(Point.RenderSlot, CustomData, true);
+        }
         return;
     }
     if (ActivePoints.Num() >= MaxVisiblePoints)
@@ -343,6 +381,12 @@ void AGeoPointLayerActor::Submit(const FGeoMessageEnvelope& Message)
     Point.bOnGround = bMessageOnGround;
     Point.HeadingWorld = HeadingWorld;
     Point.SpeedUnitsPerSecond = SpeedUnitsPerSecond;
+    Point.PreviousLocation = Location;
+    Point.CurrentFixSeconds = NowSeconds;
+    Point.PreviousFixSeconds = NowSeconds;
+    Point.InterpolateDuration = 0.0;
+    Point.InterpolateVelocity = FVector::ZeroVector;
+    Point.LastContactAgeSec = LastContactAgeSec;
     // A lone kinematic marker added into an otherwise-quiet, static-camera
     // scene must start the coast cadence itself; otherwise the flag is only
     // ever latched inside the movement pass and it never begins (finding #14).
@@ -481,10 +525,11 @@ const FRenderedGeoPoint* AGeoPointLayerActor::FindNearestToRay(const FVector& Ra
         // Skip expired markers awaiting the batched cleanup sweep.
         if (IsExpired(Point, NowSeconds)) continue;
         if (IsAircraftFiltered(Point)) continue;
-        const FVector ToPoint = Point.RenderedLocation - RayOrigin;
+        const FVector PickLocation = ComputeRenderedLocation(Point, NowSeconds);
+        const FVector ToPoint = PickLocation - RayOrigin;
         const double Along = FVector::DotProduct(ToPoint, RayDirection);
         if (Along <= 0.0) continue;
-        const double Distance = FVector::Dist(RayOrigin + RayDirection * Along, Point.RenderedLocation);
+        const double Distance = FVector::Dist(RayOrigin + RayDirection * Along, PickLocation);
         if (Distance > MinLateral + 2.0) continue;
         if (Distance < MinLateral) MinLateral = Distance;
         // Among markers within the closest hit's lateral window, take the one
@@ -557,7 +602,7 @@ void AGeoPointLayerActor::AddRenderInstance(int32 Index, double NowSeconds)
     // re-synced every point's RenderedLocation before drawing any of them.
     RefreshRenderedLocation(Point, NowSeconds);
     const FVector Scale(MarkerScale * CurrentZoomFactor * Point.Scale);
-    const int32 Slot = MarkerInstances->AddInstance(FTransform(FQuat::Identity, Point.RenderedLocation, Scale), true);
+    const int32 Slot = MarkerInstances->AddInstance(FTransform(FQuat::Identity, InterpolationOrigin(Point), Scale), true);
     Point.RenderSlot = Slot;
     check(SlotToPointIndex.Num() == Slot);
     SlotToPointIndex.Add(Index);
@@ -579,7 +624,7 @@ void AGeoPointLayerActor::RemoveRenderInstance(int32 Index)
         const int32 MovedPointIndex = SlotToPointIndex[MovedFromSlot];
         FRenderedGeoPoint& MovedPoint = ActivePoints[MovedPointIndex];
         const FVector Scale(MarkerScale * CurrentZoomFactor * MovedPoint.Scale);
-        MarkerInstances->UpdateInstanceTransform(Slot, FTransform(FQuat::Identity, MovedPoint.RenderedLocation, Scale), true, false, true);
+        MarkerInstances->UpdateInstanceTransform(Slot, FTransform(FQuat::Identity, InterpolationOrigin(MovedPoint), Scale), true, false, true);
         TArray<float> CustomData;
         AppendCustomData(CustomData, MovedPoint);
         MarkerInstances->SetCustomData(Slot, CustomData, false);
@@ -667,65 +712,56 @@ int32 AGeoPointLayerActor::TrimToCapacity(int32 MaxRemovals)
     return RemoveCount;
 }
 
-void AGeoPointLayerActor::RefreshRenderedLocation(FRenderedGeoPoint& Point, double NowSeconds) const
+FVector AGeoPointLayerActor::ComputeRenderedLocation(const FRenderedGeoPoint& Point, double NowSeconds) const
 {
-    Point.RenderedLocation = Point.Location;
+    if (Point.InterpolateDuration > 0.0)
+    {
+        const double Elapsed = FMath::Max(NowSeconds - Point.PreviousFixSeconds, 0.0);
+        const double Travel = FMath::Min(Elapsed, Point.InterpolateDuration);
+        FVector Location = Point.PreviousLocation + Point.InterpolateVelocity * Travel;
+        if (Elapsed > Point.InterpolateDuration && Point.SpeedUnitsPerSecond > 0.0)
+        {
+            double Coast = Elapsed - Point.InterpolateDuration;
+            if (Point.LastContactAgeSec > 300.0)
+            {
+                Coast = 0.0;
+            }
+            else
+            {
+                const double Remain = FMath::Max(0.0, 60.0 - Point.LastContactAgeSec);
+                Coast = FMath::Min(Coast, Remain);
+            }
+            Location += Point.HeadingWorld * (Point.SpeedUnitsPerSecond * Coast);
+        }
+        return Location;
+    }
+    FVector Location = Point.Location;
     if (Point.SpeedUnitsPerSecond > 0.0)
     {
-        // Cap covers the slow global-snapshot cycle (15 min polls).
-        const double CoastSeconds = FMath::Clamp(NowSeconds - Point.LastSeenSeconds, 0.0, 1200.0);
-        Point.RenderedLocation += Point.HeadingWorld * (Point.SpeedUnitsPerSecond * CoastSeconds);
+        const double CoastSeconds = FMath::Clamp(NowSeconds - Point.LastSeenSeconds, 0.0, 60.0);
+        Location += Point.HeadingWorld * (Point.SpeedUnitsPerSecond * CoastSeconds);
     }
+    return Location;
+}
+
+void AGeoPointLayerActor::RefreshRenderedLocation(FRenderedGeoPoint& Point, double NowSeconds) const
+{
+    Point.RenderedLocation = ComputeRenderedLocation(Point, NowSeconds);
 }
 
 void AGeoPointLayerActor::ApplyMovementUpdates(double NowSeconds)
 {
     bHasKinematicPoints = false;
-    bool bAnyChange = false;
-    // Kinematic markers must be re-coasted every cadence pass regardless of
-    // whether anything else changed - that CPU scan is O(active points),
-    // same as before. The improvement is downstream: only a marker that is
-    // both currently rendered and actually moved touches the instance
-    // buffer; a marker that is not moving is never touched here.
     for (FRenderedGeoPoint& Point : ActivePoints)
     {
-        if (Point.SpeedUnitsPerSecond <= 0.0) continue;
+        if (Point.SpeedUnitsPerSecond <= 0.0 && Point.InterpolateDuration <= 0.0) continue;
         bHasKinematicPoints = true;
-        const FVector Previous = Point.RenderedLocation;
         RefreshRenderedLocation(Point, NowSeconds);
-        if (Point.RenderSlot != INDEX_NONE && !Previous.Equals(Point.RenderedLocation, UE_KINDA_SMALL_NUMBER))
-        {
-            const FVector Scale(MarkerScale * CurrentZoomFactor * Point.Scale);
-            MarkerInstances->UpdateInstanceTransform(Point.RenderSlot, FTransform(FQuat::Identity, Point.RenderedLocation, Scale), true, false, true);
-            ++RuntimeStats.IncrementalUpdates;
-            bAnyChange = true;
-        }
     }
-    // Fresh sightings whose position drifted past tolerance (see
-    // FRenderedGeoPoint::RenderedLocation): flush RenderedLocation now, on
-    // the same coalesced cadence as dead reckoning rather than immediately
-    // on submit. Uses the same coast-aware refresh as the loop above (not a
-    // bare snap to Location) so a point that is both kinematic and dirty -
-    // a moving marker whose last sighting also jumped past tolerance - is
-    // left at its correctly coasted position rather than having this loop
-    // undo the first one's work; for a non-kinematic point the two
-    // computations are identical.
-    for (const FString& EntityKey : DirtyEntityKeys)
-    {
-        const int32* IndexPtr = EntityToPoint.Find(EntityKey);
-        if (!IndexPtr) continue; // expired/removed since being marked dirty
-        FRenderedGeoPoint& Point = ActivePoints[*IndexPtr];
-        RefreshRenderedLocation(Point, NowSeconds);
-        if (Point.RenderSlot != INDEX_NONE)
-        {
-            const FVector Scale(MarkerScale * CurrentZoomFactor * Point.Scale);
-            MarkerInstances->UpdateInstanceTransform(Point.RenderSlot, FTransform(FQuat::Identity, Point.RenderedLocation, Scale), true, false, true);
-            ++RuntimeStats.IncrementalUpdates;
-            bAnyChange = true;
-        }
-    }
+    // Bookkeeping only: the instance stays parked at the interpolation
+    // origin. Glide is material WPO (velocity * time), so this pass no
+    // longer hops transforms every MovementRebuildSeconds.
     DirtyEntityKeys.Reset();
-    if (bAnyChange) MarkerInstances->MarkRenderStateDirty();
     LastMovementRebuild = NowSeconds;
 }
 
@@ -767,7 +803,7 @@ void AGeoPointLayerActor::ReconcileRenderedSet()
             // just because an unrelated point's style changed.
             RefreshRenderedLocation(Point, NowSeconds);
             const FVector Scale(MarkerScale * CurrentZoomFactor * Point.Scale);
-            MarkerInstances->UpdateInstanceTransform(Point.RenderSlot, FTransform(FQuat::Identity, Point.RenderedLocation, Scale), true, false, true);
+            MarkerInstances->UpdateInstanceTransform(Point.RenderSlot, FTransform(FQuat::Identity, InterpolationOrigin(Point), Scale), true, false, true);
             TArray<float> CustomData;
             AppendCustomData(CustomData, Point);
             MarkerInstances->SetCustomData(Point.RenderSlot, CustomData, false);

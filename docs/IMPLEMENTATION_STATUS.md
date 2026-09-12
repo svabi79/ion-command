@@ -75,9 +75,18 @@ The component list is in [COMPONENTS.md](COMPONENTS.md) — not repeated here.
   operator must obtain; see
   [DATA-SOURCES.md](DATA-SOURCES.md#enabling-ais-ships-aisstreamio).
   Sustained multi-hour reconnect behaviour remains unexercised.
-- **OpenSky authentication** is ineffective: the `login`/`password` fields use
-  HTTP basic auth, which OpenSky retired in favour of OAuth2. Anonymous access
-  works.
+- **OpenSky OAuth2** is implemented (`oauth` when `clientId`/`clientSecret` or
+  a `credentials.json` path are present in gitignored `local.json`; `anon`
+  otherwise). Token cache, refresh-before-expiry, single 401 retry, daily
+  credit budget, and `Retry-After` are covered by httptest. A live OpenSky
+  account was not available in this environment.
+- **Additional geospatial sources** (Launch Library 2, Open-Meteo, Natural
+  Earth, TeleGeography cables, NASA EONET, GDACS, gpsjam.org, OpenAQ,
+  IMF PortWatch) are implemented as Go source plugins against the upstream
+  APIs. OpenAQ ships disabled (needs a key). gpsjam hex centres are an
+  approximate independent H3 decode, honest at globe scale, not a surveyed
+  hex. Live fetches of the new HTTP sources were unit-tested against
+  fixtures, not against a long-running collector session.
 - **Plugin manifests** under `plugins/` are incomplete descriptive metadata;
   the registry code is authoritative.
 
@@ -108,7 +117,8 @@ The component list is in [COMPONENTS.md](COMPONENTS.md) — not repeated here.
 - **The tile cache is never evicted.** `<Saved>/TileCache` grows with every
   place the operator visits and is only reclaimed by deleting the directory.
 - Aircraft coverage depends on the configured regions plus the global snapshot;
-  the anonymous OpenSky poll is slow by design.
+  the anonymous OpenSky poll is slow by design. OAuth credentials in
+  `local.json` allow a faster poll within the authenticated credit budget.
 
 ## Not implemented
 

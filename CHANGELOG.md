@@ -12,6 +12,23 @@ superseded configurations, is in
 
 ### Added
 
+- **OpenSky OAuth2** (`#9`). The retired HTTP basic-auth path is gone.
+  `clientId`/`clientSecret` (or an OpenSky `credentials.json`) live only in
+  gitignored `local.json`. Without credentials the source keeps running
+  anonymously. Tokens are cached and refreshed before expiry; a 401 retries
+  once.
+- **New geospatial sources** (`#10` and follow-on catalog). Launch Library 2,
+  Open-Meteo, Natural Earth regions, TeleGeography submarine cables, NASA
+  EONET, GDACS, gpsjam.org GNSS interference, OpenAQ (disabled until keyed),
+  and IMF PortWatch chokepoints. Each is a Go plugin against the upstream
+  API. Attribution credits those providers.
+- **Smooth marker motion** (`#7`). Markers interpolate the last two fixes in
+  `M_MarkerIcon` (velocity × time WPO) instead of hopping 1.6 km every two
+  seconds. `headingprobe` now also serves a mover, a turner, and a hover.
+- **Sensor looks** (`#8`). FLIR white-hot / black-hot, Ironbow, NVG, and CRT
+  post-process modes on **F1–F6** and a SETTINGS row. Persist to
+  `IonOperator.ini`. Missing materials are a no-op.
+
 - **Motion trails.** Aircraft, satellites, and anything else that reports a
   moving Point now leave a short, fading comet tail along the globe surface
   behind them, built purely from repeated sightings of the same entity — a

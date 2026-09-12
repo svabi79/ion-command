@@ -53,11 +53,14 @@ See [CONFIGURATION.md](CONFIGURATION.md#source-entries).
 
 ## Aircraft take minutes to appear after starting
 
-The global OpenSky snapshot is polled every 15 minutes by default (anonymous
-access is credit-limited). The collector retains the last snapshot and replays
-it to every client that connects, so this only affects the very first minutes
-after the **collector** starts — not client restarts. Configure an OpenSky
-account for much shorter intervals.
+The global OpenSky snapshot is polled every 30 minutes by default (anonymous
+access is credit-limited: 100 requests/day, 5 minute floor). The collector
+retains the last snapshot and replays it to every client that connects, so
+this only affects the very first minutes after the **collector** starts — not
+client restarts. Put an OpenSky OAuth2 client in gitignored
+`collector/configs/local.json` (see `local.json.example`) to switch the
+source to `oauth` and poll faster. `/api/status` reports `anon`, `oauth`,
+`oauth_invalid_credentials`, or `rate_limited`.
 
 ## Too many aircraft / the map is unreadable
 

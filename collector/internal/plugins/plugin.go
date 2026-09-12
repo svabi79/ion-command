@@ -25,6 +25,14 @@ type Source interface {
 	Start(context.Context, chan<- RawRecord) error
 }
 
+// StatusReporter is an optional source interface. The pipeline copies
+// StatusReason into /api/sources so operators can see auth mode and
+// failure classes (oauth_invalid_credentials, rate_limited) without
+// leaking credential values.
+type StatusReporter interface {
+	StatusReason() string
+}
+
 type Domain interface {
 	ID() string
 	Domain() string
