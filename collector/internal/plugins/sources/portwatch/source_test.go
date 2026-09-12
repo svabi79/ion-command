@@ -2,7 +2,9 @@ package portwatch
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -10,7 +12,11 @@ import (
 	"github.com/ion-command/ion-command/collector/internal/config"
 )
 
-func TestSampleJoinsDailyCounts(t *testing.T) {
+func TestSampleJoinsDailyCountsAndRecentDisruptions(t *testing.T) {
+	disruptionBody, err := os.ReadFile("testdata/disruptions.json")
+	if err != nil {
+		t.Fatal(err)
+	}
 	source, err := New(config.Source{ID: "p", Type: "maritime.portwatch"}, slog.Default())
 	if err != nil {
 		t.Fatal(err)
@@ -20,7 +26,7 @@ func TestSampleJoinsDailyCounts(t *testing.T) {
 			return []byte(`{"features":[{"attributes":{"portid":"chokepoint1","n_total":42}}]}`), nil
 		}
 		if strings.Contains(rawURL, "disruptions") {
-			return []byte(`{"features":[{"attributes":{"eventid":99,"eventname":"Red Sea","eventtype":"Conflict","alertlevel":"Red","country":"Yemen","lat":14.5,"long":42.8}}]}`), nil
+			return disruptionBody, nil
 		}
 		return []byte(`{"features":[{"attributes":{"portid":"chokepoint1","portname":"Suez Canal"},"geometry":{"x":32.3,"y":30.5}}]}`), nil
 	}
@@ -28,11 +34,23 @@ func TestSampleJoinsDailyCounts(t *testing.T) {
 	if err != nil || len(records) != 2 {
 		t.Fatalf("%v %d", err, len(records))
 	}
+	var payload map[string]any
+	if err := json.Unmarshal(records[1].Payload, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload["kind"] != "disruption" || payload["eventId"] != "1000999" {
+		t.Fatalf("%v", payload)
+	}
 }
 
-func TestArcgisTimestamp(t *testing.T) {
-	got := arcgisTimestamp(time.Date(2026, 8, 13, 5, 51, 0, 0, time.UTC))
-	if got != "2026-08-13 05:51:00" {
-		t.Fatalf("%q", got)
+func TestRecentDisruptionKeepsOpenAndDropsStale(t *testing.T) {
+	now := time.Date(2026, 9, 12, 12, 0, 0, 0, time.UTC)
+	recent := float64(now.Add(-2 * 24 * time.Hour).UnixMilli())
+	stale := float64(now.Add(-400 * 24 * time.Hour).UnixMilli())
+	if !recentDisruption(map[string]any{"fromdate": recent}, now) {
+		t.Fatal("recent open-ended event should stay")
+	}
+	if recentDisruption(map[string]any{"fromdate": stale, "todate": stale}, now) {
+		t.Fatal("2019-style event should drop")
 	}
 }

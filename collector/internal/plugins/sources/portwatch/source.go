@@ -1,5 +1,6 @@
-// Package portwatch polls IMF PortWatch chokepoint locations and the
-// latest daily transit counts from the public ArcGIS FeatureServer.
+// Package portwatch polls IMF PortWatch chokepoint locations, daily
+// transit counts, and recent disruption events from the public ArcGIS
+// FeatureServer.
 package portwatch
 
 import (
@@ -18,9 +19,14 @@ import (
 const (
 	defaultLocations = "https://services9.arcgis.com/weJ1QsnbMYJlCHdG/arcgis/rest/services/PortWatch_chokepoints_database/FeatureServer/0/query?where=1%3D1&outFields=*&outSR=4326&f=json"
 	defaultDaily     = "https://services9.arcgis.com/weJ1QsnbMYJlCHdG/arcgis/rest/services/Daily_Chokepoints_Data/FeatureServer/0/query?where=1%3D1&outFields=*&orderByFields=date%20DESC&resultRecordCount=80&f=json"
-	pollDefault      = 6 * time.Hour
-	pollFloor        = time.Hour
-	maxPoints        = 40
+	// Disruptions are polygons on the FeatureServer; the layer also publishes
+	// a representative lat/long on each feature, which is what we plot.
+	defaultDisruptions = "https://services9.arcgis.com/weJ1QsnbMYJlCHdG/arcgis/rest/services/portwatch_disruptions_database/FeatureServer/0/query?where=1%3D1&outFields=eventid,eventtype,eventname,alertlevel,country,fromdate,todate,severitytext,lat,long&orderByFields=fromdate%20DESC&resultRecordCount=200&outSR=4326&f=json"
+	pollDefault        = 6 * time.Hour
+	pollFloor          = time.Hour
+	maxPoints          = 40
+	maxDisruptions     = 40
+	disruptionHorizon  = 30 * 24 * time.Hour
 )
 
 type Source struct {
@@ -103,6 +109,25 @@ func attrFloat(attrs map[string]any, keys ...string) (float64, bool) {
 	return 0, false
 }
 
+func attrEpoch(attrs map[string]any, keys ...string) (time.Time, bool) {
+	ms, ok := attrFloat(attrs, keys...)
+	if !ok || ms <= 0 {
+		return time.Time{}, false
+	}
+	return time.UnixMilli(int64(ms)).UTC(), true
+}
+
+func recentDisruption(attrs map[string]any, now time.Time) bool {
+	cutoff := now.Add(-disruptionHorizon)
+	if ended, ok := attrEpoch(attrs, "todate"); ok {
+		return !ended.Before(cutoff)
+	}
+	if started, ok := attrEpoch(attrs, "fromdate"); ok {
+		return !started.Before(cutoff)
+	}
+	return false
+}
+
 func (s *Source) sample(ctx context.Context) ([]plugins.RawRecord, error) {
 	locBody, err := s.fetch(ctx, s.locationsURL)
 	if err != nil {
@@ -178,6 +203,59 @@ func (s *Source) sample(ctx context.Context) ([]plugins.RawRecord, error) {
 	}
 	records = append(records, s.sampleDisruptions(ctx, now)...)
 	return records, nil
+}
+
+func (s *Source) sampleDisruptions(ctx context.Context, now time.Time) []plugins.RawRecord {
+	body, err := s.fetch(ctx, defaultDisruptions)
+	if err != nil {
+		s.logger.Warn("portwatch disruptions fetch failed", "source", s.id, "error", err)
+		return nil
+	}
+	var response arcGIS
+	if err := json.Unmarshal(body, &response); err != nil {
+		s.logger.Warn("portwatch disruptions decode failed", "source", s.id, "error", err)
+		return nil
+	}
+	records := make([]plugins.RawRecord, 0, len(response.Features))
+	for _, feature := range response.Features {
+		if !recentDisruption(feature.Attributes, now) {
+			continue
+		}
+		id := attrString(feature.Attributes, "eventid")
+		if id == "" || id == "0" {
+			continue
+		}
+		lat, latOK := attrFloat(feature.Attributes, "lat")
+		lon, lonOK := attrFloat(feature.Attributes, "long")
+		if !latOK || !lonOK || lat < -90 || lat > 90 || lon < -180 || lon > 180 {
+			continue
+		}
+		payload, err := json.Marshal(map[string]any{
+			"kind":       "disruption",
+			"eventId":    id,
+			"title":      attrString(feature.Attributes, "eventname"),
+			"category":   attrString(feature.Attributes, "eventtype"),
+			"alertLevel": attrString(feature.Attributes, "alertlevel"),
+			"country":    attrString(feature.Attributes, "country"),
+			"latitude":   lat,
+			"longitude":  lon,
+			"severity":   attrString(feature.Attributes, "severitytext"),
+		})
+		if err != nil {
+			continue
+		}
+		records = append(records, plugins.RawRecord{
+			SourcePluginID: "portwatch", SourceInstanceID: s.id,
+			OriginalID:  "pw-disruption-" + id,
+			Domain:      "maritime",
+			ObservedUTC: now,
+			Payload:     payload,
+		})
+		if len(records) >= maxDisruptions {
+			break
+		}
+	}
+	return records
 }
 
 func (s *Source) Start(ctx context.Context, output chan<- plugins.RawRecord) error {

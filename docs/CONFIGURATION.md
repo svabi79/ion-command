@@ -215,7 +215,7 @@ Additional fields by type:
 | `geography.cables` | `pollSeconds`, `cacheDirectory` | TeleGeography cable map, 6 h floor, removable cache. |
 | `geophysics.eonet` | `pollSeconds` | NASA EONET open events. |
 | `geophysics.gdacs` | `pollSeconds` | GDACS disaster alerts. |
-| `maritime.portwatch` | `pollSeconds` | IMF PortWatch chokepoints. |
+| `maritime.portwatch` | `pollSeconds` | IMF PortWatch chokepoints, daily transits, and recent disruptions. |
 | `weather.nhc` | `pollSeconds` | NOAA NHC active storm centres. Floor five minutes. |
 | `space.pads` | `pollSeconds`, `apiKey`, `broker`, `cacheDirectory` | Earth spaceports from Launch Library 2. Floor six hours. |
 | `humanitarian.hapi` | `apiKey`, `pollSeconds` | UNHCR refugee host/origin countries. **Requires an HDX HAPI app identifier** in `local.json`; refuse to start if enabled without one. |

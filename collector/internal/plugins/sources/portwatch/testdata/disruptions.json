@@ -1,0 +1,32 @@
+{
+  "features": [
+    {
+      "attributes": {
+        "eventid": 1000552,
+        "eventtype": "TC",
+        "eventname": "IDAI-19",
+        "alertlevel": "RED",
+        "country": "Mozambique",
+        "fromdate": 1552111200000,
+        "todate": 1552608000000,
+        "severitytext": "Hurricane/Typhoon",
+        "lat": -19.6,
+        "long": 34.8
+      }
+    },
+    {
+      "attributes": {
+        "eventid": 1000999,
+        "eventtype": "Conflict",
+        "eventname": "Red Sea",
+        "alertlevel": "RED",
+        "country": "Yemen",
+        "fromdate": 4070908800000,
+        "todate": 4073510400000,
+        "severitytext": "Shipping disruption",
+        "lat": 14.5,
+        "long": 42.8
+      }
+    }
+  ]
+}

@@ -36,7 +36,7 @@ messages itself — that is the domain's job.
 | `geography.cables` | TeleGeography submarine-cable map | HTTP poll | **on** | no | CC BY-NC-SA 3.0; removable on-disk cache |
 | `geophysics.eonet` | NASA EONET open natural events | HTTP poll | **on** | no | public NASA API |
 | `geophysics.gdacs` | GDACS disaster alerts | HTTP poll | **on** | no | public GeoJSON search |
-| `maritime.portwatch` | IMF PortWatch chokepoints and daily transits | HTTP poll | **on** | no | public ArcGIS FeatureServer |
+| `maritime.portwatch` | IMF PortWatch chokepoints, daily transits, and recent disruptions | HTTP poll | **on** | no | public ArcGIS FeatureServer |
 | `weather.nhc` | NOAA NHC active tropical-cyclone centres | HTTP poll | **on** | no | public domain; Atlantic and eastern Pacific only |
 | `space.pads` | Launch Library 2 Earth spaceports | HTTP poll | **on** | optional (`apiKey` as `Authorization: Token`) | daily floor; shares the LL2 15/hour budget |
 | `humanitarian.hapi` | UNHCR refugee totals via HDX HAPI (host and origin countries) | HTTP poll | **off** (needs an app identifier) | **yes** (identifier in `local.json`) | fail-closed without identifier; CC BY-IGO |

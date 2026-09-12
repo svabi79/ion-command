@@ -26,12 +26,7 @@ SOFTWARE.
 ### Third-party content
 
 The MIT grant above covers ION COMMAND's own source code and generated assets
-only, except where a file header says otherwise.
-
-A small number of collector helpers adapt World Monitor
-(https://github.com/koala73/worldmonitor) under AGPL-3.0-only. Those files
-carry an SPDX `AGPL-3.0-only` header. The rest of this tree stays MIT.
-See THIRD_PARTY_NOTICES.md and licenses/AGPL-3.0.txt.
+only.
 
 Bundled third-party content — including `collector/internal/cty/cty.dat`, NASA
 imagery fetched into `unreal/SourceAssets/NASA/` and the textures derived from
@@ -40,5 +35,4 @@ licensed by its respective owners. See THIRD_PARTY_NOTICES.md.
 
 Live data fetched at runtime is **not** covered by this licence and remains
 subject to each provider's own terms. Several sources permit non-commercial
-use only. AGPL permission to adapt World Monitor code does **not** grant
-commercial use of those feeds. See docs/DATA-SOURCES.md.
+use only. See docs/DATA-SOURCES.md.

@@ -20,14 +20,12 @@ superseded configurations, is in
 - **New geospatial sources** (`#10` and follow-on catalog). Launch Library 2,
   Open-Meteo, Natural Earth regions, TeleGeography submarine cables, NASA
   EONET, GDACS, gpsjam.org GNSS interference, OpenAQ (disabled until keyed),
-  IMF PortWatch chokepoints, NOAA NHC tropical-cyclone centres, Launch
+  IMF PortWatch chokepoints and recent disruptions, NOAA NHC tropical-cyclone centres, Launch
   Library 2 Earth spaceports, and HDX HAPI displacement (disabled until an
   app identifier is supplied). Each is a Go plugin against the upstream
-  API. Attribution credits those providers. [World Monitor](https://github.com/koala73/worldmonitor)
-  (AGPL-3.0) is an implementation reference; ION COMMAND does not vendor
-  that TypeScript app. PortWatch disruption query wiring is an AGPL-adapted
-  helper (`disruptions.go`). Upstream data licences still apply
-  independently.
+  API. Attribution credits those providers. Inspired by public OSINT
+  dashboards as a catalog of which providers exist; every plugin talks to
+  the upstream API.
 - **Smooth marker motion** (`#7`). Markers interpolate the last two fixes in
   `M_MarkerIcon` (velocity × time WPO) instead of hopping 1.6 km every two
   seconds. `headingprobe` now also serves a mover, a turner, and a hover.

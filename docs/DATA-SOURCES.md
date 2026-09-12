@@ -9,13 +9,6 @@ non-commercial only.
 > feeds. If you fork or redistribute, change the collector's User-Agent
 > (`ion-command-collector/0.1 (+https://github.com/svabi79/ion-command)`) to
 > identify your build, and set your own callsign where a source requires one.
->
-> **World Monitor** ([koala73/worldmonitor](https://github.com/koala73/worldmonitor),
-> AGPL-3.0-only) is an implementation reference for endpoint catalogs and
-> polling patterns. ION COMMAND does not vendor that app. A few Go helpers
-> adapt World Monitor query wiring and are themselves AGPL-3.0; see
-> [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md). That AGPL grant does
-> **not** relax any provider row below.
 
 ## Attribution
 
@@ -43,7 +36,7 @@ non-commercial only.
 | **NASA EONET** | Open natural events from NASA's Earth Observatory Natural Event Tracker. Public API; NASA does not endorse this project. | [eonet.gsfc.nasa.gov](https://eonet.gsfc.nasa.gov) |
 | **GDACS** | Disaster alerts from the Global Disaster Alert and Coordination System (European Commission / UN). Public GeoJSON search. | [gdacs.org](https://www.gdacs.org) |
 | **gpsjam.org** | Daily ADS-B-derived GNSS interference hexes. Public CSV; hex centres are decoded locally and are approximate at globe scale. | [gpsjam.org](https://gpsjam.org) |
-| **IMF PortWatch** | Maritime chokepoint locations, daily transit counts, and recent port/chokepoint disruption events from the IMF PortWatch public ArcGIS FeatureServer. Disruption query wiring was adapted from World Monitor (AGPL-3.0); the feed itself is IMF's. | [portwatch.imf.org](https://portwatch.imf.org) |
+| **IMF PortWatch** | Maritime chokepoint locations, daily transit counts, and recent disruption events from the IMF PortWatch public ArcGIS FeatureServer. | [portwatch.imf.org](https://portwatch.imf.org) |
 | **NOAA / NHC** | Active tropical-cyclone centres from the National Hurricane Center `CurrentStorms.json` feed (public domain, US Government work). Atlantic and eastern Pacific only; forecast cones stay out of scope until the renderer has Area geometry. NOAA does not endorse this project. | [nhc.noaa.gov](https://www.nhc.noaa.gov) |
 | **The Space Devs / Launch Library 2 (locations)** | Earth spaceport coordinates from the same Launch Library 2 catalogue as upcoming launches. Anonymous access is limited to 15 calls/hour; this source polls daily. | [ll.thespacedevs.com](https://ll.thespacedevs.com) |
 | **UNHCR / HDX HAPI** | Current-year refugee totals (population group REF, all ages and genders) from the OCHA Humanitarian API. Host and origin countries with at least 100,000 people are placed at public-domain country centroids. Requires a free app identifier (application name + email, not a secret). Licensed **CC BY-IGO**; credit UNHCR and HDX HAPI. Disabled until the operator supplies an identifier in `local.json`. | [hapi.humdata.org](https://hapi.humdata.org) · [HAPI docs](https://docs.humdata.org/build/hdx-apis/hapi/how-to-query-hapi) |

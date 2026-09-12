@@ -67,12 +67,10 @@ no public service can offer.
 Blocked on a decision about the interface the receiver exposes (file, socket,
 HTTP) and on which detection semantics are worth normalising.
 
-## Deferred leftovers (World Monitor catalog)
+## Deferred leftovers
 
-World Monitor ([koala73/worldmonitor](https://github.com/koala73/worldmonitor),
-AGPL-3.0-only) is an acceptable implementation reference. ION COMMAND still
-reimplements collector plugins in Go against upstream providers and does not
-vendor that TypeScript app. These leftovers stay deferred:
+These stay deferred (cones/rasters need renderer work; the rest need a
+cleaner licence or API than we have today):
 
 | Candidate | Why deferred |
 | --- | --- |
