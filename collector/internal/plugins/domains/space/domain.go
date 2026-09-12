@@ -33,6 +33,12 @@ func (d *Domain) ID() string     { return "domain.space" }
 func (d *Domain) Domain() string { return "space" }
 
 func (d *Domain) Normalize(_ context.Context, record plugins.RawRecord) ([]events.Envelope, error) {
+	var kind struct {
+		Kind string `json:"kind"`
+	}
+	if json.Unmarshal(record.Payload, &kind) == nil && kind.Kind == "pad" {
+		return d.normalizePad(record)
+	}
 	var raw rawLaunch
 	if err := json.Unmarshal(record.Payload, &raw); err != nil {
 		return nil, fmt.Errorf("decode launch record: %w", err)
@@ -72,5 +78,49 @@ func (d *Domain) Normalize(_ context.Context, record plugins.RawRecord) ([]event
 	}
 	measured := true
 	event.Quality.Measured = &measured
+	return []events.Envelope{event}, nil
+}
+
+func (d *Domain) normalizePad(record plugins.RawRecord) ([]events.Envelope, error) {
+	var raw struct {
+		PadID     string  `json:"padId"`
+		Name      string  `json:"name"`
+		Country   string  `json:"country"`
+		Latitude  float64 `json:"latitude"`
+		Longitude float64 `json:"longitude"`
+		Active    bool    `json:"active"`
+		Launches  int     `json:"launches"`
+	}
+	if err := json.Unmarshal(record.Payload, &raw); err != nil || raw.PadID == "" {
+		return nil, fmt.Errorf("decode space pad")
+	}
+	event := events.NewEnvelope(record.OriginalID, "space", "space.pad", events.MessageAnnotation,
+		events.SourceRef{PluginID: record.SourcePluginID, InstanceID: record.SourceInstanceID, OriginalID: record.OriginalID},
+		record.ObservedUTC)
+	event.EntityID = "space:pad:" + raw.PadID
+	event.Geometry = events.Point(raw.Longitude, raw.Latitude, 0)
+	validUntil := record.ObservedUTC.Add(30 * 24 * time.Hour)
+	event.Time.ValidUntilUTC = &validUntil
+	primary := raw.Country
+	if raw.Active {
+		if primary != "" {
+			primary += "  //  active"
+		} else {
+			primary = "active"
+		}
+	}
+	if raw.Launches > 0 {
+		if primary != "" {
+			primary += "  //  "
+		}
+		primary += fmt.Sprintf("%d launches", raw.Launches)
+	}
+	event.Properties = map[string]any{
+		"visual.icon":        "satellite",
+		"visual.markerScale": 0.85,
+		"display.title":      raw.Name,
+		"display.primary":    primary,
+		"display.secondary":  "spaceport",
+	}
 	return []events.Envelope{event}, nil
 }

@@ -216,6 +216,9 @@ Additional fields by type:
 | `geophysics.eonet` | `pollSeconds` | NASA EONET open events. |
 | `geophysics.gdacs` | `pollSeconds` | GDACS disaster alerts. |
 | `maritime.portwatch` | `pollSeconds` | IMF PortWatch chokepoints. |
+| `weather.nhc` | `pollSeconds` | NOAA NHC active storm centres. Floor five minutes. |
+| `space.pads` | `pollSeconds`, `apiKey`, `broker`, `cacheDirectory` | Earth spaceports from Launch Library 2. Floor six hours. |
+| `humanitarian.hapi` | `apiKey`, `pollSeconds` | UNHCR refugee host/origin countries. **Requires an HDX HAPI app identifier** in `local.json`; refuse to start if enabled without one. |
 | `hamradio.rbn` | `login` | Reverse Beacon Network telnet; **requires a real callsign**. Disabled by default. |
 | `aprs.is` | `login`, `filter`, `broker`, `latitude`/`longitude`/`radiusNm` | APRS-IS packet stream; **requires a real callsign**. Disabled by default. |
 | `wsjtx.udp` | `broker` (listen address) | Local WSJT-X UDP feed. |
@@ -312,6 +315,13 @@ carry secrets. Without credentials the source stays in `anon` mode. Lowering
 **OpenAQ (optional).** Same overlay: put an Explorer API key on
 `openaq-example`, then set `"enabled": true` on that source in `live.json`.
 The collector refuses to start if the source is enabled without a key.
+
+**HDX HAPI displacement (optional).** Mint an app identifier (application
+name + contact email, not a secret) from
+[HAPI's encode endpoint](https://hapi.humdata.org/api/v2/encode_app_identifier),
+put it on `hapi-displacement` as `apiKey` in `local.json`, then set
+`"enabled": true` on that source in `live.json`. The collector refuses to
+start if the source is enabled without an identifier.
 
 **Turn on recording** (`recording.enabled: true`) to capture a JSONL event log
 for later replay. Mind the volume — the live feeds produce several GB per hour;

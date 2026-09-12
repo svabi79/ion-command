@@ -1,0 +1,35 @@
+{
+  "count": 3,
+  "results": [
+    {
+      "id": 12,
+      "name": "Kennedy Space Center, USA",
+      "active": true,
+      "latitude": 28.608,
+      "longitude": -80.604,
+      "country": {"name": "United States", "alpha_3_code": "USA"},
+      "celestial_body": {"name": "Earth"},
+      "total_launch_count": 200
+    },
+    {
+      "id": 144,
+      "name": "Air launch to Suborbital flight",
+      "active": true,
+      "latitude": null,
+      "longitude": null,
+      "country": {"name": "Unknown", "alpha_3_code": "???"},
+      "celestial_body": {"name": "Earth"},
+      "total_launch_count": 86
+    },
+    {
+      "id": 99,
+      "name": "Moon Base",
+      "active": false,
+      "latitude": 0,
+      "longitude": 0,
+      "country": {"name": "Unknown", "alpha_3_code": "???"},
+      "celestial_body": {"name": "Moon"},
+      "total_launch_count": 0
+    }
+  ]
+}

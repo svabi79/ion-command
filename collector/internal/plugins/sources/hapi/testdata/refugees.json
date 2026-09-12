@@ -1,0 +1,8 @@
+{
+  "data": [
+    {"population": 2600000, "origin_location_code": "SYR", "origin_location_name": "Syria", "asylum_location_code": "TUR", "asylum_location_name": "Türkiye", "reference_period_start": "2025-01-01T00:00:00"},
+    {"population": 900000, "origin_location_code": "UKR", "origin_location_name": "Ukraine", "asylum_location_code": "DEU", "asylum_location_name": "Germany", "reference_period_start": "2025-01-01T00:00:00"},
+    {"population": 800000, "origin_location_code": "UKR", "origin_location_name": "Ukraine", "asylum_location_code": "POL", "asylum_location_name": "Poland", "reference_period_start": "2025-01-01T00:00:00"},
+    {"population": 50, "origin_location_code": "AFG", "origin_location_name": "Afghanistan", "asylum_location_code": "ALB", "asylum_location_name": "Albania", "reference_period_start": "2025-01-01T00:00:00"}
+  ]
+}

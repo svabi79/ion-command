@@ -37,6 +37,9 @@ messages itself — that is the domain's job.
 | `geophysics.eonet` | NASA EONET open natural events | HTTP poll | **on** | no | public NASA API |
 | `geophysics.gdacs` | GDACS disaster alerts | HTTP poll | **on** | no | public GeoJSON search |
 | `maritime.portwatch` | IMF PortWatch chokepoints and daily transits | HTTP poll | **on** | no | public ArcGIS FeatureServer |
+| `weather.nhc` | NOAA NHC active tropical-cyclone centres | HTTP poll | **on** | no | public domain; Atlantic and eastern Pacific only |
+| `space.pads` | Launch Library 2 Earth spaceports | HTTP poll | **on** | optional (`apiKey` as `Authorization: Token`) | daily floor; shares the LL2 15/hour budget |
+| `humanitarian.hapi` | UNHCR refugee totals via HDX HAPI (host and origin countries) | HTTP poll | **off** (needs an app identifier) | **yes** (identifier in `local.json`) | fail-closed without identifier; CC BY-IGO |
 | `hamradio.rbn` | Reverse Beacon Network | telnet | off | **yes** (your callsign) | no published licence |
 | `hamradio.dxcluster` | DX cluster spots (DXSpider / AR-Cluster / CC Cluster) | telnet | off | **yes** (your callsign) | no published licence; no single canonical node - address is configured |
 | `hamradio.wspr` | WSPR reception reports via wspr.live | HTTP poll | **on** | no | non-commercial use only; 20 req/min |
@@ -57,13 +60,14 @@ envelope. Domains own the vocabulary; nothing above them does.
 | `hamradio` | `radio.reception`, `radio.station` | `pskreporter.mqtt`, `hamradio.rbn`, `wsjtx.udp`, `hamradio.dxcluster`, `hamradio.wspr` |
 | `aprs` | `aprs.station`, `aprs.object` | `aprs.is` |
 | `aviation` | `aviation.aircraft`, `aviation.interference` | `aviation.adsb`, `aviation.opensky`, `aviation.gpsjam` |
-| `weather` | `weather.lightning`, `weather.observation`, `weather.airquality` | `lightning.blitzortung`, `weather.openmeteo`, `weather.openaq` |
+| `weather` | `weather.lightning`, `weather.observation`, `weather.airquality`, `weather.storm` | `lightning.blitzortung`, `weather.openmeteo`, `weather.openaq`, `weather.nhc` |
 | `spaceweather` | `spaceweather.state` | `spaceweather.swpc` |
 | `ionosphere` | `ionosphere.sounding` | `ionosonde.kc2g` |
 | `geophysics` | `geophysics.earthquake`, `geophysics.event` | `earthquake.usgs`, `geophysics.eonet`, `geophysics.gdacs` |
 | `orbital` | `orbital.position` | `orbital.celestrak` |
-| `space` | `space.launch` | `space.launchlibrary` |
+| `space` | `space.launch`, `space.pad` | `space.launchlibrary`, `space.pads` |
 | `geography` | `geography.region`, `geography.cable`, `geography.landing` | `geography.naturalearth`, `geography.cables` |
+| `humanitarian` | `humanitarian.displacement` | `humanitarian.hapi` |
 | `wildfire` | `wildfire.detection` | `wildfire.firms` |
 | `maritime` | `maritime.vessel`, `maritime.chokepoint` | `ais.aisstream`, `maritime.portwatch` |
 

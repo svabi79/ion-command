@@ -21,10 +21,13 @@
       "space.launch",
       "weather.observation",
       "weather.airquality",
+      "weather.storm",
       "geography.region",
       "geography.cable",
       "geography.landing",
-      "geophysics.event"
+      "geophysics.event",
+      "space.pad",
+      "humanitarian.displacement"
     ]
   },
   "recording": {
@@ -191,6 +194,24 @@
       "type": "maritime.portwatch",
       "enabled": true,
       "pollSeconds": 21600
+    },
+    {
+      "id": "nhc-storms",
+      "type": "weather.nhc",
+      "enabled": true,
+      "pollSeconds": 600
+    },
+    {
+      "id": "launchlibrary-pads",
+      "type": "space.pads",
+      "enabled": true,
+      "pollSeconds": 86400
+    },
+    {
+      "id": "hapi-displacement",
+      "type": "humanitarian.hapi",
+      "enabled": false,
+      "pollSeconds": 86400
     }
   ]
 }

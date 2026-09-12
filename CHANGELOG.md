@@ -20,8 +20,12 @@ superseded configurations, is in
 - **New geospatial sources** (`#10` and follow-on catalog). Launch Library 2,
   Open-Meteo, Natural Earth regions, TeleGeography submarine cables, NASA
   EONET, GDACS, gpsjam.org GNSS interference, OpenAQ (disabled until keyed),
-  and IMF PortWatch chokepoints. Each is a Go plugin against the upstream
-  API. Attribution credits those providers.
+  IMF PortWatch chokepoints, NOAA NHC tropical-cyclone centres, Launch
+  Library 2 Earth spaceports, and HDX HAPI displacement (disabled until an
+  app identifier is supplied). Each is a Go plugin against the upstream
+  API. Attribution credits those providers. Public OSINT dashboards were
+  used only as a catalog of which providers exist; no third-party
+  TypeScript was copied.
 - **Smooth marker motion** (`#7`). Markers interpolate the last two fixes in
   `M_MarkerIcon` (velocity × time WPO) instead of hopping 1.6 km every two
   seconds. `headingprobe` now also serves a mover, a turner, and a hover.

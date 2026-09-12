@@ -34,3 +34,20 @@ func TestLightningNormalizesAsGenericMeasuredPoint(t *testing.T) {
 		t.Fatalf("generic canonical point rejected: %v", err)
 	}
 }
+
+func TestStormNormalizes(t *testing.T) {
+	payload, _ := json.Marshal(map[string]any{
+		"kind": "storm", "stormId": "ep142026", "name": "Norbert", "classLabel": "Tropical Storm",
+		"intensityKt": 55.0, "pressureHpa": 996.0, "latitude": 17.2, "longitude": -126.6, "provider": "nhc",
+	})
+	messages, err := New().Normalize(context.Background(), plugins.RawRecord{
+		SourcePluginID: "nhc", SourceInstanceID: "t", OriginalID: "ep142026", Domain: "weather",
+		ObservedUTC: time.Now().UTC(), Payload: payload,
+	})
+	if err != nil || len(messages) != 1 || messages[0].SemanticType != "weather.storm" {
+		t.Fatalf("%v %#v", err, messages)
+	}
+	if err := messages[0].Validate(); err != nil {
+		t.Fatal(err)
+	}
+}

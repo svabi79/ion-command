@@ -9,6 +9,10 @@
     {
       "id": "openaq-example",
       "apiKey": "YOUR_OPENAQ_API_KEY"
+    },
+    {
+      "id": "hapi-displacement",
+      "apiKey": "YOUR_HDX_HAPI_APP_IDENTIFIER"
     }
   ]
 }

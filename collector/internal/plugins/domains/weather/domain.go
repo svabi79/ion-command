@@ -34,6 +34,8 @@ func (d *Domain) Normalize(_ context.Context, record plugins.RawRecord) ([]event
 			return d.normalizeObservation(record)
 		case "airquality":
 			return d.normalizeAirQuality(record)
+		case "storm":
+			return d.normalizeStorm(record)
 		}
 	}
 	var raw rawLightning
@@ -118,6 +120,51 @@ func (d *Domain) normalizeAirQuality(record plugins.RawRecord) ([]events.Envelop
 		"display.title":      title,
 		"display.primary":    raw.Parameter,
 		"display.secondary":  raw.Attribution,
+	}
+	measured := true
+	event.Quality.Measured = &measured
+	return []events.Envelope{event}, nil
+}
+
+func (d *Domain) normalizeStorm(record plugins.RawRecord) ([]events.Envelope, error) {
+	var raw struct {
+		StormID     string  `json:"stormId"`
+		Name        string  `json:"name"`
+		ClassLabel  string  `json:"classLabel"`
+		IntensityKt float64 `json:"intensityKt"`
+		PressureHpa float64 `json:"pressureHpa"`
+		Latitude    float64 `json:"latitude"`
+		Longitude   float64 `json:"longitude"`
+		Provider    string  `json:"provider"`
+	}
+	if err := json.Unmarshal(record.Payload, &raw); err != nil || raw.StormID == "" {
+		return nil, fmt.Errorf("decode weather storm")
+	}
+	event := events.NewEnvelope(record.OriginalID, "weather", "weather.storm", events.MessageObservation,
+		events.SourceRef{PluginID: record.SourcePluginID, InstanceID: record.SourceInstanceID, OriginalID: record.OriginalID},
+		record.ObservedUTC)
+	event.EntityID = "weather:storm:" + raw.StormID
+	event.Geometry = events.Point(raw.Longitude, raw.Latitude, 0)
+	validUntil := record.ObservedUTC.Add(12 * time.Hour)
+	event.Time.ValidUntilUTC = &validUntil
+	title := raw.Name
+	if raw.ClassLabel != "" {
+		title = raw.ClassLabel + " " + raw.Name
+	}
+	primary := fmt.Sprintf("%.0f kt", raw.IntensityKt)
+	if raw.PressureHpa > 0 {
+		primary = fmt.Sprintf("%.0f kt  //  %.0f hPa", raw.IntensityKt, raw.PressureHpa)
+	}
+	scale := 1.2 + raw.IntensityKt/80
+	if scale > 2.6 {
+		scale = 2.6
+	}
+	event.Properties = map[string]any{
+		"visual.icon":        "sounding",
+		"visual.markerScale": scale,
+		"display.title":      title,
+		"display.primary":    primary,
+		"display.secondary":  raw.Provider,
 	}
 	measured := true
 	event.Quality.Measured = &measured

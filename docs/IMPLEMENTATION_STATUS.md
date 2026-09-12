@@ -80,13 +80,15 @@ The component list is in [COMPONENTS.md](COMPONENTS.md) — not repeated here.
   otherwise). Token cache, refresh-before-expiry, single 401 retry, daily
   credit budget, and `Retry-After` are covered by httptest. A live OpenSky
   account was not available in this environment.
-- **Additional geospatial sources** (Launch Library 2, Open-Meteo, Natural
-  Earth, TeleGeography cables, NASA EONET, GDACS, gpsjam.org, OpenAQ,
-  IMF PortWatch) are implemented as Go source plugins against the upstream
-  APIs. OpenAQ ships disabled (needs a key). gpsjam hex centres are an
-  approximate independent H3 decode, honest at globe scale, not a surveyed
-  hex. Live fetches of the new HTTP sources were unit-tested against
-  fixtures, not against a long-running collector session.
+- **Additional geospatial sources** (Launch Library 2 upcoming launches and
+  Earth spaceports, Open-Meteo, Natural Earth, TeleGeography cables, NASA
+  EONET, GDACS, gpsjam.org, OpenAQ, IMF PortWatch, NOAA NHC storm centres,
+  HDX HAPI displacement) are implemented as Go source plugins against the
+  upstream APIs. OpenAQ and HAPI ship disabled (need an operator
+  identifier). gpsjam hex centres are an approximate independent H3 decode,
+  honest at globe scale, not a surveyed hex. Live fetches of the new HTTP
+  sources were unit-tested against fixtures, not against a long-running
+  collector session.
 - **Plugin manifests** under `plugins/` are incomplete descriptive metadata;
   the registry code is authoritative.
 

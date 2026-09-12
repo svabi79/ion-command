@@ -89,6 +89,7 @@ namespace
             {TEXT("geophysics"), TEXT("earthquake")},
             {TEXT("space"), TEXT("satellite")},
             {TEXT("geography"), TEXT("station")},
+            {TEXT("humanitarian"), TEXT("station")},
             {TEXT("maritime"), TEXT("vessel")},
             {TEXT("wildfire"), TEXT("wildfire")},
         };
