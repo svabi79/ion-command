@@ -13,8 +13,8 @@ func TestParseHexesKeepsMediumAndHigh(t *testing.T) {
 	csv := []byte("hex,count_good_aircraft,count_bad_aircraft\n" +
 		"84754e7ffffffff,20,8\n" +
 		"84754e7ffffffff,50,0\n" +
-		"84754e7ffffffff,2,1\n")
-	// first: 8/28 = 28% high; second low; third low sample
+		"84754e7ffffffff,1,0\n")
+	// first: 8/28 = 28% high; second 0% low; third below the aircraft floor
 	out := parseHexes(csv)
 	if len(out) != 1 {
 		t.Fatalf("got %d %#v", len(out), out)
