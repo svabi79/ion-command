@@ -12,6 +12,12 @@ superseded configurations, is in
 
 ### Fixed
 
+- **UE 5.8 package compile after `#14`.** `#14` committed SETTINGS/search
+  on `EKeys::Enter || EKeys::NumPadEnter`. `NumPadEnter` is not a member
+  of `EKeys` on 5.8 (`InputCoreTypes.h` has `Enter` and `NumPadZero`–
+  `NumPadNine` only), so `tools/package.ps1` / UAT exited 6. Commit stays
+  on `EKeys::Enter`. The other keys in that file (`BackSpace`, `Escape`,
+  `Up`/`Down`, `Slash`, `Hyphen`, `Underscore`, `SpaceBar`) are valid.
 - **Detail imagery felt serial even with a warm TileCache.** `BeginRegion`
   decoded every cached tile on the game thread and fired every miss as an
   HTTP request at once. A wall-resolution window is hundreds of tiles; that
