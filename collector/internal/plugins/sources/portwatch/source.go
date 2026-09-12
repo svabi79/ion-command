@@ -176,6 +176,7 @@ func (s *Source) sample(ctx context.Context) ([]plugins.RawRecord, error) {
 			break
 		}
 	}
+	records = append(records, s.sampleDisruptions(ctx, now)...)
 	return records, nil
 }
 

@@ -131,6 +131,9 @@ func (d *Domain) Normalize(_ context.Context, record plugins.RawRecord) ([]event
 	if kind.Kind == "chokepoint" {
 		return d.normalizeChokepoint(record)
 	}
+	if kind.Kind == "disruption" {
+		return d.normalizeDisruption(record)
+	}
 	if kind.MMSI <= 0 {
 		return nil, fmt.Errorf("ais record requires a positive mmsi")
 	}
@@ -417,6 +420,42 @@ func (d *Domain) normalizeChokepoint(record plugins.RawRecord) ([]events.Envelop
 		"visual.markerScale": 1.6,
 		"display.title":      raw.Name,
 		"display.primary":    fmt.Sprintf("%.0f daily transits", raw.Transits),
+	}
+	measured := true
+	event.Quality.Measured = &measured
+	return []events.Envelope{event}, nil
+}
+
+func (d *Domain) normalizeDisruption(record plugins.RawRecord) ([]events.Envelope, error) {
+	var raw struct {
+		EventID    string  `json:"eventId"`
+		Title      string  `json:"title"`
+		Category   string  `json:"category"`
+		AlertLevel string  `json:"alertLevel"`
+		Country    string  `json:"country"`
+		Latitude   float64 `json:"latitude"`
+		Longitude  float64 `json:"longitude"`
+	}
+	if err := json.Unmarshal(record.Payload, &raw); err != nil || raw.EventID == "" {
+		return nil, fmt.Errorf("decode maritime disruption")
+	}
+	event := events.NewEnvelope(record.OriginalID, "maritime", "maritime.disruption", events.MessageObservation,
+		events.SourceRef{PluginID: record.SourcePluginID, InstanceID: record.SourceInstanceID, OriginalID: record.OriginalID},
+		record.ObservedUTC)
+	event.EntityID = "maritime:disruption:" + raw.EventID
+	event.Geometry = events.Point(raw.Longitude, raw.Latitude, 0)
+	validUntil := record.ObservedUTC.Add(36 * time.Hour)
+	event.Time.ValidUntilUTC = &validUntil
+	primary := raw.Category
+	if raw.AlertLevel != "" {
+		primary = raw.AlertLevel + "  //  " + raw.Category
+	}
+	event.Properties = map[string]any{
+		"visual.icon":        "vessel",
+		"visual.markerScale": 1.4,
+		"display.title":      raw.Title,
+		"display.primary":    primary,
+		"display.secondary":  raw.Country,
 	}
 	measured := true
 	event.Quality.Measured = &measured

@@ -88,7 +88,9 @@ The component list is in [COMPONENTS.md](COMPONENTS.md) — not repeated here.
   identifier). gpsjam hex centres are an approximate independent H3 decode,
   honest at globe scale, not a surveyed hex. Live fetches of the new HTTP
   sources were unit-tested against fixtures, not against a long-running
-  collector session.
+  collector session. World Monitor (AGPL-3.0) is an allowed implementation
+  reference; see THIRD_PARTY_NOTICES.md. PortWatch now also emits recent
+  disruption events from the public IMF FeatureServer.
 - **Plugin manifests** under `plugins/` are incomplete descriptive metadata;
   the registry code is authoritative.
 

@@ -69,14 +69,17 @@ HTTP) and on which detection semantics are worth normalising.
 
 ## Deferred leftovers (World Monitor catalog)
 
-Mined as ideas only; not copied. These were deliberately not shipped:
+World Monitor ([koala73/worldmonitor](https://github.com/koala73/worldmonitor),
+AGPL-3.0-only) is an acceptable implementation reference. ION COMMAND still
+reimplements collector plugins in Go against upstream providers and does not
+vendor that TypeScript app. These leftovers stay deferred:
 
 | Candidate | Why deferred |
 | --- | --- |
 | ReliefWeb disasters | API requires a pre-approved `appname` since November 2025; overlaps GDACS/EONET |
 | ACLED conflict events | Keyed + terms; only acceptable as `local.json` fail-closed, and the globe already has GDACS |
 | RainViewer radar | Needs `Field` / raster geometry; terms not a clean hobby overlay |
-| Nuclear facilities / undersea pipelines | No properly licensed, attributable, removable global point bundle found |
+| Nuclear facilities / undersea pipelines | No properly licensed, attributable, removable global point bundle found. GEM oil/gas trackers are CC BY 4.0 but download is registration-gated and operator-mediated — not a runtime fetch |
 | JMA / JTWC western-Pacific centres | No stable documented JSON comparable to NHC `CurrentStorms.json` |
 | WMO SWIC CAP list | `wmo_all.json` has no coordinates without a second lookup |
 | News / Telegram / webcams / markets | Out of product scope |

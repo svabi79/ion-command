@@ -23,9 +23,11 @@ superseded configurations, is in
   IMF PortWatch chokepoints, NOAA NHC tropical-cyclone centres, Launch
   Library 2 Earth spaceports, and HDX HAPI displacement (disabled until an
   app identifier is supplied). Each is a Go plugin against the upstream
-  API. Attribution credits those providers. Public OSINT dashboards were
-  used only as a catalog of which providers exist; no third-party
-  TypeScript was copied.
+  API. Attribution credits those providers. [World Monitor](https://github.com/koala73/worldmonitor)
+  (AGPL-3.0) is an implementation reference; ION COMMAND does not vendor
+  that TypeScript app. PortWatch disruption query wiring is an AGPL-adapted
+  helper (`disruptions.go`). Upstream data licences still apply
+  independently.
 - **Smooth marker motion** (`#7`). Markers interpolate the last two fixes in
   `M_MarkerIcon` (velocity × time WPO) instead of hopping 1.6 km every two
   seconds. `headingprobe` now also serves a mover, a turner, and a hover.

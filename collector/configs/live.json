@@ -18,6 +18,7 @@
       "aviation.interference",
       "maritime.vessel",
       "maritime.chokepoint",
+      "maritime.disruption",
       "space.launch",
       "weather.observation",
       "weather.airquality",

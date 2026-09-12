@@ -69,7 +69,7 @@ envelope. Domains own the vocabulary; nothing above them does.
 | `geography` | `geography.region`, `geography.cable`, `geography.landing` | `geography.naturalearth`, `geography.cables` |
 | `humanitarian` | `humanitarian.displacement` | `humanitarian.hapi` |
 | `wildfire` | `wildfire.detection` | `wildfire.firms` |
-| `maritime` | `maritime.vessel`, `maritime.chokepoint` | `ais.aisstream`, `maritime.portwatch` |
+| `maritime` | `maritime.vessel`, `maritime.chokepoint`, `maritime.disruption` | `ais.aisstream`, `maritime.portwatch` |
 
 ## Context plugins
 

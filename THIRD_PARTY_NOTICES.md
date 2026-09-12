@@ -11,6 +11,33 @@ remains subject to each provider's own terms; see
 
 ---
 
+## World Monitor (AGPL-3.0-only)
+
+[koala73/worldmonitor](https://github.com/koala73/worldmonitor) is licensed
+**AGPL-3.0-only**. ION COMMAND does **not** vendor that TypeScript
+application. Collector plugins are Go reimplementations against the upstream
+providers. World Monitor's public docs, attribution tables, map-layer
+catalog, and seed-script endpoint wiring were used as an implementation
+reference (which providers exist, how they poll/cache, and a few ArcGIS
+query details).
+
+Files that adapt a World Monitor helper carry
+`SPDX-License-Identifier: AGPL-3.0-only` in their header. The full licence
+text is in [licenses/AGPL-3.0.txt](licenses/AGPL-3.0.txt).
+
+Currently adapted:
+
+- `collector/internal/plugins/sources/portwatch/disruptions.go` — IMF
+  PortWatch disruption FeatureServer query (timestamp literal and
+  `todate IS NULL` means still-active), from
+  `scripts/seed-portwatch-disruptions.mjs`.
+
+ION COMMAND's own code remains MIT unless a file header says otherwise.
+**AGPL on that reference code does not change any upstream data licence**
+(CC BY-NC-SA, OpenSky non-profit, Blitzortung non-commercial, and so on).
+
+---
+
 ## Unreal Engine
 
 The client is built with Unreal Engine 5. Unreal® is a trademark or registered
