@@ -39,7 +39,7 @@ bool AIonCommandPlayerController::InputKey(const FInputKeyEventArgs& Params)
         // receives the keystroke depends on which one is open.
         const bool bSearchActive = Cockpit->IsSearchActive();
         if (Key == EKeys::BackSpace) { bSearchActive ? Cockpit->SearchTextControl(0) : Cockpit->SettingsTextControl(0); return true; }
-        if (Key == EKeys::Enter) { bSearchActive ? Cockpit->SearchTextControl(1) : Cockpit->SettingsTextControl(1); return true; }
+        if (Key == EKeys::Enter || Key == EKeys::NumPadEnter) { bSearchActive ? Cockpit->SearchTextControl(1) : Cockpit->SettingsTextControl(1); return true; }
         if (Key == EKeys::Escape) { bSearchActive ? Cockpit->SearchTextControl(2) : Cockpit->SettingsTextControl(2); return true; }
         if (bSearchActive)
         {

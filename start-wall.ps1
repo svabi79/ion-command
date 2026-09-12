@@ -8,9 +8,9 @@
 #
 # Options:
 #   -ResX / -ResY        wall resolution (default 5120x1440)
-#   -Callsign/-Locator   write an own-station override for the packaged client
-#                        (packaging deletes it); otherwise set them in the
-#                        in-app SETTINGS panel, which persists them itself.
+#   -Callsign/-Locator   write Saved/Config/IonOperator.ini for the packaged
+#                        client (packaging deletes Saved/); otherwise set them
+#                        in the in-app SETTINGS panel, which persists them.
 #   -ShowDeck            restore the diegetic console panels
 param(
     [int]$ResX = 5120,
@@ -24,17 +24,18 @@ $ErrorActionPreference = 'Stop'
 $repo      = $PSScriptRoot
 $collector = Join-Path $repo 'collector\bin\ion-collector.exe'
 $client    = Join-Path $repo 'dist\windows\IonCommand.exe'
-$configDir = Join-Path $repo 'dist\windows\IonCommand\Saved\Config\Windows'
 
 # live.json is the source list; gitignored local.json overlays secrets.
 $configName = 'configs/live.json'
 
 # Only write the station override when explicitly asked; the settings panel
-# persists callsign/locator on its own.
+# persists callsign/locator on its own into IonOperator.ini (NOT the engine
+# Game.ini, which Unreal rewrites on shutdown).
 if ($Callsign -and $Locator) {
-    New-Item -ItemType Directory -Path $configDir -Force | Out-Null
+    $operatorDir = Join-Path $repo 'dist\windows\IonCommand\Saved\Config'
+    New-Item -ItemType Directory -Path $operatorDir -Force | Out-Null
     [System.IO.File]::WriteAllText(
-        (Join-Path $configDir 'Game.ini'),
+        (Join-Path $operatorDir 'IonOperator.ini'),
         "[IonCommand.Station]`nCallsign=$Callsign`nLocator=$Locator`n",
         (New-Object System.Text.UTF8Encoding($false)))
     Write-Host "Own station set to $Callsign / $Locator"

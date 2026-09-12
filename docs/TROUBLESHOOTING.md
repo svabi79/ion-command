@@ -91,10 +91,13 @@ logs a warning. `-IonNoLiveClouds` forces the offline texture.
 ## My callsign / grid does not stick
 
 Set them in **O → SETTINGS** (click the row, type, **Enter**). They are written
-to `Saved\Config\Windows\Game.ini` next to the client.
+to `Saved\Config\IonOperator.ini` next to the client, not the engine's
+`Saved\Config\Windows\Game.ini` (that file is rewritten on shutdown and the
+station section is dropped).
 
-If you are running from a self-built package: **packaging deletes that file**,
-so re-apply after every package (the shipped launcher writes it for you).
+If you are running from a self-built package: packaging deletes `Saved/`, so
+re-apply after every package (or pass `-Callsign`/`-Locator` to `start-wall.ps1`,
+which writes `IonOperator.ini` for you).
 
 ## Typing in the settings panel toggles layers
 

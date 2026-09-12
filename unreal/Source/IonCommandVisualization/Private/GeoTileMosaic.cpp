@@ -248,6 +248,8 @@ void UGeoTileMosaic::BeginRegion(int32 Level, int32 ColMin, int32 RowMin)
 
     ExpectedTiles = Fetches.Num();
     PendingTiles = ExpectedTiles;
+    CancelInFlight();
+    JobQueue.Reset();
     if (ExpectedTiles == 0)
     {
         Coverage = 1.0f;
@@ -255,8 +257,18 @@ void UGeoTileMosaic::BeginRegion(int32 Level, int32 ColMin, int32 RowMin)
     }
     for (const FTileFetch& Fetch : Fetches)
     {
-        RequestTile(Fetch.Layer, Fetch.Level, Fetch.Col, Fetch.Row);
+        EnqueueTile(Fetch.Layer, Fetch.Level, Fetch.Col, Fetch.Row);
     }
+    // Warm tiles paint first so a populated TileCache fills the window
+    // before the cold downloads occupy the HTTP slots.
+    JobQueue.StableSort([](const FTileJob& A, const FTileJob& B) { return static_cast<int32>(A.bCacheHit) > static_cast<int32>(B.bCacheHit); });
+    int32 Warm = 0;
+    for (const FTileJob& Job : JobQueue)
+    {
+        Warm += Job.bCacheHit ? 1 : 0;
+    }
+    UE_LOG(LogTemp, Display, TEXT("ION COMMAND tile cache: window L%d, %d tiles (%d warm, %d fetch)"),
+        Level, ExpectedTiles, Warm, ExpectedTiles - Warm);
 }
 
 int64 UGeoTileMosaic::TrimCache(int64 BudgetBytes)
@@ -343,10 +355,45 @@ int64 UGeoTileMosaic::TrimCache(int64 BudgetBytes)
     return Reclaimed;
 }
 
+FString UGeoTileMosaic::MakeCacheRelativePath(const FString& CacheName, int32 Level, int32 Col, int32 Row,
+                                              const FString& Extension)
+{
+    return FString(TEXT("TileCache")) / CacheName /
+        FString::Printf(TEXT("%d_%d_%d.%s"), Level, Row, Col, *Extension);
+}
+
 FString UGeoTileMosaic::CacheFilePath(const FGeoTileLayer& Layer, int32 Level, int32 Col, int32 Row) const
 {
-    return FPaths::ProjectSavedDir() / TEXT("TileCache") / Layer.CacheName /
-        FString::Printf(TEXT("%d_%d_%d.%s"), Level, Row, Col, *Layer.Extension);
+    return FPaths::ConvertRelativePathToFull(
+        FPaths::ProjectSavedDir() / MakeCacheRelativePath(Layer.CacheName, Level, Col, Row, Layer.Extension));
+}
+
+FString UGeoTileMosaic::ExistingCachePath(const FGeoTileLayer& Layer, int32 Level, int32 Col, int32 Row) const
+{
+    const FString Primary = CacheFilePath(Layer, Level, Col, Row);
+    if (IFileManager::Get().FileExists(*Primary))
+    {
+        return Primary;
+    }
+    FString AltExt;
+    if (Layer.Extension == TEXT("jpeg"))
+    {
+        AltExt = TEXT("jpg");
+    }
+    else if (Layer.Extension == TEXT("jpg"))
+    {
+        AltExt = TEXT("jpeg");
+    }
+    if (!AltExt.IsEmpty())
+    {
+        const FString Alt = FPaths::ConvertRelativePathToFull(
+            FPaths::ProjectSavedDir() / MakeCacheRelativePath(Layer.CacheName, Level, Col, Row, AltExt));
+        if (IFileManager::Get().FileExists(*Alt))
+        {
+            return Alt;
+        }
+    }
+    return FString();
 }
 
 void UGeoTileMosaic::TileResolved()
@@ -357,44 +404,125 @@ void UGeoTileMosaic::TileResolved()
         : 1.0f;
 }
 
-void UGeoTileMosaic::RequestTile(const FGeoTileLayer& Layer, int32 Level, int32 Col, int32 Row)
+void UGeoTileMosaic::DecidePumpBudget(int32 CachedWaiting, int32 DownloadsWaiting, int32 InFlightDownloads,
+                                      int32& OutCacheReads, int32& OutDownloadStarts)
 {
-    const uint32 Serial = RegionSerial;
+    OutCacheReads = FMath::Clamp(CachedWaiting, 0, MaxCacheLoadsPerPump);
+    const int32 Room = FMath::Max(0, MaxInFlightDownloads - FMath::Max(0, InFlightDownloads));
+    OutDownloadStarts = FMath::Clamp(DownloadsWaiting, 0, Room);
+}
 
-    // Disk cache first: the operator returns to the same places, and a
-    // restart should not re-fetch what is already here.
-    const FString CachePath = CacheFilePath(Layer, Level, Col, Row);
-    TArray<uint8> Cached;
-    if (FFileHelper::LoadFileToArray(Cached, *CachePath, FILEREAD_Silent) && Cached.Num() > 0)
+void UGeoTileMosaic::RememberCache(const FString& Path, const TArray<uint8>& Bytes)
+{
+    if (Path.IsEmpty() || Bytes.Num() == 0)
     {
-        CompositeTile(Cached, Layer, Level, Col, Row);
-        TileResolved();
         return;
     }
+    if (TArray<uint8>* Existing = MemoryCache.Find(Path))
+    {
+        *Existing = Bytes;
+        MemoryCacheOrder.RemoveSingle(Path);
+        MemoryCacheOrder.Add(Path);
+        return;
+    }
+    while (MemoryCache.Num() >= MemoryCacheLimit && MemoryCacheOrder.Num() > 0)
+    {
+        MemoryCache.Remove(MemoryCacheOrder[0]);
+        MemoryCacheOrder.RemoveAt(0);
+    }
+    MemoryCache.Add(Path, Bytes);
+    MemoryCacheOrder.Add(Path);
+}
 
-    FString Url = Layer.UrlTemplate;
-    Url.ReplaceInline(TEXT("{z}"), *FString::FromInt(Level));
-    Url.ReplaceInline(TEXT("{x}"), *FString::FromInt(Col));
-    Url.ReplaceInline(TEXT("{y}"), *FString::FromInt(Row));
+bool UGeoTileMosaic::RecallCache(const FString& Path, TArray<uint8>& OutBytes) const
+{
+    if (const TArray<uint8>* Found = MemoryCache.Find(Path))
+    {
+        OutBytes = *Found;
+        return OutBytes.Num() > 0;
+    }
+    return false;
+}
 
+void UGeoTileMosaic::CancelInFlight()
+{
+    TArray<TSharedPtr<IHttpRequest, ESPMode::ThreadSafe>> Snapshot = MoveTemp(InFlightRequests);
+    InFlightRequests.Reset();
+    for (const TSharedPtr<IHttpRequest, ESPMode::ThreadSafe>& Request : Snapshot)
+    {
+        if (Request.IsValid())
+        {
+            Request->CancelRequest();
+        }
+    }
+}
+
+void UGeoTileMosaic::EnqueueTile(const FGeoTileLayer& Layer, int32 Level, int32 Col, int32 Row)
+{
+    FTileJob Job;
+    Job.Layer = Layer;
+    Job.Level = Level;
+    Job.Col = Col;
+    Job.Row = Row;
+    Job.Serial = RegionSerial;
+    Job.CachePath = CacheFilePath(Layer, Level, Col, Row);
+    const FString Existing = ExistingCachePath(Layer, Level, Col, Row);
+    Job.bCacheHit = MemoryCache.Contains(Job.CachePath) || MemoryCache.Contains(Existing) || !Existing.IsEmpty();
+    Job.Url = Layer.UrlTemplate;
+    Job.Url.ReplaceInline(TEXT("{z}"), *FString::FromInt(Level));
+    Job.Url.ReplaceInline(TEXT("{x}"), *FString::FromInt(Col));
+    Job.Url.ReplaceInline(TEXT("{y}"), *FString::FromInt(Row));
+    JobQueue.Add(MoveTemp(Job));
+}
+
+bool UGeoTileMosaic::LoadAndComposite(const FGeoTileLayer& Layer, int32 Level, int32 Col, int32 Row, const FString& CachePath)
+{
+    TArray<uint8> Bytes;
+    if (!RecallCache(CachePath, Bytes))
+    {
+        const FString Existing = ExistingCachePath(Layer, Level, Col, Row);
+        const FString Path = !Existing.IsEmpty() ? Existing : CachePath;
+        if (!FFileHelper::LoadFileToArray(Bytes, *Path, FILEREAD_Silent) || Bytes.Num() == 0)
+        {
+            return false;
+        }
+        RememberCache(CachePath, Bytes);
+        if (Path != CachePath)
+        {
+            RememberCache(Path, Bytes);
+        }
+    }
+    CompositeTile(Bytes, Layer, Level, Col, Row);
+    return true;
+}
+
+void UGeoTileMosaic::StartDownload(const FGeoTileLayer& Layer, int32 Level, int32 Col, int32 Row, uint32 Serial,
+                                  const FString& CachePath, const FString& Url)
+{
     const TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = FHttpModule::Get().CreateRequest();
     Request->SetURL(Url);
     Request->SetVerb(TEXT("GET"));
-    Request->SetTimeout(45.0f);
+    Request->SetTimeout(30.0f);
+    Request->SetHeader(TEXT("User-Agent"), TEXT("IONCOMMAND/0.1 (tile cache)"));
+    Request->SetHeader(TEXT("Accept"), TEXT("image/jpeg,image/png,*/*"));
     TWeakObjectPtr<UGeoTileMosaic> WeakThis(this);
     const FGeoTileLayer LayerCopy = Layer;
+    const TSharedPtr<IHttpRequest, ESPMode::ThreadSafe> Held = Request;
+    InFlightRequests.Add(Held);
     Request->OnProcessRequestComplete().BindLambda(
-        [WeakThis, LayerCopy, Level, Col, Row, Serial, CachePath](FHttpRequestPtr, FHttpResponsePtr Response, bool bConnected)
+        [WeakThis, LayerCopy, Level, Col, Row, Serial, CachePath, Held](FHttpRequestPtr, FHttpResponsePtr Response, bool bConnected)
         {
             if (!WeakThis.IsValid())
             {
                 return;
             }
             UGeoTileMosaic* Self = WeakThis.Get();
+            Self->InFlightRequests.Remove(Held);
             if (bConnected && Response.IsValid() && Response->GetResponseCode() == 200)
             {
                 const TArray<uint8>& Bytes = Response->GetContent();
                 FFileHelper::SaveArrayToFile(Bytes, *CachePath);
+                Self->RememberCache(CachePath, Bytes);
                 // Drop tiles from a region the camera has already left:
                 // compositing them would smear the old place over the new.
                 if (Serial == Self->RegionSerial)
@@ -409,7 +537,79 @@ void UGeoTileMosaic::RequestTile(const FGeoTileLayer& Layer, int32 Level, int32 
                 Self->TileResolved();
             }
         });
-    Request->ProcessRequest();
+    if (!Request->ProcessRequest())
+    {
+        InFlightRequests.Remove(Held);
+        if (Serial == RegionSerial)
+        {
+            TileResolved();
+        }
+    }
+}
+
+void UGeoTileMosaic::PumpWork()
+{
+    if (JobQueue.Num() == 0)
+    {
+        return;
+    }
+    int32 CachedWaiting = 0;
+    int32 DownloadsWaiting = 0;
+    for (const FTileJob& Job : JobQueue)
+    {
+        if (Job.Serial != RegionSerial)
+        {
+            continue;
+        }
+        if (Job.bCacheHit)
+        {
+            ++CachedWaiting;
+        }
+        else
+        {
+            ++DownloadsWaiting;
+        }
+    }
+    int32 CacheReads = 0;
+    int32 DownloadStarts = 0;
+    DecidePumpBudget(CachedWaiting, DownloadsWaiting, InFlightRequests.Num(), CacheReads, DownloadStarts);
+
+    for (int32 Index = 0; Index < JobQueue.Num() && (CacheReads > 0 || DownloadStarts > 0);)
+    {
+        const FTileJob Job = JobQueue[Index];
+        if (Job.Serial != RegionSerial)
+        {
+            JobQueue.RemoveAt(Index);
+            continue;
+        }
+        if (Job.bCacheHit)
+        {
+            if (CacheReads == 0)
+            {
+                ++Index;
+                continue;
+            }
+            JobQueue.RemoveAt(Index);
+            --CacheReads;
+            if (LoadAndComposite(Job.Layer, Job.Level, Job.Col, Job.Row, Job.CachePath))
+            {
+                TileResolved();
+            }
+            else
+            {
+                StartDownload(Job.Layer, Job.Level, Job.Col, Job.Row, Job.Serial, Job.CachePath, Job.Url);
+            }
+            continue;
+        }
+        if (DownloadStarts == 0)
+        {
+            ++Index;
+            continue;
+        }
+        JobQueue.RemoveAt(Index);
+        --DownloadStarts;
+        StartDownload(Job.Layer, Job.Level, Job.Col, Job.Row, Job.Serial, Job.CachePath, Job.Url);
+    }
 }
 
 void UGeoTileMosaic::EnsureTexture()
@@ -601,6 +801,11 @@ EGeoMosaicUploadDecision UGeoTileMosaic::DecideUpload(bool bDirty, bool bResourc
 
 void UGeoTileMosaic::FlushPendingUpload()
 {
+    // Drain the tile queue on the same once-per-frame tick as the GPU copy.
+    // Cache hits used to decode the whole region inside BeginRegion, which
+    // froze the game thread; downloads used to all call ProcessRequest at
+    // once and then sit behind Unreal's per-host limit.
+    PumpWork();
     if (bDirty && !Texture)
     {
         EnsureTexture();
@@ -690,6 +895,8 @@ void UGeoTileMosaic::BeginDestroy()
     // Flush it before UTexture tears that resource down, or teardown
     // itself becomes the same Copy Engine page-fault as the old per-tile
     // UpdateResource path.
+    CancelInFlight();
+    JobQueue.Reset();
     if (bUploadInFlight && IsInGameThread())
     {
         FlushRenderingCommands();

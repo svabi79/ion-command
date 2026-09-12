@@ -245,7 +245,9 @@ private:
     bool bSettingsOpen = false;
     bool bSettingsLoaded = false;
     int32 EditingRow = -1; // index of the text row being edited, -1 = none
+    FString EditingKey;    // "callsign" / "grid" — not the hit-rect index
     FString EditBuffer;
+    bool bReplaceOnNextChar = false;
     void DrawSettings(float Scale, float Alpha);
     bool HandleSettingsClick(const FVector2D& ScreenPosition);
     void CycleSetting(const FString& Key);

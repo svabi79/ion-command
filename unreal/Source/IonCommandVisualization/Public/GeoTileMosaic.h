@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Interfaces/IHttpRequest.h"
 #include "UObject/Object.h"
 #include "GeoTileMosaic.generated.h"
 
@@ -170,6 +171,25 @@ public:
     static EGeoMosaicUploadDecision DecideUpload(bool bDirty, bool bResourceReady, bool bUploadInFlight,
                                                  int64 CpuPixels, int64 ExpectedPixels);
 
+    // How many disk/memory cache reads and new HTTP starts one pump may
+    // issue. Cache work is cheaper and paints first; downloads stay capped
+    // so a region change cannot flood the host (Unreal's default per-server
+    // limit is low, and abandoned requests used to occupy it).
+    static constexpr int32 MaxCacheLoadsPerPump = 8;
+    static constexpr int32 MaxInFlightDownloads = 8;
+    static constexpr int32 MemoryCacheLimit = 256;
+
+    static void DecidePumpBudget(int32 CachedWaiting, int32 DownloadsWaiting, int32 InFlightDownloads,
+                                 int32& OutCacheReads, int32& OutDownloadStarts);
+
+    // Stable on-disk name for one tile. Tests lock the key so a warm
+    // TileCache is actually consulted.
+    static FString MakeCacheRelativePath(const FString& CacheName, int32 Level, int32 Col, int32 Row,
+                                         const FString& Extension);
+
+    // Drain queued cache reads and start downloads. Safe every frame.
+    void PumpWork();
+
     virtual void BeginDestroy() override;
 
 private:
@@ -196,13 +216,20 @@ private:
     static int32 LayerLevelForResolution(const FGeoTileLayer& Layer, double TargetDegreesPerPixel);
     int32 ChooseLevel(double SpanDegrees, double SpanLongitudeDegrees, int32 ScreenHeightPixels) const;
     void BeginRegion(int32 Level, int32 ColMin, int32 RowMin);
-    void RequestTile(const FGeoTileLayer& Layer, int32 Level, int32 Col, int32 Row);
+    void EnqueueTile(const FGeoTileLayer& Layer, int32 Level, int32 Col, int32 Row);
+    void StartDownload(const FGeoTileLayer& Layer, int32 Level, int32 Col, int32 Row, uint32 Serial,
+                       const FString& CachePath, const FString& Url);
+    bool LoadAndComposite(const FGeoTileLayer& Layer, int32 Level, int32 Col, int32 Row, const FString& CachePath);
+    void CancelInFlight();
+    void RememberCache(const FString& Path, const TArray<uint8>& Bytes);
+    bool RecallCache(const FString& Path, TArray<uint8>& OutBytes) const;
     // Paints the tile into whichever part of the window it covers, mapping
     // through latitude/longitude so a mercator tile lands in the right rows.
     void CompositeTile(const TArray<uint8>& Bytes, const FGeoTileLayer& Layer, int32 Level, int32 Col, int32 Row);
     void TileResolved();
     void EnsureTexture();
     FString CacheFilePath(const FGeoTileLayer& Layer, int32 Level, int32 Col, int32 Row) const;
+    FString ExistingCachePath(const FGeoTileLayer& Layer, int32 Level, int32 Col, int32 Row) const;
 
     UPROPERTY() TArray<FGeoTileLayer> Layers;
     UPROPERTY(Transient) TObjectPtr<UTexture2D> Texture;
@@ -235,4 +262,20 @@ private:
     // A second copy must not start until that one has finished reading it,
     // and the texture must not be destroyed in the meantime.
     bool bUploadInFlight = false;
+
+    struct FTileJob
+    {
+        FGeoTileLayer Layer;
+        int32 Level = 0;
+        int32 Col = 0;
+        int32 Row = 0;
+        uint32 Serial = 0;
+        bool bCacheHit = false;
+        FString CachePath;
+        FString Url;
+    };
+    TArray<FTileJob> JobQueue;
+    TArray<TSharedPtr<IHttpRequest, ESPMode::ThreadSafe>> InFlightRequests;
+    TMap<FString, TArray<uint8>> MemoryCache;
+    TArray<FString> MemoryCacheOrder;
 };
