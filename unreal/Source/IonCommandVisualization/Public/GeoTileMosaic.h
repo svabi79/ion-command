@@ -68,6 +68,18 @@ struct FGeoTileLayer
     UPROPERTY() bool bMayBeSparse = false;
 };
 
+// Whether the mosaic may copy its CPU window onto the existing GPU texture.
+// Kept as a pure function so the Copy-Engine safety rules can be tested
+// without an RHI: a bad buffer is skipped, a busy copy is retried, and
+// nothing is uploaded unless the destination resource is already alive.
+enum class EGeoMosaicUploadDecision : uint8
+{
+    NoWork,
+    RetryLater,
+    SkipInvalid,
+    Upload,
+};
+
 // A window of map data that follows the camera: the visible region is
 // resolved to whole tiles, fetched, and assembled into one texture the globe
 // material samples inside the region's bounds.
@@ -142,6 +154,24 @@ public:
     // per texel, not in count.
     double GetMetresPerPixel() const;
 
+    // Copy composited pixels onto the existing GPU texture. Safe to call
+    // every frame: no-ops when nothing is dirty, the RHI is not ready, or
+    // a previous copy is still in flight. Never recreates the resource.
+    void FlushPendingUpload();
+
+    // Window level a view would pick, without aiming the mosaic or touching
+    // the GPU. Used by the actor log and by tests for the wall-resolution
+    // case that used to GPU-crash.
+    int32 PreviewLevel(double SpanDegrees, double SpanLongitudeDegrees, int32 ScreenHeightPixels) const
+    {
+        return ChooseLevel(SpanDegrees, SpanLongitudeDegrees, ScreenHeightPixels);
+    }
+
+    static EGeoMosaicUploadDecision DecideUpload(bool bDirty, bool bResourceReady, bool bUploadInFlight,
+                                                 int64 CpuPixels, int64 ExpectedPixels);
+
+    virtual void BeginDestroy() override;
+
 private:
     // Degrees spanned by one tile edge at a level, for the window's own
     // grid. The window is laid out on the GIBS geometry whatever the layers
@@ -172,7 +202,6 @@ private:
     void CompositeTile(const TArray<uint8>& Bytes, const FGeoTileLayer& Layer, int32 Level, int32 Col, int32 Row);
     void TileResolved();
     void EnsureTexture();
-    void PushToGpu();
     FString CacheFilePath(const FGeoTileLayer& Layer, int32 Level, int32 Col, int32 Row) const;
 
     UPROPERTY() TArray<FGeoTileLayer> Layers;
@@ -202,4 +231,8 @@ private:
     // the one that replaced it - the camera moves faster than HTTP.
     uint32 RegionSerial = 0;
     bool bDirty = false;
+    // True while the render thread still holds the last staging buffer.
+    // A second copy must not start until that one has finished reading it,
+    // and the texture must not be destroyed in the meantime.
+    bool bUploadInFlight = false;
 };

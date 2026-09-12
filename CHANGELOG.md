@@ -59,6 +59,17 @@ superseded configurations, is in
 
 ### Fixed
 
+- **Far zoom at 5120×1440 no longer GPU-crashes the packaged client.** Detail
+  imagery composited each tile by calling `UTexture2D::UpdateResource()`,
+  which destroys and recreates the 4096×2048 mosaic (and the elevation
+  mosaic) on the D3D12 Copy Engine. At wall resolution the first close-orbit
+  window is level 5 and a cached region lands tens or hundreds of tiles in
+  one go; the next copy then read a resource that had already been released
+  — Aftermath reported PageFault / AddressTranslationError on CopyEngine,
+  not VRAM exhaustion. Tiles now dirty the CPU window only; one in-place
+  `UpdateTextureRegions` copy runs per mosaic per frame, skipped when the
+  buffer is invalid and deferred while a copy is still in flight. Max
+  resolution stays 5120×1440 and zoom is not capped.
 - **A transport blip no longer stalls route lookups for five minutes.** The
   single route-lookup worker treated any fetch error like a rate limit; a DNS
   hiccup or dropped connection now pauses it only 15 seconds, while a real
