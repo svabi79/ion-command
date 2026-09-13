@@ -25,6 +25,7 @@ EGeoGeometryType ParseGeometryType(const FString& Value)
     if (Value == TEXT("Point")) return EGeoGeometryType::Point;
     if (Value == TEXT("MultiPoint")) return EGeoGeometryType::MultiPoint;
     if (Value == TEXT("LineString")) return EGeoGeometryType::LineString;
+    if (Value == TEXT("MultiLineString")) return EGeoGeometryType::MultiLineString;
     if (Value == TEXT("GreatCircle")) return EGeoGeometryType::GreatCircle;
     if (Value == TEXT("Arc")) return EGeoGeometryType::Arc;
     if (Value == TEXT("Polygon")) return EGeoGeometryType::Polygon;
@@ -77,6 +78,35 @@ bool ParsePosition(const TArray<TSharedPtr<FJsonValue>>& Values, FGeoPosition& O
     OutPosition.Latitude = Values[1]->AsNumber();
     OutPosition.AltitudeMeters = Values.Num() > 2 && Values[2]->Type == EJson::Number ? Values[2]->AsNumber() : 0.0;
     return OutPosition.Longitude >= -180.0 && OutPosition.Longitude <= 180.0 && OutPosition.Latitude >= -90.0 && OutPosition.Latitude <= 90.0;
+}
+
+bool ParseLine(const TArray<TSharedPtr<FJsonValue>>& Positions, FGeoGeometry& OutGeometry, FString& OutError)
+{
+    const int32 Start = OutGeometry.Positions.Num();
+    for (const TSharedPtr<FJsonValue>& Coordinate : Positions)
+    {
+        const TArray<TSharedPtr<FJsonValue>>* PositionValues = nullptr;
+        if (!Coordinate->TryGetArray(PositionValues))
+        {
+            OutError = TEXT("invalid line coordinates");
+            return false;
+        }
+        FGeoPosition Position;
+        if (!ParsePosition(*PositionValues, Position))
+        {
+            OutError = TEXT("invalid line position");
+            return false;
+        }
+        OutGeometry.Positions.Add(Position);
+    }
+    const int32 Count = OutGeometry.Positions.Num() - Start;
+    if (Count < 2)
+    {
+        OutError = TEXT("line requires two or more positions");
+        return false;
+    }
+    OutGeometry.RingLengths.Add(Count);
+    return true;
 }
 
 bool ParsePolygonRings(const TArray<TSharedPtr<FJsonValue>>& Rings, FGeoGeometry& OutGeometry, FString& OutError)
@@ -191,15 +221,17 @@ bool FGeoEnvelopeJsonParser::Parse(const FString& Json, FGeoMessageEnvelope& Out
             }
             else if (OutEnvelope.Geometry.Type == EGeoGeometryType::GreatCircle || OutEnvelope.Geometry.Type == EGeoGeometryType::LineString)
             {
-                for (const TSharedPtr<FJsonValue>& Coordinate : *Coordinates)
+                if (!ParseLine(*Coordinates, OutEnvelope.Geometry, OutError)) return false;
+            }
+            else if (OutEnvelope.Geometry.Type == EGeoGeometryType::MultiLineString)
+            {
+                for (const TSharedPtr<FJsonValue>& LineValue : *Coordinates)
                 {
-                    const TArray<TSharedPtr<FJsonValue>>* PositionValues = nullptr;
-                    if (!Coordinate->TryGetArray(PositionValues)) { OutError = TEXT("invalid line coordinates"); return false; }
-                    FGeoPosition Position;
-                    if (!ParsePosition(*PositionValues, Position)) { OutError = TEXT("invalid line position"); return false; }
-                    OutEnvelope.Geometry.Positions.Add(Position);
+                    const TArray<TSharedPtr<FJsonValue>>* Line = nullptr;
+                    if (!LineValue->TryGetArray(Line)) { OutError = TEXT("invalid MultiLineString coordinates"); return false; }
+                    if (!ParseLine(*Line, OutEnvelope.Geometry, OutError)) return false;
                 }
-                if (OutEnvelope.Geometry.Positions.Num() < 2) { OutError = TEXT("line requires two or more positions"); return false; }
+                if (OutEnvelope.Geometry.NumLines() == 0) { OutError = TEXT("MultiLineString requires at least one line"); return false; }
             }
             else if (OutEnvelope.Geometry.Type == EGeoGeometryType::Polygon)
             {

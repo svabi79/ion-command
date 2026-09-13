@@ -128,7 +128,7 @@ collector/            Go collector
 unreal/
   Source/IonCommandCore/           geo math, generic types
   Source/IonCommandData/           envelope parsing, stream/data subsystems
-  Source/IonCommandVisualization/  globe, arcs, markers, heatmap
+  Source/IonCommandVisualization/  globe, arcs, markers, areas, paths, heatmap
   Source/IonCommandUI/             cockpit HUD, overlay menu, settings
   Source/IonCommandHamRadio/       ham-specific layers (own station, panels)
   Source/IonCommand/               game mode, player controller, camera

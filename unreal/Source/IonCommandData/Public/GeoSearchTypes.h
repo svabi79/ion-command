@@ -60,7 +60,7 @@ struct IONCOMMANDDATA_API FGeoSearchResult
 
     // Canonical selection payload: the latest snapshot for this key, passed
     // straight to UGeoSelectionSubsystem::SelectMessage() on FOCUS. Carries
-    // the geometry (Point or GreatCircle) the camera frames.
+    // the geometry (Point, GreatCircle or LineString) the camera frames.
     UPROPERTY(BlueprintReadOnly, Category="ION COMMAND|Search")
     FGeoMessageEnvelope Envelope;
 };

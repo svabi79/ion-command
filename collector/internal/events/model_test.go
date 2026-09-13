@@ -58,6 +58,22 @@ func TestPolygonValidation(t *testing.T) {
 	}
 }
 
+func TestLineStringValidation(t *testing.T) {
+	event := NewEnvelope("line-1", "geography", "geography.cable", MessageRelationship, SourceRef{PluginID: "cables", InstanceID: "test"}, time.Now())
+	event.Geometry = LineString([][]float64{{-5, 36}, {0, 42}, {5, 37}})
+	if err := event.Validate(); err != nil {
+		t.Fatalf("valid line rejected: %v", err)
+	}
+	event.Geometry = MultiLineString([][][]float64{{{-5, 36}, {5, 37}}, {{6, 37}, {8, 38}}})
+	if err := event.Validate(); err != nil {
+		t.Fatalf("valid multilinestring rejected: %v", err)
+	}
+	event.Geometry = LineString([][]float64{{-5, 36}})
+	if err := event.Validate(); err == nil {
+		t.Fatal("short line accepted")
+	}
+}
+
 func TestUnknownGeometryIsForwardCompatible(t *testing.T) {
 	event := NewEnvelope("test-2", "future", "future.thing", MessageField, SourceRef{PluginID: "mock", InstanceID: "test"}, time.Now())
 	event.Geometry.Type = "FutureGeometry"

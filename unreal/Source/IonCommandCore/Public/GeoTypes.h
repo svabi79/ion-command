@@ -35,6 +35,7 @@ enum class EGeoGeometryType : uint8
     Grid,
     Volume,
     Shell,
+    MultiLineString,
     Unknown
 };
 
@@ -70,11 +71,53 @@ struct IONCOMMANDCORE_API FGeoGeometry
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="ION COMMAND|Geo")
     TArray<FGeoPosition> Positions;
 
-    // Vertex counts of each linear ring packed into Positions, in order.
-    // Empty for Point/GreatCircle. Polygon and MultiPolygon use this so a
-    // closed area can carry holes or multiple shells without a new type.
+    // Vertex counts of each linear ring or line packed into Positions, in
+    // order. Empty for Point/GreatCircle. Polygon/MultiPolygon and
+    // MultiLineString use this so several rings or segments share one array.
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="ION COMMAND|Geo")
     TArray<int32> RingLengths;
+
+    int32 NumLines() const
+    {
+        if (RingLengths.Num() > 0)
+        {
+            return RingLengths.Num();
+        }
+        if (Positions.Num() >= 2)
+        {
+            return 1;
+        }
+        return 0;
+    }
+
+    bool GetLine(int32 Index, TArray<FGeoPosition>& OutLine) const
+    {
+        OutLine.Reset();
+        if (RingLengths.Num() == 0)
+        {
+            if (Index != 0 || Positions.Num() < 2)
+            {
+                return false;
+            }
+            OutLine = Positions;
+            return true;
+        }
+        if (!RingLengths.IsValidIndex(Index) || RingLengths[Index] < 2)
+        {
+            return false;
+        }
+        int32 Offset = 0;
+        for (int32 Prior = 0; Prior < Index; ++Prior)
+        {
+            Offset += RingLengths[Prior];
+        }
+        if (Offset + RingLengths[Index] > Positions.Num())
+        {
+            return false;
+        }
+        OutLine.Append(Positions.GetData() + Offset, RingLengths[Index]);
+        return true;
+    }
 
     int32 NumRings() const
     {

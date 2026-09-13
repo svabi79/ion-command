@@ -33,7 +33,7 @@ messages itself — that is the domain's job.
 | `weather.openmeteo` | Open-Meteo current weather at a configured cell | HTTP poll | **on** (one example cell) | no | attribution required: "Weather data by Open-Meteo.com" |
 | `weather.openaq` | OpenAQ v3 air-quality stations near a point | HTTP poll | **off** (needs a free API key) | **yes** (Explorer API key in `local.json`) | fail-closed without a key |
 | `geography.naturalearth` | Named regions from a bundled Natural Earth extract | in-process | **on** | no | public domain |
-| `geography.cables` | TeleGeography submarine-cable map | HTTP poll | **on** | no | CC BY-NC-SA 3.0; removable on-disk cache |
+| `geography.cables` | TeleGeography submarine-cable **routes** + landings | HTTP poll | **on** | no | CC BY-NC-SA 3.0; removable on-disk cache |
 | `geophysics.eonet` | NASA EONET open natural events | HTTP poll | **on** | no | public NASA API |
 | `geophysics.gdacs` | GDACS disaster alerts | HTTP poll | **on** | no | public GeoJSON search |
 | `maritime.portwatch` | IMF PortWatch chokepoints, daily transits, and recent disruptions | HTTP poll | **on** | no | public ArcGIS FeatureServer |
@@ -85,7 +85,7 @@ A context derives interpretation from canonical messages without owning a feed.
 | --- | --- | --- |
 | `IonCommandCore` | geo maths, generic types, the pinned sphere frame | no |
 | `IonCommandData` | envelope parsing, stream/data/timeline/replay/search/watch subsystems | no |
-| `IonCommandVisualization` | globe, atmosphere, arc layer, point/marker layer, area layer, motion-trail layer, heatmap, ionosphere shells | no |
+| `IonCommandVisualization` | globe, atmosphere, arc layer, point/marker layer, area layer, path/line layer, motion-trail layer, heatmap, ionosphere shells | no |
 | `IonCommandUI` | cockpit HUD, overlay menu, settings panel, tooltips | no |
 | `IonCommandHamRadio` | own station, band/DXCC panels, HF conditions and path analysis | **yes** |
 | `IonCommand` | game mode, player controller, camera rig | thin glue |

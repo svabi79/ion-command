@@ -2,9 +2,9 @@
 
 Candidate data layers, ordered by what they give the operator and by what the
 platform already supports. A layer is a source plugin plus a domain normaliser;
-when its geometry is `Point`, `GreatCircle`, `Track` or `Area`, no renderer
-change is required. Anything needing `Field`, `Raster` or `Volume` is blocked on
-new geometry support and is marked accordingly.
+when its geometry is `Point`, `GreatCircle`, `LineString`, `Track` or `Area`,
+no renderer change is required. Anything needing `Field`, `Raster` or `Volume`
+is blocked on new geometry support and is marked accordingly.
 
 Priorities for the platform as a whole are in
 [USER_VALUE_ROADMAP.md](USER_VALUE_ROADMAP.md); what exists today is in
@@ -54,7 +54,7 @@ remaining `Field` geometry work. `Area` is now rendered.
 | **Precipitation radar** | RainViewer or national services | `Field` / raster — no clean hobby-globe API/terms found; left deferred |
 | **Ionospheric maps** (foF2, MUF, TEC) | Already fetched from KC2G as soundings | `Field` / raster |
 | **Tropical storm tracks and cones** | NOAA NHC | `Track` + `Area` — **centres and 5-day cones shipped** as `weather.nhc` / `weather.storm` + `weather.storm.cone` |
-| **Submarine cables** — context for global connectivity | TeleGeography | `LineString` (static) — **shipped** as GreatCircle + landing points (`geography.cables`) |
+| **Submarine cables** — context for global connectivity | TeleGeography | `LineString` / `MultiLineString` — **shipped** as real routes + landing points (`geography.cables`); color = planned vs in-service length band |
 
 ## Wave 4 — the operator's own receiver
 

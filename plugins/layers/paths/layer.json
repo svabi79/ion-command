@@ -1,0 +1,13 @@
+{
+  "layerId": "core.paths",
+  "displayName": "Geospatial Paths",
+  "domain": "*",
+  "acceptedSemanticTypes": ["*"],
+  "geometryTypes": ["LineString", "MultiLineString"],
+  "defaultVisibility": true,
+  "defaultTimeWindowSeconds": 2592000,
+  "renderer": "GenericBatchedPathRenderer",
+  "supportsSelection": true,
+  "supportsReplay": true,
+  "supportsAggregation": false
+}

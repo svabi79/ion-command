@@ -100,9 +100,9 @@ of Entity, Observation, Relationship, Track, Area, Field, Volume, or Annotation.
 Semantic types are hierarchical strings registered by plugins. Unknown semantic
 types remain recordable and replayable.
 
-Point, GreatCircle and Polygon (Area) are fully parsed by the client.
-Interfaces and schema names remain reserved for tracks, grids, raster fields,
-shells, and volumes.
+Point, GreatCircle, LineString/MultiLineString and Polygon (Area) are fully
+parsed by the client. Interfaces and schema names remain reserved for tracks,
+grids, raster fields, shells, and volumes.
 
 ## Unreal modules
 

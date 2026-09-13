@@ -14,6 +14,7 @@ REQUIRED_CLASSES = [
     ("IonCommandVisualization", "IonGlobeActor"),
     ("IonCommandVisualization", "GeoArcLayerActor"),
     ("IonCommandVisualization", "GeoAreaLayerActor"),
+    ("IonCommandVisualization", "GeoPathLayerActor"),
     ("IonCommandHamRadio", "HamRadioLinkLayerActor"),
     ("IonCommandUI", "IonCommandDeckActor"),
 ]

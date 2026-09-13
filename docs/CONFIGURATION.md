@@ -105,6 +105,10 @@ Press **O**. Every row is clickable and shows its state:
 - **MY RX/TX ONLY** — only paths where your station is transmitter or receiver
 - **HEATMAP** — activity density splats
 - **IONOSPHERE SHELLS** — ionosonde shells
+- **TRAILS** — motion trails behind moving markers
+- **AREAS** — filled polygons (NHC forecast cones)
+- **CABLES** — submarine cable routes (TeleGeography). Color: planned amber;
+  in-service by length (short teal / regional cyan / ocean blue / trunk magenta)
 - **ALT EXAGGERATION 12X** — aircraft altitude exaggerated so flight level is
   visible at globe scale; off renders true scale
 - **&lt;DOMAIN&gt; MARKERS** — one row per marker domain currently present
@@ -125,6 +129,9 @@ Press **O**. Every row is clickable and shows its state:
 | **M** | only my station's RX/TX paths |
 | **H** | activity heatmap |
 | **I** | ionosphere shells |
+| **T** | show/hide trails |
+| **Y** | show/hide areas |
+| **C** | show/hide cable routes |
 | **N** | cycle transmission-mode filter |
 | **F** | focus the selected path |
 | **Esc** | clear selection |
@@ -212,7 +219,7 @@ Additional fields by type:
 | `weather.openmeteo` | `latitude`, `longitude`, `pollSeconds` | Current weather at a 0.1° cell. Requires coordinates. |
 | `weather.openaq` | `apiKey`, `latitude`, `longitude`, `radiusNm`, `pollSeconds` | Air-quality stations. **Requires a free Explorer key** in `local.json`; refuse to start if enabled without one. |
 | `geography.naturalearth` | — | Bundled public-domain region labels. |
-| `geography.cables` | `pollSeconds`, `cacheDirectory` | TeleGeography cable map, 6 h floor, removable cache. |
+| `geography.cables` | `pollSeconds`, `cacheDirectory` | TeleGeography cable **routes** + landings, 6 h floor, removable `routes.json` cache. |
 | `geophysics.eonet` | `pollSeconds` | NASA EONET open events. |
 | `geophysics.gdacs` | `pollSeconds` | GDACS disaster alerts. |
 | `maritime.portwatch` | `pollSeconds` | IMF PortWatch chokepoints, daily transits, and recent disruptions. |

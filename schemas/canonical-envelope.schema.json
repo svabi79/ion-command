@@ -40,7 +40,7 @@
       "type": "object",
       "required": ["type"],
       "properties": {
-        "type": { "enum": ["None", "Point", "MultiPoint", "LineString", "GreatCircle", "Arc", "Polygon", "MultiPolygon", "BoundingBox", "Circle", "Track", "Raster", "Grid", "Volume", "Shell"] },
+        "type": { "enum": ["None", "Point", "MultiPoint", "LineString", "MultiLineString", "GreatCircle", "Arc", "Polygon", "MultiPolygon", "BoundingBox", "Circle", "Track", "Raster", "Grid", "Volume", "Shell"] },
         "coordinates": {},
         "crs": { "type": "string", "default": "EPSG:4326" }
       },

@@ -15,8 +15,9 @@ The component list is in [COMPONENTS.md](COMPONENTS.md) — not repeated here.
 - Compile-time source/domain/context registries; 11 source types, 8 domains,
   1 context (see [COMPONENTS.md](COMPONENTS.md))
 - Bounded queue with parallel domain workers and drop/evict metrics
-- Canonical envelope with Point, GreatCircle and Polygon (Area) geometry,
-  validity windows and generic `display.*` / `visual.*` presentation properties
+- Canonical envelope with Point, GreatCircle, LineString/MultiLineString and
+  Polygon (Area) geometry, validity windows and generic `display.*` /
+  `visual.*` presentation properties
 - Retained state per entity with TTL, background purge and replay on connect
 - JSONL recording with hourly rotation and a total-size cap; time-scaled replay
 - HTTP API (`/api/health`, `/api/status`, `/api/stats`, `/api/sources`) and
@@ -42,6 +43,10 @@ The component list is in [COMPONENTS.md](COMPONENTS.md) — not repeated here.
   globe shell with a translucent fill and a brighter outline. One fill mesh
   and one outline batch for the whole layer; not one Actor per area.
   Toggle: `Y` key or the overlay menu's AREAS row
+- Batched path layer: open LineString/MultiLineString routes projected onto
+  the globe shell (densified like Area edges). Used for TeleGeography
+  submarine cables; color is planned vs in-service length band. Toggle: `C`
+  or the overlay menu's CABLES row (legend under the row)
 - Cockpit HUD: status bar, band histogram, path-rate sparkline, top DXCC
   regions with flags, auroral oval, HF conditions estimate, hop/MUF path
   analysis, hover tooltips, own-station reticle
@@ -50,7 +55,7 @@ The component list is in [COMPONENTS.md](COMPONENTS.md) — not repeated here.
 - Timeline: pause, replay of the recent window, variable speed, return to live
 - Keyboard-first search overlay (`/` or `S`) over a bounded, timeline-aware
   index of accepted canonical messages, grouped by stable entity id; results
-  focus/select Point, GreatCircle and Polygon geometry
+  focus/select Point, GreatCircle, LineString and Polygon geometry
 - Watchlist and alerts (`W`): save a search query as a watch, persisted to
   `Game.ini`; a bounded, live-only alert list with an at-a-glance unseen count
 
@@ -133,11 +138,12 @@ The component list is in [COMPONENTS.md](COMPONENTS.md) — not repeated here.
 
 - Niagara-based renderer (ADR 0003 describes the intent; the renderer uses
   hierarchical instanced meshes)
-- Geometry beyond Point, GreatCircle and Polygon — the `Track` semantic
-  geometry payload itself, plus grids, raster fields, shells and volumes,
-  are reserved in the contract only and parsed but not rendered. (The client
-  motion-trail layer above is a distinct client-side visualization built from
-  ordinary Point messages, not an implementation of this payload.)
+- Geometry beyond Point, GreatCircle, LineString/MultiLineString and Polygon —
+  the `Track` semantic geometry payload itself, plus grids, raster fields,
+  shells and volumes, are reserved in the contract only and parsed but not
+  rendered. (The client motion-trail layer above is a distinct client-side
+  visualization built from ordinary Point messages, not an implementation of
+  this payload.)
 - Dynamic or third-party plugin loading
 - Any multi-user, server-hosted or authenticated deployment mode
 
