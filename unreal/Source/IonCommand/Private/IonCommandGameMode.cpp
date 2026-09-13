@@ -68,7 +68,7 @@ void AIonCommandGameMode::BeginPlay()
         const FTransform Identity;
         if (AGeoPathLayerActor* Cartography = World->SpawnActorDeferred<AGeoPathLayerActor>(AGeoPathLayerActor::StaticClass(), Identity))
         {
-            Cartography->Role = EGeoPathLayerRole::Cartography;
+            Cartography->PathRole = EGeoPathLayerRole::Cartography;
             Cartography->PathThickness = 0.008;
             Cartography->MaxVisiblePaths = 400;
             UGameplayStatics::FinishSpawningActor(Cartography, Identity);

@@ -141,11 +141,11 @@ void AGeoPathLayerActor::BeginPlay()
         UMaterialInstanceDynamic* Material = ClassMeshes[Index] ? ClassMeshes[Index]->CreateAndSetMaterialInstanceDynamic(0) : nullptr;
         if (Material)
         {
-            const FLinearColor ClassColor = Role == EGeoPathLayerRole::Cartography
+            const FLinearColor ClassColor = PathRole == EGeoPathLayerRole::Cartography
                 ? CartographyColors[Index]
                 : LegendColors[Index];
             Material->SetVectorParameterValue(TEXT("Color"), ClassColor);
-            Material->SetScalarParameterValue(TEXT("Intensity"), Role == EGeoPathLayerRole::Cartography ? CartographyIntensity : PathIntensity);
+            Material->SetScalarParameterValue(TEXT("Intensity"), PathRole == EGeoPathLayerRole::Cartography ? CartographyIntensity : PathIntensity);
         }
         ClassMaterials.Add(Material);
     }
@@ -250,7 +250,7 @@ bool AGeoPathLayerActor::Supports(const FGeoMessageEnvelope& Message) const
         return false;
     }
     const bool bCartographyType = Message.SemanticType == TEXT("geography.border") || Message.SemanticType == TEXT("geography.river");
-    return Role == EGeoPathLayerRole::Cartography ? bCartographyType : !bCartographyType;
+    return PathRole == EGeoPathLayerRole::Cartography ? bCartographyType : !bCartographyType;
 }
 
 void AGeoPathLayerActor::Submit(const FGeoMessageEnvelope& Message)
@@ -345,7 +345,7 @@ int32 AGeoPathLayerActor::ResolveLegendIndex(const FGeoMessageEnvelope& Message)
 
 FString AGeoPathLayerActor::GetLegendNote() const
 {
-    if (Role == EGeoPathLayerRole::Cartography)
+    if (PathRole == EGeoPathLayerRole::Cartography)
     {
         return FString();
     }
@@ -354,7 +354,7 @@ FString AGeoPathLayerActor::GetLegendNote() const
 
 FString AGeoPathLayerActor::GetOverlayLayerId() const
 {
-    return Role == EGeoPathLayerRole::Cartography ? TEXT("core.cartography") : TEXT("core.paths");
+    return PathRole == EGeoPathLayerRole::Cartography ? TEXT("core.cartography") : TEXT("core.paths");
 }
 
 bool AGeoPathLayerActor::IsExpired(const FRenderedGeoPath& Path, double NowSeconds) const
@@ -615,8 +615,8 @@ FGeoLayerManifest AGeoPathLayerActor::CreateLayerManifest() const
 {
     FGeoLayerManifest Manifest;
     Manifest.LayerId = GetOverlayLayerId();
-    Manifest.DisplayName = Role == EGeoPathLayerRole::Cartography ? TEXT("Country Borders") : TEXT("Geospatial Paths");
-    Manifest.AcceptedSemanticTypes = Role == EGeoPathLayerRole::Cartography
+    Manifest.DisplayName = PathRole == EGeoPathLayerRole::Cartography ? TEXT("Country Borders") : TEXT("Geospatial Paths");
+    Manifest.AcceptedSemanticTypes = PathRole == EGeoPathLayerRole::Cartography
         ? TArray<FString>{TEXT("geography.border"), TEXT("geography.river")}
         : TArray<FString>{TEXT("geography.cable")};
     Manifest.GeometryTypes = {EGeoGeometryType::LineString, EGeoGeometryType::MultiLineString};

@@ -336,7 +336,7 @@ bool FGeoPathLayerRoleFiltersCartographyTest::RunTest(const FString& Parameters)
     };
     AGeoPathLayerActor* Cables = NewObject<AGeoPathLayerActor>(GetTransientPackage());
     AGeoPathLayerActor* Borders = NewObject<AGeoPathLayerActor>(GetTransientPackage());
-    Borders->Role = EGeoPathLayerRole::Cartography;
+    Borders->PathRole = EGeoPathLayerRole::Cartography;
     TestTrue(TEXT("cable role accepts a cable"), Cables->Supports(MakeLine(TEXT("geography.cable"))));
     TestFalse(TEXT("cable role rejects a border"), Cables->Supports(MakeLine(TEXT("geography.border"))));
     TestTrue(TEXT("cartography role accepts a border"), Borders->Supports(MakeLine(TEXT("geography.border"))));
