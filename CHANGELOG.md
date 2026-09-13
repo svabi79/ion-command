@@ -43,6 +43,14 @@ superseded configurations, is in
 
 ### Fixed
 
+- **UE 5.8 place-label `TArray::Sort` after `#21`.** `DrawPlaceLabels`
+  built `TArray<const FIonPlaceLabel*>` and sorted with a pointer
+  lambda. UE 5.8 `TArray::Sort` wraps the predicate in
+  `TDereferenceWrapper`, which specialises for `T*` and passes the
+  pointed-to `FIonPlaceLabel` into that lambda (MSVC C2664, UAT exit 6).
+  Candidates are now value copies sorted with `const FIonPlaceLabel&`,
+  the same form as the endpoint/region caches. LOD then label priority
+  is unchanged. Wall re-package still needed.
 - **UE 5.8 path-layer `Role` shadow after `#21`.** `#21` added
   `AGeoPathLayerActor::Role` (`EGeoPathLayerRole` Cartography vs cables).
   That name is already `AActor::Role` (`ENetRole`), and UHT rejects the
