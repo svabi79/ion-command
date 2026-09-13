@@ -1,5 +1,6 @@
 #include "GeoArcLayerActor.h"
 #include "GeoAreaLayerActor.h"
+#include "GeoPathLayerActor.h"
 #include "GeoPointLayerActor.h"
 #include "Misc/AutomationTest.h"
 #include "UObject/Package.h"
@@ -220,6 +221,61 @@ bool FGeoAreaLayerEntityReplaceIsUpdateTest::RunTest(const FString& Parameters)
     TestEqual(TEXT("first submit is the only insert"), Stats.IncrementalInserts, (int64)1);
     TestEqual(TEXT("later submits are in-place updates"), Stats.IncrementalUpdates, (int64)5);
     TestEqual(TEXT("entity replace is not a full rebuild"), Stats.FullRebuilds, (int64)0);
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FGeoPathLayerEntityReplaceIsUpdateTest, "IONCOMMAND.Visualization.PathLayer.RepeatedEntityReplaces", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FGeoPathLayerEntityReplaceIsUpdateTest::RunTest(const FString& Parameters)
+{
+    AGeoPathLayerActor* Actor = NewObject<AGeoPathLayerActor>(GetTransientPackage());
+    for (int32 Sighting = 0; Sighting < 6; ++Sighting)
+    {
+        FGeoMessageEnvelope Message;
+        Message.MessageId = FString::Printf(TEXT("path-sighting-%d"), Sighting);
+        Message.EntityId = TEXT("path-entity-0");
+        Message.MessageType = EGeoMessageType::Relationship;
+        Message.SemanticType = TEXT("test.path");
+        Message.Geometry.Type = EGeoGeometryType::LineString;
+        FGeoPosition From; From.Longitude = -5.0; From.Latitude = 36.0;
+        FGeoPosition Mid; Mid.Longitude = 0.0; Mid.Latitude = 42.0;
+        FGeoPosition To; To.Longitude = 5.0; To.Latitude = 37.0;
+        Message.Geometry.Positions.Add(From);
+        Message.Geometry.Positions.Add(Mid);
+        Message.Geometry.Positions.Add(To);
+        Actor->Submit(Message);
+    }
+    const FGeoRenderLayerStatistics Stats = Actor->GetRenderStatistics();
+    TestEqual(TEXT("one entity keeps a single path"), Stats.TrackedItems, 1);
+    TestEqual(TEXT("first submit is the only insert"), Stats.IncrementalInserts, (int64)1);
+    TestEqual(TEXT("later submits are in-place updates"), Stats.IncrementalUpdates, (int64)5);
+    TestEqual(TEXT("entity replace is not a full rebuild"), Stats.FullRebuilds, (int64)0);
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FGeoPathLayerCapacityTrimIsIncrementalTest, "IONCOMMAND.Visualization.PathLayer.CapacityTrimIsIncremental", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FGeoPathLayerCapacityTrimIsIncrementalTest::RunTest(const FString& Parameters)
+{
+    AGeoPathLayerActor* Actor = NewObject<AGeoPathLayerActor>(GetTransientPackage());
+    Actor->MaxVisiblePaths = 8;
+    const int32 SubmitCount = Actor->MaxVisiblePaths * 3;
+    for (int32 Index = 0; Index < SubmitCount; ++Index)
+    {
+        FGeoMessageEnvelope Message;
+        Message.MessageId = FString::Printf(TEXT("path-%d"), Index);
+        Message.EntityId = FString::Printf(TEXT("path-entity-%d"), Index);
+        Message.MessageType = EGeoMessageType::Relationship;
+        Message.SemanticType = TEXT("test.path");
+        Message.Geometry.Type = EGeoGeometryType::LineString;
+        FGeoPosition From; From.Longitude = -5.0 + Index; From.Latitude = 36.0;
+        FGeoPosition To; To.Longitude = 5.0 + Index; To.Latitude = 37.0;
+        Message.Geometry.Positions.Add(From);
+        Message.Geometry.Positions.Add(To);
+        Actor->Submit(Message);
+    }
+    const FGeoRenderLayerStatistics Stats = Actor->GetRenderStatistics();
+    TestTrue(TEXT("tracked count stays at or under the capacity bound"), Stats.TrackedItems <= Actor->MaxVisiblePaths);
+    TestTrue(TEXT("capacity eviction fired"), Stats.CapacityEvictions > 0);
+    TestEqual(TEXT("no full rebuild under capacity pressure"), Stats.FullRebuilds, (int64)0);
     return true;
 }
 

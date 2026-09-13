@@ -9,6 +9,7 @@
 #include "GeoDataSubsystem.h"
 #include "GeoMathLibrary.h"
 #include "GeoAreaLayerActor.h"
+#include "GeoPathLayerActor.h"
 #include "GeoPointLayerActor.h"
 #include "GeoSearchSubsystem.h"
 #include "GeoSelectionSubsystem.h"
@@ -781,6 +782,13 @@ void AIonCockpitHudActor::DrawOverlayMenu(float Scale, float Alpha)
         MenuRows.Add({TEXT("AREAS"), TEXT("areas"), FString(), !It->IsHidden()});
         break;
     }
+    FString PathLegend;
+    for (TActorIterator<AGeoPathLayerActor> It(GetWorld()); It; ++It)
+    {
+        MenuRows.Add({TEXT("CABLES"), TEXT("cables"), FString(), !It->IsHidden()});
+        PathLegend = It->GetLegendNote();
+        break;
+    }
     if (PointLayer)
     {
         MenuRows.Add({TEXT("ALT EXAGGERATION 12X"), TEXT("altscale"), FString(), PointLayer->IsAltitudeExaggerationEnabled()});
@@ -793,9 +801,10 @@ void AIonCockpitHudActor::DrawOverlayMenu(float Scale, float Alpha)
     }
 
     const float RowHeight = 26.0f * Scale;
-    const float PanelWidth = 250.0f * Scale;
+    const float PanelWidth = 280.0f * Scale;
     const float HeaderHeight = 34.0f * Scale;
-    const float PanelHeight = HeaderHeight + MenuRows.Num() * RowHeight + 12.0f * Scale;
+    const float LegendHeight = PathLegend.IsEmpty() ? 0.0f : 44.0f * Scale;
+    const float PanelHeight = HeaderHeight + MenuRows.Num() * RowHeight + LegendHeight + 12.0f * Scale;
     const float PanelX = 18.0f * Scale;
     const float PanelY = Canvas->SizeY - PanelHeight - 44.0f * Scale;
     DrawPanelFrame(PanelX, PanelY, PanelWidth, PanelHeight, TEXT("OVERLAYS // O"), Scale, Alpha);
@@ -820,6 +829,15 @@ void AIonCockpitHudActor::DrawOverlayMenu(float Scale, float Alpha)
         DrawTextAt(Row.bVisible ? TEXT("[x]") : TEXT("[ ]"), PanelX + 12.0f * Scale, RowY + 5.0f * Scale, WithAlpha(Mark, Alpha), 1.15f * Scale);
         DrawTextAt(Row.Label, PanelX + 48.0f * Scale, RowY + 5.0f * Scale, WithAlpha(Row.bVisible ? CockpitWhite : CockpitDim, Alpha), 1.15f * Scale);
         RowY += RowHeight;
+    }
+    if (!PathLegend.IsEmpty())
+    {
+        TArray<FString> LegendLines;
+        PathLegend.ParseIntoArrayLines(LegendLines, false);
+        for (int32 Line = 0; Line < LegendLines.Num(); ++Line)
+        {
+            DrawTextAt(LegendLines[Line], PanelX + 12.0f * Scale, RowY + 4.0f * Scale + Line * 14.0f * Scale, WithAlpha(CockpitDim, Alpha), 0.78f * Scale);
+        }
     }
 }
 
@@ -869,6 +887,10 @@ void AIonCockpitHudActor::ApplyMenuToggle(const FMenuRow& Row)
     else if (Row.Kind == TEXT("areas"))
     {
         for (TActorIterator<AGeoAreaLayerActor> It(GetWorld()); It; ++It) It->SetActorHiddenInGame(!It->IsHidden());
+    }
+    else if (Row.Kind == TEXT("cables"))
+    {
+        for (TActorIterator<AGeoPathLayerActor> It(GetWorld()); It; ++It) It->SetActorHiddenInGame(!It->IsHidden());
     }
     else if (Row.Kind == TEXT("altscale"))
     {

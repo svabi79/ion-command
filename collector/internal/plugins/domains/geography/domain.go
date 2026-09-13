@@ -1,11 +1,13 @@
 // Package geography normalizes static cartographic labels: named regions
-// and submarine-cable geometry.
+// and submarine-cable routes.
 package geography
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
+	"strings"
 	"time"
 
 	"github.com/ion-command/ion-command/collector/internal/events"
@@ -69,29 +71,99 @@ func (d *Domain) region(record plugins.RawRecord) ([]events.Envelope, error) {
 
 func (d *Domain) cable(record plugins.RawRecord) ([]events.Envelope, error) {
 	var raw struct {
-		CableID string  `json:"cableId"`
-		Name    string  `json:"name"`
-		FromLon float64 `json:"fromLon"`
-		FromLat float64 `json:"fromLat"`
-		ToLon   float64 `json:"toLon"`
-		ToLat   float64 `json:"toLat"`
+		CableID  string        `json:"cableId"`
+		Name     string        `json:"name"`
+		Color    string        `json:"color"`
+		Segments [][][]float64 `json:"segments"`
 	}
-	if err := json.Unmarshal(record.Payload, &raw); err != nil || raw.CableID == "" {
-		return nil, fmt.Errorf("geography cable requires id")
+	if err := json.Unmarshal(record.Payload, &raw); err != nil || raw.CableID == "" || len(raw.Segments) == 0 {
+		return nil, fmt.Errorf("geography cable requires id and route")
 	}
 	event := events.NewEnvelope(record.OriginalID, "geography", "geography.cable", events.MessageRelationship,
 		events.SourceRef{PluginID: record.SourcePluginID, InstanceID: record.SourceInstanceID, OriginalID: record.OriginalID},
 		record.ObservedUTC)
 	event.EntityID = "geography:cable:" + raw.CableID
-	event.Geometry = events.GreatCircle(raw.FromLon, raw.FromLat, raw.ToLon, raw.ToLat)
+	if len(raw.Segments) == 1 {
+		event.Geometry = events.LineString(raw.Segments[0])
+	} else {
+		event.Geometry = events.MultiLineString(raw.Segments)
+	}
 	validUntil := record.ObservedUTC.Add(30 * 24 * time.Hour)
 	event.Time.ValidUntilUTC = &validUntil
+	lengthKm := routeLengthKm(raw.Segments)
+	planned := isPlannedCableColor(raw.Color)
+	class, color := cableLegend(planned, lengthKm)
+	primary := class
+	if lengthKm > 0 {
+		primary = fmt.Sprintf("%s  //  %.0f km", class, lengthKm)
+	}
 	event.Properties = map[string]any{
-		"visual.paletteIndex": 7,
-		"display.title":       raw.Name,
-		"display.primary":     "submarine cable",
+		"visual.color":       color,
+		"visual.legendIndex": cableLegendIndex(planned, lengthKm),
+		"display.title":      raw.Name,
+		"display.primary":    primary,
+		"display.secondary":  "submarine cable",
 	}
 	return []events.Envelope{event}, nil
+}
+
+// TeleGeography paints planned / unbuilt cables #939597 on the public map.
+// The geojson itself has no status field; this is the feed's operational cue.
+func isPlannedCableColor(color string) bool {
+	return strings.EqualFold(strings.TrimSpace(color), "#939597")
+}
+
+func routeLengthKm(segments [][][]float64) float64 {
+	const earthKm = 6371.0
+	total := 0.0
+	for _, line := range segments {
+		for i := 1; i < len(line); i++ {
+			if len(line[i-1]) < 2 || len(line[i]) < 2 {
+				continue
+			}
+			lat1 := line[i-1][1] * math.Pi / 180
+			lat2 := line[i][1] * math.Pi / 180
+			dLat := lat2 - lat1
+			dLon := (line[i][0] - line[i-1][0]) * math.Pi / 180
+			sinLat := math.Sin(dLat / 2)
+			sinLon := math.Sin(dLon / 2)
+			h := sinLat*sinLat + math.Cos(lat1)*math.Cos(lat2)*sinLon*sinLon
+			total += 2 * earthKm * math.Asin(math.Min(1, math.Sqrt(h)))
+		}
+	}
+	return total
+}
+
+func cableLegend(planned bool, lengthKm float64) (class, color string) {
+	if planned {
+		return "planned", "1.00,0.72,0.18"
+	}
+	switch {
+	case lengthKm < 500:
+		return "in service · short", "0.25,0.70,0.62"
+	case lengthKm < 3000:
+		return "in service · regional", "0.20,0.85,1.00"
+	case lengthKm < 12000:
+		return "in service · ocean", "0.22,0.45,0.95"
+	default:
+		return "in service · trunk", "0.92,0.28,0.72"
+	}
+}
+
+func cableLegendIndex(planned bool, lengthKm float64) int {
+	if planned {
+		return 0
+	}
+	switch {
+	case lengthKm < 500:
+		return 1
+	case lengthKm < 3000:
+		return 2
+	case lengthKm < 12000:
+		return 3
+	default:
+		return 4
+	}
 }
 
 func (d *Domain) landing(record plugins.RawRecord) ([]events.Envelope, error) {

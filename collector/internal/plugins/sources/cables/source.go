@@ -1,6 +1,6 @@
 // Package cables fetches TeleGeography's public submarine-cable map
-// (cables plus landing points), simplifies each cable to a great-circle
-// between its first and last vertices, and caches the copy in a removable
+// (cables plus landing points), keeps each cable's MultiLineString
+// route after a bounded decimate, and caches the copy in a removable
 // folder. Licensed CC BY-NC-SA 3.0; attribution is required.
 package cables
 
@@ -9,9 +9,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"math"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/ion-command/ion-command/collector/internal/config"
@@ -24,8 +26,10 @@ const (
 	defaultLandingsURL = "https://www.submarinecablemap.com/api/v3/landing-point/landing-point-geo.json"
 	pollDefault        = 24 * time.Hour
 	pollFloor          = 6 * time.Hour
-	maxCables          = 250
+	maxCables          = 800
 	maxLandings        = 400
+	maxVerticesPerLine = 64
+	minVertexKm        = 25.0
 	attribution        = "Submarine cables © TeleGeography (CC BY-NC-SA 3.0)"
 )
 
@@ -61,7 +65,7 @@ func New(sourceConfig config.Source, logger *slog.Logger) (*Source, error) {
 		cablesURL:   defaultCablesURL,
 		landingsURL: defaultLandingsURL,
 		interval:    interval,
-		cache:       pollutil.FileCache{Path: filepath.Join(cacheDir, "simplified.json"), TTL: interval},
+		cache:       pollutil.FileCache{Path: filepath.Join(cacheDir, "routes.json"), TTL: interval},
 		client:      &http.Client{Timeout: 90 * time.Second},
 		logger:      logger,
 	}
@@ -104,19 +108,81 @@ func propertyString(properties map[string]any, keys ...string) string {
 	return ""
 }
 
-func firstLast(coords json.RawMessage) (lon1, lat1, lon2, lat2 float64, ok bool) {
+func parseLines(coords json.RawMessage) [][][]float64 {
 	var line [][]float64
-	if json.Unmarshal(coords, &line) == nil && len(line) >= 2 && len(line[0]) >= 2 && len(line[len(line)-1]) >= 2 {
-		return line[0][0], line[0][1], line[len(line)-1][0], line[len(line)-1][1], true
+	if json.Unmarshal(coords, &line) == nil && validLine(line) {
+		return [][][]float64{line}
 	}
 	var multi [][][]float64
-	if json.Unmarshal(coords, &multi) == nil && len(multi) > 0 && len(multi[0]) >= 2 {
-		first, last := multi[0][0], multi[len(multi)-1][len(multi[len(multi)-1])-1]
-		if len(first) >= 2 && len(last) >= 2 {
-			return first[0], first[1], last[0], last[1], true
+	if json.Unmarshal(coords, &multi) != nil {
+		return nil
+	}
+	out := make([][][]float64, 0, len(multi))
+	for _, segment := range multi {
+		if validLine(segment) {
+			out = append(out, segment)
 		}
 	}
-	return 0, 0, 0, 0, false
+	return out
+}
+
+func validLine(line [][]float64) bool {
+	if len(line) < 2 {
+		return false
+	}
+	for _, point := range line {
+		if len(point) < 2 || point[0] < -180 || point[0] > 180 || point[1] < -90 || point[1] > 90 {
+			return false
+		}
+	}
+	return true
+}
+
+func distanceKm(a, b []float64) float64 {
+	const earthKm = 6371.0
+	lat1 := a[1] * math.Pi / 180
+	lat2 := b[1] * math.Pi / 180
+	dLat := lat2 - lat1
+	dLon := (b[0] - a[0]) * math.Pi / 180
+	sinLat := math.Sin(dLat / 2)
+	sinLon := math.Sin(dLon / 2)
+	h := sinLat*sinLat + math.Cos(lat1)*math.Cos(lat2)*sinLon*sinLon
+	return 2 * earthKm * math.Asin(math.Min(1, math.Sqrt(h)))
+}
+
+func decimateLine(line [][]float64) [][]float64 {
+	if len(line) <= 2 {
+		return line
+	}
+	kept := make([][]float64, 0, len(line))
+	kept = append(kept, line[0])
+	last := line[0]
+	for i := 1; i < len(line)-1; i++ {
+		if distanceKm(last, line[i]) >= minVertexKm {
+			kept = append(kept, line[i])
+			last = line[i]
+		}
+	}
+	kept = append(kept, line[len(line)-1])
+	if len(kept) <= maxVerticesPerLine {
+		return kept
+	}
+	step := float64(len(kept)-1) / float64(maxVerticesPerLine-1)
+	reduced := make([][]float64, 0, maxVerticesPerLine)
+	for i := 0; i < maxVerticesPerLine-1; i++ {
+		reduced = append(reduced, kept[int(float64(i)*step)])
+	}
+	return append(reduced, kept[len(kept)-1])
+}
+
+func decimateLines(lines [][][]float64) [][][]float64 {
+	out := make([][][]float64, 0, len(lines))
+	for _, line := range lines {
+		if reduced := decimateLine(line); validLine(reduced) {
+			out = append(out, reduced)
+		}
+	}
+	return out
 }
 
 func pointCoord(coords json.RawMessage) (lon, lat float64, ok bool) {
@@ -127,18 +193,16 @@ func pointCoord(coords json.RawMessage) (lon, lat float64, ok bool) {
 	return 0, 0, false
 }
 
-type simplified struct {
-	Cables   []simplifiedCable  `json:"cables"`
+type routed struct {
+	Cables   []routedCable       `json:"cables"`
 	Landings []simplifiedLanding `json:"landings"`
 }
 
-type simplifiedCable struct {
-	ID   string  `json:"id"`
-	Name string  `json:"name"`
-	Lon1 float64 `json:"lon1"`
-	Lat1 float64 `json:"lat1"`
-	Lon2 float64 `json:"lon2"`
-	Lat2 float64 `json:"lat2"`
+type routedCable struct {
+	ID       string        `json:"id"`
+	Name     string        `json:"name"`
+	Color    string        `json:"color,omitempty"`
+	Segments [][][]float64 `json:"segments"`
 }
 
 type simplifiedLanding struct {
@@ -148,22 +212,22 @@ type simplifiedLanding struct {
 	Lat  float64 `json:"lat"`
 }
 
-func (s *Source) refresh(ctx context.Context) (simplified, error) {
+func (s *Source) refresh(ctx context.Context) (routed, error) {
 	if cached, _, ok := s.cache.Load(); ok {
-		var ready simplified
-		if json.Unmarshal(cached, &ready) == nil {
+		var ready routed
+		if json.Unmarshal(cached, &ready) == nil && len(ready.Cables) > 0 {
 			return ready, nil
 		}
 	}
 	cablesBody, err := s.fetchCables(ctx)
 	if err != nil {
 		if cached, _, ok := s.cache.Load(); ok {
-			var ready simplified
-			if json.Unmarshal(cached, &ready) == nil {
+			var ready routed
+			if json.Unmarshal(cached, &ready) == nil && len(ready.Cables) > 0 {
 				return ready, nil
 			}
 		}
-		return simplified{}, err
+		return routed{}, err
 	}
 	landingsBody, err := s.fetchLanding(ctx)
 	if err != nil {
@@ -171,25 +235,47 @@ func (s *Source) refresh(ctx context.Context) (simplified, error) {
 	}
 	var cables geoJSON
 	if err := json.Unmarshal(cablesBody, &cables); err != nil {
-		return simplified{}, fmt.Errorf("decode cable geojson: %w", err)
+		return routed{}, fmt.Errorf("decode cable geojson: %w", err)
 	}
 	var landings geoJSON
 	_ = json.Unmarshal(landingsBody, &landings)
-	out := simplified{}
+	byID := make(map[string]*routedCable, len(cables.Features))
+	order := make([]string, 0, len(cables.Features))
+	dropped := 0
 	for _, feature := range cables.Features {
-		lon1, lat1, lon2, lat2, ok := firstLast(feature.Geometry.Coordinates)
-		if !ok {
+		lines := decimateLines(parseLines(feature.Geometry.Coordinates))
+		if len(lines) == 0 {
+			dropped++
 			continue
 		}
-		name := propertyString(feature.Properties, "name", "color", "id")
+		name := propertyString(feature.Properties, "name", "id")
 		id := propertyString(feature.Properties, "id", "name")
 		if id == "" {
-			id = fmt.Sprintf("%s-%d", name, len(out.Cables))
+			id = fmt.Sprintf("%s-%d", name, len(order))
 		}
-		out.Cables = append(out.Cables, simplifiedCable{ID: id, Name: name, Lon1: lon1, Lat1: lat1, Lon2: lon2, Lat2: lat2})
-		if len(out.Cables) >= maxCables {
-			break
+		if existing, ok := byID[id]; ok {
+			existing.Segments = append(existing.Segments, lines...)
+			if existing.Color == "" {
+				existing.Color = propertyString(feature.Properties, "color")
+			}
+			continue
 		}
+		if len(order) >= maxCables {
+			dropped++
+			continue
+		}
+		cable := &routedCable{
+			ID:       id,
+			Name:     name,
+			Color:    propertyString(feature.Properties, "color"),
+			Segments: lines,
+		}
+		byID[id] = cable
+		order = append(order, id)
+	}
+	out := routed{Cables: make([]routedCable, 0, len(order))}
+	for _, id := range order {
+		out.Cables = append(out.Cables, *byID[id])
 	}
 	for _, feature := range landings.Features {
 		lon, lat, ok := pointCoord(feature.Geometry.Coordinates)
@@ -205,6 +291,9 @@ func (s *Source) refresh(ctx context.Context) (simplified, error) {
 		if len(out.Landings) >= maxLandings {
 			break
 		}
+	}
+	if dropped > 0 {
+		s.logger.Info("cables dropped", "source", s.id, "dropped", dropped, "kept", len(out.Cables))
 	}
 	if encoded, err := json.Marshal(out); err == nil {
 		_ = s.cache.Store(encoded)
@@ -225,10 +314,8 @@ func (s *Source) sample(ctx context.Context) ([]plugins.RawRecord, error) {
 			"kind":        "cable",
 			"cableId":     cable.ID,
 			"name":        cable.Name,
-			"fromLon":     cable.Lon1,
-			"fromLat":     cable.Lat1,
-			"toLon":       cable.Lon2,
-			"toLat":       cable.Lat2,
+			"color":       strings.ToLower(cable.Color),
+			"segments":    cable.Segments,
 			"attribution": attribution,
 		})
 		if err != nil {

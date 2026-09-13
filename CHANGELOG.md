@@ -56,6 +56,14 @@ superseded configurations, is in
 
 ### Added
 
+- **Submarine cables follow TeleGeography routes.** `geography.cables`
+  keeps the MultiLineString (decimated for GPU), and the client draws
+  LineString / MultiLineString on the sphere shell — not a first↔last
+  great-circle chord. Landings stay Points. Color is operational: planned
+  cables (TeleGeography `#939597`) amber; in-service cables by route
+  length (short teal / regional cyan / ocean blue / trunk magenta).
+  Overlay **CABLES** or `C`; legend under that row. Attribution unchanged
+  (CC BY-NC-SA 3.0, removable `data/cables/` cache).
 - **Area geometry on the globe.** The client now parses and draws
   Polygon/MultiPolygon envelopes: one batched translucent fill plus a
   brighter outline on the sphere shell, matching Point and GreatCircle.

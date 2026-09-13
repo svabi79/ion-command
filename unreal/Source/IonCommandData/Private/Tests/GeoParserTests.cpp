@@ -34,5 +34,22 @@ bool FIonEnvelopeParserPolygonTest::RunTest(const FString& Parameters)
     return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FIonEnvelopeParserMultiLineStringTest, "IONCOMMAND.Data.CanonicalEnvelope.MultiLineString", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FIonEnvelopeParserMultiLineStringTest::RunTest(const FString& Parameters)
+{
+    const FString Json = TEXT(R"({"schemaVersion":1,"messageId":"cable","messageType":"relationship","domain":"geography","semanticType":"geography.cable","entityId":"geography:cable:demo","source":{"pluginId":"cables","instanceId":"test"},"time":{"observedUtc":"2026-09-13T03:00:00Z","receivedUtc":"2026-09-13T03:00:01Z","validFromUtc":"2026-09-13T03:00:00Z","processingUtc":"2026-09-13T03:00:01Z"},"geometry":{"type":"MultiLineString","crs":"EPSG:4326","coordinates":[[[-5.0,36.0],[0.0,42.0],[5.0,37.0]],[[6.0,37.0],[8.0,38.0]]]},"properties":{"display.title":"Demo Cable"}})");
+    FGeoMessageEnvelope Envelope;
+    FString Error;
+    TestTrue(TEXT("multilinestring envelope parses"), FGeoEnvelopeJsonParser::Parse(Json, Envelope, Error));
+    TestEqual(TEXT("geometry"), Envelope.Geometry.Type, EGeoGeometryType::MultiLineString);
+    TestEqual(TEXT("line count"), Envelope.Geometry.NumLines(), 2);
+    TestEqual(TEXT("positions"), Envelope.Geometry.Positions.Num(), 5);
+    TArray<FGeoPosition> First;
+    TestTrue(TEXT("first line"), Envelope.Geometry.GetLine(0, First));
+    TestEqual(TEXT("dogleg kept"), First.Num(), 3);
+    TestEqual(TEXT("mid lat"), First[1].Latitude, 42.0);
+    return true;
+}
+
 #endif
 

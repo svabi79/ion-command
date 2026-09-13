@@ -33,6 +33,16 @@ GreatCircle:
 {"type":"GreatCircle","coordinates":[[8.3,47.2],[-73.9,41.0]],"crs":"EPSG:4326"}
 ```
 
+LineString / MultiLineString (open routes on the sphere):
+
+```json
+{"type":"LineString","coordinates":[[-5.0,36.0],[0.0,42.0],[5.0,37.0]],"crs":"EPSG:4326"}
+```
+
+```json
+{"type":"MultiLineString","coordinates":[[[-5.0,36.0],[5.0,37.0]],[[6.0,37.0],[8.0,38.0]]],"crs":"EPSG:4326"}
+```
+
 Polygon (Area), GeoJSON rings, first ring exterior:
 
 ```json
@@ -50,7 +60,7 @@ frequency, band, mode, SNR, and source identifiers. `representation` is
 
 The Go validator accepts unknown geometry names so they can be recorded and
 forwarded. The Unreal parser records the envelope and renders Point,
-GreatCircle and Polygon; other reserved geometry stays recordable. Breaking
-semantic changes require a new schema version; new properties and semantic
-types do not.
+GreatCircle, LineString/MultiLineString and Polygon; other reserved geometry
+stays recordable. Breaking semantic changes require a new schema version; new
+properties and semantic types do not.
 

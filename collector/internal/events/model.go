@@ -100,6 +100,18 @@ func GreatCircle(fromLongitude, fromLatitude, toLongitude, toLatitude float64) G
 	return Geometry{Type: "GreatCircle", Coordinates: coordinates, CRS: "EPSG:4326"}
 }
 
+// LineString is a GeoJSON line: two or more positions.
+func LineString(positions [][]float64) Geometry {
+	coordinates, _ := json.Marshal(positions)
+	return Geometry{Type: "LineString", Coordinates: coordinates, CRS: "EPSG:4326"}
+}
+
+// MultiLineString is a GeoJSON multilinestring: an array of lines.
+func MultiLineString(lines [][][]float64) Geometry {
+	coordinates, _ := json.Marshal(lines)
+	return Geometry{Type: "MultiLineString", Coordinates: coordinates, CRS: "EPSG:4326"}
+}
+
 // Polygon is a GeoJSON polygon: an array of closed linear rings. The first
 // ring is the exterior; subsequent rings are holes. Coordinates stay in
 // GeoJSON order (longitude, latitude, optional altitude).
@@ -155,6 +167,23 @@ func validateGeometry(geometry Geometry) error {
 			return err
 		}
 		return validateLonLat(line[1][0], line[1][1])
+	case "LineString":
+		var line [][]float64
+		if err := json.Unmarshal(geometry.Coordinates, &line); err != nil {
+			return fmt.Errorf("LineString requires an array of positions")
+		}
+		return validateLine(line)
+	case "MultiLineString":
+		var lines [][][]float64
+		if err := json.Unmarshal(geometry.Coordinates, &lines); err != nil || len(lines) == 0 {
+			return fmt.Errorf("MultiLineString requires at least one line")
+		}
+		for _, line := range lines {
+			if err := validateLine(line); err != nil {
+				return err
+			}
+		}
+		return nil
 	case "Polygon":
 		var rings [][][]float64
 		if err := json.Unmarshal(geometry.Coordinates, &rings); err != nil {
@@ -176,6 +205,21 @@ func validateGeometry(geometry Geometry) error {
 		// Unknown geometry types remain forwardable and recordable by design.
 		return nil
 	}
+}
+
+func validateLine(line [][]float64) error {
+	if len(line) < 2 {
+		return fmt.Errorf("line requires at least two positions")
+	}
+	for _, position := range line {
+		if len(position) < 2 {
+			return fmt.Errorf("line position requires longitude and latitude")
+		}
+		if err := validateLonLat(position[0], position[1]); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func validatePolygonRings(rings [][][]float64) error {
