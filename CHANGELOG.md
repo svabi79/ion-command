@@ -12,6 +12,14 @@ superseded configurations, is in
 
 ### Fixed
 
+- **UE 5.8 Area fill bootstrap after `#16`.** `create_material_instances.py`
+  set `used_with_procedural_meshes` on `M_AreaFill`. That property is not
+  on Material in 5.8 (Python API: `used_with_static_mesh`,
+  `used_with_instanced_static_meshes`, `used_with_nanite`, … — no
+  procedural-mesh usage). The setter raised, so `MI_AreaFill` was never
+  written and the runtime fell back to `MI_Atmosphere`. The fill master
+  now sets `used_with_static_mesh`, which is the permutation
+  `UProceduralMeshComponent` uses. Outline / cone runtime is unchanged.
 - **UE 5.8 package compile after `#14`.** `#14` committed SETTINGS/search
   on `EKeys::Enter || EKeys::NumPadEnter`. `NumPadEnter` is not a member
   of `EKeys` on 5.8 (`InputCoreTypes.h` has `Enter` and `NumPadZero`–
