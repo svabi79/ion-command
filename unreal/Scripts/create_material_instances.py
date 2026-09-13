@@ -163,6 +163,27 @@ def build_shell_master() -> unreal.Material:
     return material
 
 
+def build_area_fill_master() -> unreal.Material:
+    """Unlit translucent polygon fill for Area geometry on the globe shell."""
+    material = ensure_material("M_AreaFill")
+    material.set_editor_property("blend_mode", unreal.BlendMode.BLEND_TRANSLUCENT)
+    material.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
+    material.set_editor_property("two_sided", True)
+    material.set_editor_property("used_with_procedural_meshes", True)
+
+    color = vector(material, "Color", unreal.LinearColor(1.0, 0.55, 0.12, 1.0), -700, -120)
+    intensity = scalar(material, "Intensity", 1.4, -700, 40)
+    opacity = scalar(material, "Opacity", 0.22, -700, 200)
+    tinted = expression(material, unreal.MaterialExpressionMultiply, -380, -40)
+    MEL.connect_material_expressions(color, "", tinted, "A")
+    MEL.connect_material_expressions(intensity, "", tinted, "B")
+    MEL.connect_material_property(tinted, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    MEL.connect_material_property(opacity, "", unreal.MaterialProperty.MP_OPACITY)
+    MEL.recompile_material(material)
+    save_asset(f"{MATERIAL_DIR}/M_AreaFill")
+    return material
+
+
 def build_signal_master() -> unreal.Material:
     material = ensure_material("M_HolographicSignal")
     material.set_editor_property("blend_mode", unreal.BlendMode.BLEND_ADDITIVE)
@@ -1371,6 +1392,8 @@ def main() -> None:
     shell = build_shell_master()
     create_instance("MI_Atmosphere", shell, unreal.LinearColor(0.12, 0.45, 1.0, 1.0), 0.62, intensity=2.4, rim_exponent=2.6)
     create_instance("MI_Ionosphere", shell, unreal.LinearColor(0.0, 0.85, 1.0, 1.0), 0.10, intensity=1.0, rim_exponent=4.0)
+    area = build_area_fill_master()
+    create_instance("MI_AreaFill", area, unreal.LinearColor(1.0, 0.55, 0.12, 1.0), 0.22, intensity=1.4)
 
     signal = build_signal_master()
     for index in range(11):

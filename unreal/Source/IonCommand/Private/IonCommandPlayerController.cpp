@@ -3,6 +3,7 @@
 #include "Components/InputComponent.h"
 #include "EngineUtils.h"
 #include "GeoArcLayerActor.h"
+#include "GeoAreaLayerActor.h"
 #include "GeoDataSubsystem.h"
 #include "GeoPointLayerActor.h"
 #include "GeoSearchSubsystem.h"
@@ -96,6 +97,7 @@ void AIonCommandPlayerController::SetupInputComponent()
     InputComponent->BindAction(TEXT("ToggleHeatmap"), IE_Pressed, this, &AIonCommandPlayerController::ToggleHeatmap);
     InputComponent->BindAction(TEXT("TogglePaths"), IE_Pressed, this, &AIonCommandPlayerController::TogglePaths);
     InputComponent->BindAction(TEXT("ToggleTrails"), IE_Pressed, this, &AIonCommandPlayerController::ToggleTrails);
+    InputComponent->BindAction(TEXT("ToggleAreas"), IE_Pressed, this, &AIonCommandPlayerController::ToggleAreas);
     InputComponent->BindAction(TEXT("CycleModeFilter"), IE_Pressed, this, &AIonCommandPlayerController::CycleModeFilter);
     InputComponent->BindAction(TEXT("ToggleOverlayMenu"), IE_Pressed, this, &AIonCommandPlayerController::ToggleOverlayMenu);
     InputComponent->BindAction(TEXT("OpenSearch"), IE_Pressed, this, &AIonCommandPlayerController::OpenSearchOverlay);
@@ -206,6 +208,15 @@ void AIonCommandPlayerController::ToggleTrails()
     }
 }
 
+void AIonCommandPlayerController::ToggleAreas()
+{
+    if (IsTypingText()) return;
+    for (TActorIterator<AGeoAreaLayerActor> It(GetWorld()); It; ++It)
+    {
+        It->SetActorHiddenInGame(!It->IsHidden());
+    }
+}
+
 void AIonCommandPlayerController::CycleHudMode()
 {
     if (IsTypingText()) return;
@@ -304,6 +315,24 @@ void AIonCommandPlayerController::SelectUnderCursor()
     FGeoMessageEnvelope BestMessage;
     double BestMessageDistance = TNumericLimits<double>::Max();
     for (TActorIterator<AGeoArcLayerActor> It(GetWorld()); It; ++It)
+    {
+        if (It->IsHidden())
+        {
+            continue;
+        }
+        FGeoMessageEnvelope Candidate;
+        if (It->FindClosestMessageToRay(RayOrigin, RayDirection, RayLength, 32.0, Candidate))
+        {
+            const FVector CandidateLocation = It->GetActorLocation();
+            const double CandidateDistance = FVector::DistSquared(RayOrigin, CandidateLocation);
+            if (CandidateDistance < BestMessageDistance)
+            {
+                BestMessageDistance = CandidateDistance;
+                BestMessage = MoveTemp(Candidate);
+            }
+        }
+    }
+    for (TActorIterator<AGeoAreaLayerActor> It(GetWorld()); It; ++It)
     {
         if (It->IsHidden())
         {

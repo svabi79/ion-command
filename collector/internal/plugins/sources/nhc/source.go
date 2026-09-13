@@ -1,7 +1,7 @@
 // Package nhc polls NOAA NHC CurrentStorms.json for active tropical
-// cyclone centres in the Atlantic and eastern Pacific. Positions are
-// US Government work (public domain). Cones and wind radii stay out of
-// scope until the renderer has Area geometry.
+// cyclone centres in the Atlantic and eastern Pacific, then fetches the
+// 5-day forecast cone KMZ linked from each storm's trackCone product.
+// Positions and cones are US Government work (public domain).
 package nhc
 
 import (
@@ -45,7 +45,7 @@ type Source struct {
 	interval time.Duration
 	client   *http.Client
 	logger   *slog.Logger
-	fetch    func(ctx context.Context) ([]byte, error)
+	fetch    func(ctx context.Context, rawURL string) ([]byte, error)
 }
 
 func New(sourceConfig config.Source, logger *slog.Logger) (*Source, error) {
@@ -67,7 +67,9 @@ func New(sourceConfig config.Source, logger *slog.Logger) (*Source, error) {
 		url = sourceConfig.Broker
 	}
 	source := &Source{id: sourceConfig.ID, url: url, interval: interval, client: &http.Client{Timeout: 30 * time.Second}, logger: logger}
-	source.fetch = func(ctx context.Context) ([]byte, error) { return pollutil.Get(ctx, source.client, source.url, nil) }
+	source.fetch = func(ctx context.Context, rawURL string) ([]byte, error) {
+		return pollutil.Get(ctx, source.client, rawURL, nil)
+	}
 	return source, nil
 }
 
@@ -78,17 +80,25 @@ type nhcResponse struct {
 	ActiveStorms []nhcStorm `json:"activeStorms"`
 }
 
+type nhcProduct struct {
+	AdvNum   string `json:"advNum"`
+	Issuance string `json:"issuance"`
+	KmzFile  string `json:"kmzFile"`
+	ZipFile  string `json:"zipFile"`
+}
+
 type nhcStorm struct {
-	ID               string  `json:"id"`
-	Name             string  `json:"name"`
-	Classification   string  `json:"classification"`
-	Intensity        string  `json:"intensity"`
-	Pressure         string  `json:"pressure"`
-	LatitudeNumeric  float64 `json:"latitudeNumeric"`
-	LongitudeNumeric float64 `json:"longitudeNumeric"`
-	MovementDir      float64 `json:"movementDir"`
-	MovementSpeed    float64 `json:"movementSpeed"`
-	LastUpdate       string  `json:"lastUpdate"`
+	ID               string      `json:"id"`
+	Name             string      `json:"name"`
+	Classification   string      `json:"classification"`
+	Intensity        string      `json:"intensity"`
+	Pressure         string      `json:"pressure"`
+	LatitudeNumeric  float64     `json:"latitudeNumeric"`
+	LongitudeNumeric float64     `json:"longitudeNumeric"`
+	MovementDir      float64     `json:"movementDir"`
+	MovementSpeed    float64     `json:"movementSpeed"`
+	LastUpdate       string      `json:"lastUpdate"`
+	TrackCone        *nhcProduct `json:"trackCone"`
 }
 
 func parseNumber(text string) float64 {
@@ -100,7 +110,7 @@ func parseNumber(text string) float64 {
 }
 
 func (s *Source) sample(ctx context.Context) ([]plugins.RawRecord, error) {
-	body, err := s.fetch(ctx)
+	body, err := s.fetch(ctx, s.url)
 	if err != nil {
 		return nil, err
 	}
@@ -109,7 +119,7 @@ func (s *Source) sample(ctx context.Context) ([]plugins.RawRecord, error) {
 		return nil, fmt.Errorf("decode nhc response: %w", err)
 	}
 	now := time.Now().UTC()
-	records := make([]plugins.RawRecord, 0, len(response.ActiveStorms))
+	records := make([]plugins.RawRecord, 0, len(response.ActiveStorms)*2)
 	for _, storm := range response.ActiveStorms {
 		if storm.ID == "" {
 			continue
@@ -148,11 +158,50 @@ func (s *Source) sample(ctx context.Context) ([]plugins.RawRecord, error) {
 			SourcePluginID: "nhc", SourceInstanceID: s.id, OriginalID: storm.ID,
 			Domain: "weather", ObservedUTC: now, Payload: payload,
 		})
-		if len(records) >= maxStorms {
+		if storm.TrackCone != nil && strings.TrimSpace(storm.TrackCone.KmzFile) != "" {
+			if cone, coneErr := s.sampleCone(ctx, storm, name, label, now); coneErr != nil {
+				s.logger.Warn("nhc cone fetch failed", "source", s.id, "storm", storm.ID, "error", coneErr)
+			} else if cone != nil {
+				records = append(records, *cone)
+			}
+		}
+		if len(records) >= maxStorms*2 {
 			break
 		}
 	}
 	return records, nil
+}
+
+func (s *Source) sampleCone(ctx context.Context, storm nhcStorm, name, label string, now time.Time) (*plugins.RawRecord, error) {
+	body, err := s.fetch(ctx, storm.TrackCone.KmzFile)
+	if err != nil {
+		return nil, err
+	}
+	rings, err := parseConeGeometry(body)
+	if err != nil {
+		return nil, err
+	}
+	payload, err := json.Marshal(map[string]any{
+		"kind":        "storm-cone",
+		"stormId":     storm.ID,
+		"name":        name,
+		"classLabel":  label,
+		"advisory":    storm.TrackCone.AdvNum,
+		"issuance":    storm.TrackCone.Issuance,
+		"coneKind":    "track",
+		"rings":       rings,
+		"provider":    "nhc",
+		"product":     "5-day forecast cone",
+		"attribution": "NOAA National Hurricane Center",
+	})
+	if err != nil {
+		return nil, err
+	}
+	record := plugins.RawRecord{
+		SourcePluginID: "nhc", SourceInstanceID: s.id, OriginalID: storm.ID + ":cone",
+		Domain: "weather", ObservedUTC: now, Payload: payload,
+	}
+	return &record, nil
 }
 
 func (s *Source) Start(ctx context.Context, output chan<- plugins.RawRecord) error {
@@ -161,7 +210,7 @@ func (s *Source) Start(ctx context.Context, output chan<- plugins.RawRecord) err
 		if err != nil && ctx.Err() == nil {
 			s.logger.Warn("nhc sample failed", "source", s.id, "error", err)
 		} else if err == nil {
-			s.logger.Info("nhc snapshot", "source", s.id, "storms", len(records))
+			s.logger.Info("nhc snapshot", "source", s.id, "records", len(records))
 		}
 		for _, record := range records {
 			select {

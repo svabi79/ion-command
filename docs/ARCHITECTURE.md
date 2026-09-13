@@ -100,9 +100,9 @@ of Entity, Observation, Relationship, Track, Area, Field, Volume, or Annotation.
 Semantic types are hierarchical strings registered by plugins. Unknown semantic
 types remain recordable and replayable.
 
-Point and GreatCircle are fully parsed by the client. Interfaces and
-schema names are reserved for tracks, polygons, grids, raster fields, shells,
-and volumes.
+Point, GreatCircle and Polygon (Area) are fully parsed by the client.
+Interfaces and schema names remain reserved for tracks, grids, raster fields,
+shells, and volumes.
 
 ## Unreal modules
 
@@ -110,7 +110,7 @@ and volumes.
 |---|---|
 | `IonCommandCore` | canonical structs, geometry/layer contracts, geospatial and solar math |
 | `IonCommandData` | WebSocket, JSON parsing, bounded history, timeline, replay, selection, context queries, search index, watchlist/alerts |
-| `IonCommandVisualization` | layer registry and domain-neutral point/arc render adapters; globe and environmental instruments |
+| `IonCommandVisualization` | layer registry and domain-neutral point/arc/area render adapters; globe and environmental instruments |
 | `IonCommandHamRadio` | radio semantic selection and centrally configured band visuals |
 | `IonCommandUI` | physical command console and world-space telemetry |
 | `IonCommand` | application shell, camera, player controller, game mode, runtime composition |
@@ -129,7 +129,8 @@ No renderer parses network data, and no unbounded array is used.
 ## Rendering path
 
 The renderer uses one hierarchical instanced mesh component per palette entry
-for arc segments, and one component per point class. It never creates an Actor
+for arc segments, and one component per point class. Area polygons share one
+procedural fill mesh and one instanced outline batch. It never creates an Actor
 or material per message. `AGeoArcLayerActor` is domain-neutral;
 `AHamRadioLinkLayerActor` reuses it and supplies band styling. The next renderer
 implementation can replace HISM segments with Niagara Data Channels behind the

@@ -48,6 +48,17 @@ superseded configurations, is in
 
 ### Added
 
+- **Area geometry on the globe.** The client now parses and draws
+  Polygon/MultiPolygon envelopes: one batched translucent fill plus a
+  brighter outline on the sphere shell, matching Point and GreatCircle.
+  Toggle with `Y` or the overlay AREAS row. Not one Actor per polygon.
+- **NHC forecast cones.** `weather.nhc` fetches the official 5-day
+  track-uncertainty KMZ linked from each storm in `CurrentStorms.json` and
+  emits `weather.storm.cone` Area events next to the existing centre
+  points. Centres stay Points; the cone is linked with a `forecastFor`
+  relationship. NOAA NHC, public-domain US Government work; NOAA does not
+  endorse this project.
+
 - **OpenSky OAuth2** (`#9`). The retired HTTP basic-auth path is gone.
   `clientId`/`clientSecret` (or an OpenSky `credentials.json`) live only in
   gitignored `local.json`. Without credentials the source keeps running

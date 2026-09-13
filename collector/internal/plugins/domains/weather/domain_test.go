@@ -51,3 +51,31 @@ func TestStormNormalizes(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestStormConeNormalizesAsArea(t *testing.T) {
+	payload, _ := json.Marshal(map[string]any{
+		"kind": "storm-cone", "stormId": "ep142026", "name": "Norbert", "classLabel": "Tropical Storm",
+		"advisory": "014", "coneKind": "track", "provider": "nhc", "product": "5-day forecast cone",
+		"rings": [][][]float64{{{-130.5, 17.9}, {-129.0, 18.0}, {-128.5, 20.0}, {-131.0, 19.5}, {-130.5, 17.9}}},
+	})
+	messages, err := New().Normalize(context.Background(), plugins.RawRecord{
+		SourcePluginID: "nhc", SourceInstanceID: "t", OriginalID: "ep142026:cone", Domain: "weather",
+		ObservedUTC: time.Now().UTC(), Payload: payload,
+	})
+	if err != nil || len(messages) != 1 {
+		t.Fatalf("%v %#v", err, messages)
+	}
+	message := messages[0]
+	if message.MessageType != events.MessageArea || message.SemanticType != "weather.storm.cone" || message.Geometry.Type != "Polygon" {
+		t.Fatalf("unexpected cone message: %#v", message)
+	}
+	if message.EntityID != "weather:storm:ep142026" {
+		t.Fatalf("entity %s", message.EntityID)
+	}
+	if len(message.Relationships) != 1 || message.Relationships[0].TargetID != "weather:storm:ep142026" {
+		t.Fatalf("relationships %#v", message.Relationships)
+	}
+	if err := message.Validate(); err != nil {
+		t.Fatal(err)
+	}
+}

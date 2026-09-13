@@ -1,0 +1,21 @@
+{
+  "activeStorms": [
+    {
+      "id": "ep142026",
+      "name": "Norbert",
+      "classification": "TS",
+      "intensity": "40",
+      "pressure": "1002",
+      "latitudeNumeric": 17.9,
+      "longitudeNumeric": -130.5,
+      "movementDir": 280,
+      "movementSpeed": 12,
+      "lastUpdate": "2026-09-13T03:00:00.000Z",
+      "trackCone": {
+        "advNum": "014",
+        "issuance": "2026-09-13T03:00:00.000Z",
+        "kmzFile": "https://www.nhc.noaa.gov/storm_graphics/api/EP142026_014adv_CONE.kmz"
+      }
+    }
+  ]
+}

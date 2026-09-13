@@ -69,6 +69,54 @@ struct IONCOMMANDCORE_API FGeoGeometry
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="ION COMMAND|Geo")
     TArray<FGeoPosition> Positions;
+
+    // Vertex counts of each linear ring packed into Positions, in order.
+    // Empty for Point/GreatCircle. Polygon and MultiPolygon use this so a
+    // closed area can carry holes or multiple shells without a new type.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="ION COMMAND|Geo")
+    TArray<int32> RingLengths;
+
+    int32 NumRings() const
+    {
+        if (RingLengths.Num() > 0)
+        {
+            return RingLengths.Num();
+        }
+        if ((Type == EGeoGeometryType::Polygon || Type == EGeoGeometryType::MultiPolygon) && Positions.Num() >= 3)
+        {
+            return 1;
+        }
+        return 0;
+    }
+
+    bool GetRing(int32 Index, TArray<FGeoPosition>& OutRing) const
+    {
+        OutRing.Reset();
+        if (RingLengths.Num() == 0)
+        {
+            if (Index != 0 || Positions.Num() < 3)
+            {
+                return false;
+            }
+            OutRing = Positions;
+            return true;
+        }
+        if (!RingLengths.IsValidIndex(Index) || RingLengths[Index] < 3)
+        {
+            return false;
+        }
+        int32 Offset = 0;
+        for (int32 Prior = 0; Prior < Index; ++Prior)
+        {
+            Offset += RingLengths[Prior];
+        }
+        if (Offset + RingLengths[Index] > Positions.Num())
+        {
+            return false;
+        }
+        OutRing.Append(Positions.GetData() + Offset, RingLengths[Index]);
+        return true;
+    }
 };
 
 USTRUCT(BlueprintType)

@@ -46,6 +46,18 @@ func TestRepositorySampleDataMatchesCanonicalContract(t *testing.T) {
 	}
 }
 
+func TestPolygonValidation(t *testing.T) {
+	event := NewEnvelope("area-1", "weather", "weather.storm.cone", MessageArea, SourceRef{PluginID: "nhc", InstanceID: "test"}, time.Now())
+	event.Geometry = Polygon([][][]float64{{{-80, 25}, {-79, 25}, {-79, 26}, {-80, 26}, {-80, 25}}})
+	if err := event.Validate(); err != nil {
+		t.Fatalf("valid polygon rejected: %v", err)
+	}
+	event.Geometry = Polygon([][][]float64{{{-80, 25}}})
+	if err := event.Validate(); err == nil {
+		t.Fatal("short ring accepted")
+	}
+}
+
 func TestUnknownGeometryIsForwardCompatible(t *testing.T) {
 	event := NewEnvelope("test-2", "future", "future.thing", MessageField, SourceRef{PluginID: "mock", InstanceID: "test"}, time.Now())
 	event.Geometry.Type = "FutureGeometry"
