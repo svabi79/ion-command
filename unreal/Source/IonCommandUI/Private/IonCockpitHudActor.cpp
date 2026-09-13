@@ -759,27 +759,30 @@ void AIonCockpitHudActor::DrawPlaceLabels(float Scale, float Alpha)
     const int32 MaxLod = Orbit > 0.72 ? 0 : (Orbit > 0.38 ? 1 : 2);
     const int32 Budget = Orbit > 0.72 ? 18 : (Orbit > 0.38 ? 36 : 56);
 
-    TArray<const FIonPlaceLabel*> Candidates;
+    // Value copies: UE 5.8 TArray::Sort cannot take a pointer-element
+    // predicate (TDereferenceWrapper specialises T* and C2664s). Same
+    // const-ref form as the endpoint/region caches above.
+    TArray<FIonPlaceLabel> Candidates;
     Candidates.Reserve(PlaceLabels.Num());
     for (const TPair<FString, FIonPlaceLabel>& Pair : PlaceLabels)
     {
         if (Pair.Value.Lod <= MaxLod)
         {
-            Candidates.Add(&Pair.Value);
+            Candidates.Add(Pair.Value);
         }
     }
-    Candidates.Sort([](const FIonPlaceLabel* A, const FIonPlaceLabel* B)
+    Candidates.Sort([](const FIonPlaceLabel& A, const FIonPlaceLabel& B)
     {
-        if (A->Lod != B->Lod) return A->Lod < B->Lod;
-        return A->Label < B->Label;
+        if (A.Lod != B.Lod) return A.Lod < B.Lod;
+        return A.Label < B.Label;
     });
 
     TArray<FVector2D> Occupied;
     int32 Drawn = 0;
-    for (const FIonPlaceLabel* Place : Candidates)
+    for (const FIonPlaceLabel& Place : Candidates)
     {
         if (Drawn >= Budget) break;
-        const FVector Unit = UGeoMathLibrary::LatitudeLongitudeToUnitSphere(Place->Position.Latitude, Place->Position.Longitude);
+        const FVector Unit = UGeoMathLibrary::LatitudeLongitudeToUnitSphere(Place.Position.Latitude, Place.Position.Longitude);
         const FVector WorldPosition = Unit * LabelRadiusUnits;
         if (FVector::DotProduct(Unit, (CameraLocation - WorldPosition).GetSafeNormal()) < 0.12) continue;
         const FVector Screen = Canvas->Project(WorldPosition);
@@ -797,34 +800,34 @@ void AIonCockpitHudActor::DrawPlaceLabels(float Scale, float Alpha)
 
         FLinearColor Color = FLinearColor(0.78f, 0.86f, 0.92f);
         float TextScale = 0.95f * Scale;
-        if (Place->Kind == TEXT("geography.country"))
+        if (Place.Kind == TEXT("geography.country"))
         {
             Color = FLinearColor(0.70f, 0.78f, 0.86f);
             TextScale = 1.08f * Scale;
         }
-        else if (Place->Kind == TEXT("geography.region") || Place->Kind == TEXT("geography.marine"))
+        else if (Place.Kind == TEXT("geography.region") || Place.Kind == TEXT("geography.marine"))
         {
-            Color = Place->Kind == TEXT("geography.marine")
+            Color = Place.Kind == TEXT("geography.marine")
                 ? FLinearColor(0.38f, 0.68f, 0.86f)
                 : FLinearColor(0.52f, 0.76f, 0.88f);
             TextScale = 1.12f * Scale;
         }
-        else if (Place->Kind == TEXT("geography.river"))
+        else if (Place.Kind == TEXT("geography.river"))
         {
             Color = FLinearColor(0.42f, 0.60f, 0.70f);
             TextScale = 0.88f * Scale;
         }
-        else if (Place->Kind == TEXT("geography.landmark"))
+        else if (Place.Kind == TEXT("geography.landmark"))
         {
             Color = FLinearColor(0.76f, 0.68f, 0.50f);
             TextScale = 0.90f * Scale;
         }
-        else if (Place->Kind == TEXT("geography.city"))
+        else if (Place.Kind == TEXT("geography.city"))
         {
             Color = FLinearColor(0.84f, 0.90f, 0.96f);
         }
         DrawRect(Screen.X - 1.4f * Scale, Screen.Y - 1.4f * Scale, 2.8f * Scale, 2.8f * Scale, WithAlpha(Color, Alpha * 0.85f));
-        DrawTextAt(Place->Label, Screen.X + 5.0f * Scale, Screen.Y - 12.0f * Scale, WithAlpha(Color, Alpha * 0.9f), TextScale);
+        DrawTextAt(Place.Label, Screen.X + 5.0f * Scale, Screen.Y - 12.0f * Scale, WithAlpha(Color, Alpha * 0.9f), TextScale);
         Occupied.Add(FVector2D(Screen.X, Screen.Y));
         ++Drawn;
     }
