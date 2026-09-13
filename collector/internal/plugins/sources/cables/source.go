@@ -22,20 +22,18 @@ import (
 )
 
 const (
-	defaultCablesURL   = "https://www.submarinecablemap.com/api/v3/cable/cable-geo.json"
-	defaultLandingsURL = "https://www.submarinecablemap.com/api/v3/landing-point/landing-point-geo.json"
-	pollDefault        = 24 * time.Hour
-	pollFloor          = 6 * time.Hour
-	maxCables          = 800
-	maxLandings        = 400
-	maxLandingJoin     = 2500
-	maxLinkedLandings  = 24
-	maxVerticesPerLine = 64
-	minVertexKm        = 25.0
-	// Public cable-geo.json has no landing ids. A landing is related when it
-	// sits near a kept segment endpoint (decimate preserves ends).
-	landingLinkKm = 80.0
-	attribution   = "Submarine cables © TeleGeography (CC BY-NC-SA 3.0)"
+	defaultCablesURL      = "https://www.submarinecablemap.com/api/v3/cable/cable-geo.json"
+	defaultLandingsURL    = "https://www.submarinecablemap.com/api/v3/landing-point/landing-point-geo.json"
+	pollDefault           = 24 * time.Hour
+	pollFloor             = 6 * time.Hour
+	maxCables             = 800
+	maxLandings           = 400
+	maxLandingJoin        = 2500
+	maxLinkedLandings     = 24
+	maxVerticesPerLine    = 64
+	minVertexKm           = 25.0
+	landingEndpointLinkKm = 80.0
+	attribution           = "Submarine cables © TeleGeography (CC BY-NC-SA 3.0)"
 )
 
 type Source struct {
@@ -190,7 +188,7 @@ func decimateLines(lines [][][]float64) [][][]float64 {
 	return out
 }
 
-func landingNearCable(landing simplifiedLanding, cable routedCable, maxKm float64) bool {
+func landingNearSegmentEnds(landing simplifiedLanding, cable routedCable, maxKm float64) bool {
 	point := []float64{landing.Lon, landing.Lat}
 	for _, segment := range cable.Segments {
 		if len(segment) < 2 {
@@ -214,7 +212,7 @@ func linkLandingNames(cables []routedCable, landings []simplifiedLanding) {
 			if _, ok := seen[landing.Name]; ok {
 				continue
 			}
-			if !landingNearCable(landing, cables[i], landingLinkKm) {
+			if !landingNearSegmentEnds(landing, cables[i], landingEndpointLinkKm) {
 				continue
 			}
 			seen[landing.Name] = struct{}{}
