@@ -23,6 +23,7 @@
       "weather.observation",
       "weather.airquality",
       "weather.storm",
+      "weather.storm.cone",
       "geography.region",
       "geography.cable",
       "geography.landing",

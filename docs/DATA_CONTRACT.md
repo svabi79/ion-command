@@ -33,6 +33,12 @@ GreatCircle:
 {"type":"GreatCircle","coordinates":[[8.3,47.2],[-73.9,41.0]],"crs":"EPSG:4326"}
 ```
 
+Polygon (Area), GeoJSON rings, first ring exterior:
+
+```json
+{"type":"Polygon","coordinates":[[[-80.0,25.0],[-79.0,25.0],[-79.0,26.0],[-80.0,26.0],[-80.0,25.0]]],"crs":"EPSG:4326"}
+```
+
 ## Radio mapping
 
 A spot produces endpoint entities the first time an endpoint identity is seen,
@@ -43,7 +49,8 @@ frequency, band, mode, SNR, and source identifiers. `representation` is
 ## Compatibility
 
 The Go validator accepts unknown geometry names so they can be recorded and
-forwarded. The bootstrap Unreal parser records the envelope but only renders
-implemented geometry. Breaking semantic changes require a new schema version;
-new properties and semantic types do not.
+forwarded. The Unreal parser records the envelope and renders Point,
+GreatCircle and Polygon; other reserved geometry stays recordable. Breaking
+semantic changes require a new schema version; new properties and semantic
+types do not.
 

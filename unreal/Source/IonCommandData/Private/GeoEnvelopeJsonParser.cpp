@@ -78,6 +78,49 @@ bool ParsePosition(const TArray<TSharedPtr<FJsonValue>>& Values, FGeoPosition& O
     OutPosition.AltitudeMeters = Values.Num() > 2 && Values[2]->Type == EJson::Number ? Values[2]->AsNumber() : 0.0;
     return OutPosition.Longitude >= -180.0 && OutPosition.Longitude <= 180.0 && OutPosition.Latitude >= -90.0 && OutPosition.Latitude <= 90.0;
 }
+
+bool ParsePolygonRings(const TArray<TSharedPtr<FJsonValue>>& Rings, FGeoGeometry& OutGeometry, FString& OutError)
+{
+    if (Rings.Num() == 0)
+    {
+        OutError = TEXT("Polygon requires at least one ring");
+        return false;
+    }
+    for (const TSharedPtr<FJsonValue>& RingValue : Rings)
+    {
+        const TArray<TSharedPtr<FJsonValue>>* Ring = nullptr;
+        if (!RingValue->TryGetArray(Ring))
+        {
+            OutError = TEXT("invalid Polygon ring");
+            return false;
+        }
+        const int32 Start = OutGeometry.Positions.Num();
+        for (const TSharedPtr<FJsonValue>& Coordinate : *Ring)
+        {
+            const TArray<TSharedPtr<FJsonValue>>* PositionValues = nullptr;
+            if (!Coordinate->TryGetArray(PositionValues))
+            {
+                OutError = TEXT("invalid Polygon position");
+                return false;
+            }
+            FGeoPosition Position;
+            if (!ParsePosition(*PositionValues, Position))
+            {
+                OutError = TEXT("invalid Polygon position");
+                return false;
+            }
+            OutGeometry.Positions.Add(Position);
+        }
+        const int32 Count = OutGeometry.Positions.Num() - Start;
+        if (Count < 3)
+        {
+            OutError = TEXT("Polygon ring requires three or more positions");
+            return false;
+        }
+        OutGeometry.RingLengths.Add(Count);
+    }
+    return true;
+}
 }
 
 bool FGeoEnvelopeJsonParser::Parse(const FString& Json, FGeoMessageEnvelope& OutEnvelope, FString& OutError)
@@ -157,6 +200,20 @@ bool FGeoEnvelopeJsonParser::Parse(const FString& Json, FGeoMessageEnvelope& Out
                     OutEnvelope.Geometry.Positions.Add(Position);
                 }
                 if (OutEnvelope.Geometry.Positions.Num() < 2) { OutError = TEXT("line requires two or more positions"); return false; }
+            }
+            else if (OutEnvelope.Geometry.Type == EGeoGeometryType::Polygon)
+            {
+                if (!ParsePolygonRings(*Coordinates, OutEnvelope.Geometry, OutError)) return false;
+            }
+            else if (OutEnvelope.Geometry.Type == EGeoGeometryType::MultiPolygon)
+            {
+                for (const TSharedPtr<FJsonValue>& PolygonValue : *Coordinates)
+                {
+                    const TArray<TSharedPtr<FJsonValue>>* Rings = nullptr;
+                    if (!PolygonValue->TryGetArray(Rings)) { OutError = TEXT("invalid MultiPolygon coordinates"); return false; }
+                    if (!ParsePolygonRings(*Rings, OutEnvelope.Geometry, OutError)) return false;
+                }
+                if (OutEnvelope.Geometry.NumRings() == 0) { OutError = TEXT("MultiPolygon requires at least one ring"); return false; }
             }
         }
     }

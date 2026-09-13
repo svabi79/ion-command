@@ -37,7 +37,7 @@ messages itself — that is the domain's job.
 | `geophysics.eonet` | NASA EONET open natural events | HTTP poll | **on** | no | public NASA API |
 | `geophysics.gdacs` | GDACS disaster alerts | HTTP poll | **on** | no | public GeoJSON search |
 | `maritime.portwatch` | IMF PortWatch chokepoints, daily transits, and recent disruptions | HTTP poll | **on** | no | public ArcGIS FeatureServer |
-| `weather.nhc` | NOAA NHC active tropical-cyclone centres | HTTP poll | **on** | no | public domain; Atlantic and eastern Pacific only |
+| `weather.nhc` | NOAA NHC active tropical-cyclone centres and 5-day forecast cones | HTTP poll | **on** | no | public domain; Atlantic and eastern Pacific only |
 | `space.pads` | Launch Library 2 Earth spaceports | HTTP poll | **on** | optional (`apiKey` as `Authorization: Token`) | daily floor; shares the LL2 15/hour budget |
 | `humanitarian.hapi` | UNHCR refugee totals via HDX HAPI (host and origin countries) | HTTP poll | **off** (needs an app identifier) | **yes** (identifier in `local.json`) | fail-closed without identifier; CC BY-IGO |
 | `hamradio.rbn` | Reverse Beacon Network | telnet | off | **yes** (your callsign) | no published licence |
@@ -60,7 +60,7 @@ envelope. Domains own the vocabulary; nothing above them does.
 | `hamradio` | `radio.reception`, `radio.station` | `pskreporter.mqtt`, `hamradio.rbn`, `wsjtx.udp`, `hamradio.dxcluster`, `hamradio.wspr` |
 | `aprs` | `aprs.station`, `aprs.object` | `aprs.is` |
 | `aviation` | `aviation.aircraft`, `aviation.interference` | `aviation.adsb`, `aviation.opensky`, `aviation.gpsjam` |
-| `weather` | `weather.lightning`, `weather.observation`, `weather.airquality`, `weather.storm` | `lightning.blitzortung`, `weather.openmeteo`, `weather.openaq`, `weather.nhc` |
+| `weather` | `weather.lightning`, `weather.observation`, `weather.airquality`, `weather.storm`, `weather.storm.cone` | `lightning.blitzortung`, `weather.openmeteo`, `weather.openaq`, `weather.nhc` |
 | `spaceweather` | `spaceweather.state` | `spaceweather.swpc` |
 | `ionosphere` | `ionosphere.sounding` | `ionosonde.kc2g` |
 | `geophysics` | `geophysics.earthquake`, `geophysics.event` | `earthquake.usgs`, `geophysics.eonet`, `geophysics.gdacs` |
@@ -85,7 +85,7 @@ A context derives interpretation from canonical messages without owning a feed.
 | --- | --- | --- |
 | `IonCommandCore` | geo maths, generic types, the pinned sphere frame | no |
 | `IonCommandData` | envelope parsing, stream/data/timeline/replay/search/watch subsystems | no |
-| `IonCommandVisualization` | globe, atmosphere, arc layer, point/marker layer, motion-trail layer, heatmap, ionosphere shells | no |
+| `IonCommandVisualization` | globe, atmosphere, arc layer, point/marker layer, area layer, motion-trail layer, heatmap, ionosphere shells | no |
 | `IonCommandUI` | cockpit HUD, overlay menu, settings panel, tooltips | no |
 | `IonCommandHamRadio` | own station, band/DXCC panels, HF conditions and path analysis | **yes** |
 | `IonCommand` | game mode, player controller, camera rig | thin glue |

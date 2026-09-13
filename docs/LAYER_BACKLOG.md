@@ -2,8 +2,8 @@
 
 Candidate data layers, ordered by what they give the operator and by what the
 platform already supports. A layer is a source plugin plus a domain normaliser;
-when its geometry is `Point`, `GreatCircle` or `Track`, no renderer change is
-required. Anything needing `Area`, `Field`, `Raster` or `Volume` is blocked on
+when its geometry is `Point`, `GreatCircle`, `Track` or `Area`, no renderer
+change is required. Anything needing `Field`, `Raster` or `Volume` is blocked on
 new geometry support and is marked accordingly.
 
 Priorities for the platform as a whole are in
@@ -45,15 +45,15 @@ one. All four fit the existing renderer.
 ## Wave 3 — needs new geometry support
 
 These unlock several layers at once and should be planned together with the
-`Area` / `Field` geometry work.
+remaining `Field` geometry work. `Area` is now rendered.
 
 | Layer | Feed | Geometry needed |
 | --- | --- | --- |
-| **Satellite footprints** — who can hear which satellite now | Derived from SGP4 | `Area` |
-| **Grayline as a real surface** rather than an implied line | Derived from solar geometry | `Area` |
+| **Satellite footprints** — who can hear which satellite now | Derived from SGP4 | `Area` — renderer ready, feed not shipped |
+| **Grayline as a real surface** rather than an implied line | Derived from solar geometry | `Area` — renderer ready, feed not shipped |
 | **Precipitation radar** | RainViewer or national services | `Field` / raster — no clean hobby-globe API/terms found; left deferred |
 | **Ionospheric maps** (foF2, MUF, TEC) | Already fetched from KC2G as soundings | `Field` / raster |
-| **Tropical storm tracks and cones** | NOAA NHC | `Track` + `Area` — **centre points shipped** as `weather.nhc` / `weather.storm`; cones still blocked |
+| **Tropical storm tracks and cones** | NOAA NHC | `Track` + `Area` — **centres and 5-day cones shipped** as `weather.nhc` / `weather.storm` + `weather.storm.cone` |
 | **Submarine cables** — context for global connectivity | TeleGeography | `LineString` (static) — **shipped** as GreatCircle + landing points (`geography.cables`) |
 
 ## Wave 4 — the operator's own receiver
@@ -69,7 +69,7 @@ HTTP) and on which detection semantics are worth normalising.
 
 ## Deferred leftovers
 
-These stay deferred (cones/rasters need renderer work; the rest need a
+These stay deferred (rasters need renderer work; the rest need a
 cleaner licence or API than we have today):
 
 | Candidate | Why deferred |

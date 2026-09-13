@@ -1,4 +1,5 @@
 #include "GeoArcLayerActor.h"
+#include "GeoAreaLayerActor.h"
 #include "GeoPointLayerActor.h"
 #include "Misc/AutomationTest.h"
 #include "UObject/Package.h"
@@ -56,6 +57,30 @@ namespace
         Position.Latitude = FMath::Fmod(Index * 3.7, 80.0) - 40.0;
         Position.Longitude = FMath::Fmod(Index * 5.3, 340.0) - 170.0;
         Message.Geometry.Positions.Add(Position);
+        return Message;
+    }
+
+    FGeoMessageEnvelope MakeAreaMessage(int32 Index)
+    {
+        FGeoMessageEnvelope Message;
+        Message.SchemaVersion = 1;
+        Message.MessageId = FString::Printf(TEXT("area-%d"), Index);
+        Message.EntityId = FString::Printf(TEXT("area-entity-%d"), Index);
+        Message.MessageType = EGeoMessageType::Area;
+        Message.SemanticType = TEXT("test.area");
+        Message.Geometry.Type = EGeoGeometryType::Polygon;
+        const double Lon = FMath::Fmod(Index * 5.3, 340.0) - 170.0;
+        const double Lat = FMath::Fmod(Index * 3.7, 80.0) - 40.0;
+        const double CornerLon[] = {Lon, Lon + 2.0, Lon + 2.0, Lon, Lon};
+        const double CornerLat[] = {Lat, Lat, Lat + 2.0, Lat + 2.0, Lat};
+        for (int32 Corner = 0; Corner < 5; ++Corner)
+        {
+            FGeoPosition Position;
+            Position.Longitude = CornerLon[Corner];
+            Position.Latitude = CornerLat[Corner];
+            Message.Geometry.Positions.Add(Position);
+        }
+        Message.Geometry.RingLengths.Add(5);
         return Message;
     }
 }
@@ -177,6 +202,41 @@ bool FGeoPointLayerDomainToggleIsIncrementalTest::RunTest(const FString& Paramet
     TestEqual(TEXT("re-showing a domain is never a full rebuild"), AfterShow.FullRebuilds, (int64)0);
     TestEqual(TEXT("tracked count is unaffected throughout"), AfterShow.TrackedItems, AlphaCount + BetaCount);
 
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FGeoAreaLayerEntityReplaceIsUpdateTest, "IONCOMMAND.Visualization.AreaLayer.RepeatedEntityReplaces", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FGeoAreaLayerEntityReplaceIsUpdateTest::RunTest(const FString& Parameters)
+{
+    AGeoAreaLayerActor* Actor = NewObject<AGeoAreaLayerActor>(GetTransientPackage());
+    for (int32 Sighting = 0; Sighting < 6; ++Sighting)
+    {
+        FGeoMessageEnvelope Message = MakeAreaMessage(0);
+        Message.MessageId = FString::Printf(TEXT("area-sighting-%d"), Sighting);
+        Actor->Submit(Message);
+    }
+    const FGeoRenderLayerStatistics Stats = Actor->GetRenderStatistics();
+    TestEqual(TEXT("one entity keeps a single area"), Stats.TrackedItems, 1);
+    TestEqual(TEXT("first submit is the only insert"), Stats.IncrementalInserts, (int64)1);
+    TestEqual(TEXT("later submits are in-place updates"), Stats.IncrementalUpdates, (int64)5);
+    TestEqual(TEXT("entity replace is not a full rebuild"), Stats.FullRebuilds, (int64)0);
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FGeoAreaLayerCapacityTrimIsIncrementalTest, "IONCOMMAND.Visualization.AreaLayer.CapacityTrimIsIncremental", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FGeoAreaLayerCapacityTrimIsIncrementalTest::RunTest(const FString& Parameters)
+{
+    AGeoAreaLayerActor* Actor = NewObject<AGeoAreaLayerActor>(GetTransientPackage());
+    Actor->MaxVisibleAreas = 8;
+    const int32 SubmitCount = Actor->MaxVisibleAreas * 3;
+    for (int32 Index = 0; Index < SubmitCount; ++Index)
+    {
+        Actor->Submit(MakeAreaMessage(Index));
+    }
+    const FGeoRenderLayerStatistics Stats = Actor->GetRenderStatistics();
+    TestTrue(TEXT("tracked count stays at or under the capacity bound"), Stats.TrackedItems <= Actor->MaxVisibleAreas);
+    TestTrue(TEXT("capacity eviction fired"), Stats.CapacityEvictions > 0);
+    TestEqual(TEXT("no full rebuild under capacity pressure"), Stats.FullRebuilds, (int64)0);
     return true;
 }
 

@@ -1,0 +1,13 @@
+{
+  "layerId": "core.areas",
+  "displayName": "Geospatial Areas",
+  "domain": "*",
+  "acceptedSemanticTypes": ["*"],
+  "geometryTypes": ["Polygon", "MultiPolygon"],
+  "defaultVisibility": true,
+  "defaultTimeWindowSeconds": 7200,
+  "renderer": "GenericBatchedAreaRenderer",
+  "supportsSelection": true,
+  "supportsReplay": true,
+  "supportsAggregation": false
+}

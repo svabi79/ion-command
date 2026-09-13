@@ -100,6 +100,20 @@ func GreatCircle(fromLongitude, fromLatitude, toLongitude, toLatitude float64) G
 	return Geometry{Type: "GreatCircle", Coordinates: coordinates, CRS: "EPSG:4326"}
 }
 
+// Polygon is a GeoJSON polygon: an array of closed linear rings. The first
+// ring is the exterior; subsequent rings are holes. Coordinates stay in
+// GeoJSON order (longitude, latitude, optional altitude).
+func Polygon(rings [][][]float64) Geometry {
+	coordinates, _ := json.Marshal(rings)
+	return Geometry{Type: "Polygon", Coordinates: coordinates, CRS: "EPSG:4326"}
+}
+
+// MultiPolygon is a GeoJSON multipolygon: an array of polygon ring-sets.
+func MultiPolygon(polygons [][][][]float64) Geometry {
+	coordinates, _ := json.Marshal(polygons)
+	return Geometry{Type: "MultiPolygon", Coordinates: coordinates, CRS: "EPSG:4326"}
+}
+
 func (e Envelope) Validate() error {
 	if e.SchemaVersion != SchemaVersion {
 		return fmt.Errorf("unsupported schemaVersion %d", e.SchemaVersion)
@@ -141,10 +155,47 @@ func validateGeometry(geometry Geometry) error {
 			return err
 		}
 		return validateLonLat(line[1][0], line[1][1])
+	case "Polygon":
+		var rings [][][]float64
+		if err := json.Unmarshal(geometry.Coordinates, &rings); err != nil {
+			return fmt.Errorf("Polygon requires an array of linear rings")
+		}
+		return validatePolygonRings(rings)
+	case "MultiPolygon":
+		var polygons [][][][]float64
+		if err := json.Unmarshal(geometry.Coordinates, &polygons); err != nil || len(polygons) == 0 {
+			return fmt.Errorf("MultiPolygon requires at least one polygon")
+		}
+		for _, rings := range polygons {
+			if err := validatePolygonRings(rings); err != nil {
+				return err
+			}
+		}
+		return nil
 	default:
 		// Unknown geometry types remain forwardable and recordable by design.
 		return nil
 	}
+}
+
+func validatePolygonRings(rings [][][]float64) error {
+	if len(rings) == 0 {
+		return fmt.Errorf("Polygon requires at least one ring")
+	}
+	for _, ring := range rings {
+		if len(ring) < 3 {
+			return fmt.Errorf("Polygon ring requires at least three positions")
+		}
+		for _, position := range ring {
+			if len(position) < 2 {
+				return fmt.Errorf("Polygon position requires longitude and latitude")
+			}
+			if err := validateLonLat(position[0], position[1]); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func validateLonLat(longitude, latitude float64) error {

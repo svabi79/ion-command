@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "category": "domain",
   "accepts": ["raw:weather"],
-  "provides": ["semantic:weather.lightning"],
-  "coreDependencies": ["geometry:Point"]
+  "provides": ["semantic:weather.lightning", "semantic:weather.storm", "semantic:weather.storm.cone"],
+  "coreDependencies": ["geometry:Point", "geometry:Polygon"]
 }
 

@@ -36,6 +36,8 @@ func (d *Domain) Normalize(_ context.Context, record plugins.RawRecord) ([]event
 			return d.normalizeAirQuality(record)
 		case "storm":
 			return d.normalizeStorm(record)
+		case "storm-cone":
+			return d.normalizeStormCone(record)
 		}
 	}
 	var raw rawLightning
@@ -168,5 +170,63 @@ func (d *Domain) normalizeStorm(record plugins.RawRecord) ([]events.Envelope, er
 	}
 	measured := true
 	event.Quality.Measured = &measured
+	return []events.Envelope{event}, nil
+}
+
+func (d *Domain) normalizeStormCone(record plugins.RawRecord) ([]events.Envelope, error) {
+	var raw struct {
+		StormID     string        `json:"stormId"`
+		Name        string        `json:"name"`
+		ClassLabel  string        `json:"classLabel"`
+		Advisory    string        `json:"advisory"`
+		Issuance    string        `json:"issuance"`
+		ConeKind    string        `json:"coneKind"`
+		Rings       [][][]float64 `json:"rings"`
+		Provider    string        `json:"provider"`
+		Product     string        `json:"product"`
+		Attribution string        `json:"attribution"`
+	}
+	if err := json.Unmarshal(record.Payload, &raw); err != nil || raw.StormID == "" || len(raw.Rings) == 0 {
+		return nil, fmt.Errorf("decode weather storm cone")
+	}
+	event := events.NewEnvelope(record.OriginalID, "weather", "weather.storm.cone", events.MessageArea,
+		events.SourceRef{PluginID: record.SourcePluginID, InstanceID: record.SourceInstanceID, OriginalID: record.OriginalID},
+		record.ObservedUTC)
+	event.EntityID = "weather:storm:" + raw.StormID
+	event.Geometry = events.Polygon(raw.Rings)
+	validUntil := record.ObservedUTC.Add(18 * time.Hour)
+	event.Time.ValidUntilUTC = &validUntil
+	title := raw.Name
+	if raw.ClassLabel != "" {
+		title = raw.ClassLabel + " " + raw.Name
+	}
+	if title == "" {
+		title = raw.StormID
+	}
+	primary := "5-day forecast cone"
+	if raw.Product != "" {
+		primary = raw.Product
+	}
+	if raw.Advisory != "" {
+		primary = primary + "  //  adv " + raw.Advisory
+	}
+	secondary := raw.Attribution
+	if secondary == "" {
+		secondary = raw.Provider
+	}
+	event.Properties = map[string]any{
+		"visual.color":      "1.0,0.55,0.10",
+		"visual.opacity":    0.22,
+		"display.title":     title,
+		"display.primary":   primary,
+		"display.secondary": secondary,
+	}
+	if raw.ConeKind != "" {
+		event.Properties["coneKind"] = raw.ConeKind
+	}
+	event.Relationships = []events.RelationshipRef{{Type: "forecastFor", TargetID: "weather:storm:" + raw.StormID}}
+	measured := false
+	event.Quality.Measured = &measured
+	event.Quality.Classification = "modelled"
 	return []events.Envelope{event}, nil
 }
