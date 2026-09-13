@@ -45,8 +45,10 @@ The component list is in [COMPONENTS.md](COMPONENTS.md) — not repeated here.
   Toggle: `Y` key or the overlay menu's AREAS row
 - Batched path layer: open LineString/MultiLineString routes projected onto
   the globe shell (densified like Area edges). Used for TeleGeography
-  submarine cables; color is planned vs in-service length band. Toggle: `C`
-  or the overlay menu's CABLES row (legend under the row)
+  submarine cables; color is planned vs in-service length band. Hover
+  (same ray-to-segment pick as click) shows name, planned vs in-service,
+  route km, and linked landing names. Toggle: `C` or the overlay menu's
+  CABLES row (legend under the row)
 - Cockpit HUD: status bar, band histogram, path-rate sparkline, top DXCC
   regions with flags, auroral oval, HF conditions estimate, hop/MUF path
   analysis, hover tooltips, own-station reticle

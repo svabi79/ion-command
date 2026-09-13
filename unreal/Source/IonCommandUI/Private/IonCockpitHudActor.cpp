@@ -4,6 +4,7 @@
 #include "Engine/Canvas.h"
 #include "Engine/Engine.h"
 #include "Engine/Font.h"
+#include "Engine/HitResult.h"
 #include "EngineUtils.h"
 #include "IonGlobeActor.h"
 #include "GeoDataSubsystem.h"
@@ -1235,6 +1236,32 @@ void AIonCockpitHudActor::DrawHoverTooltip(float Scale, float Alpha)
                     bHoverValid = true;
                 }
                 break;
+            }
+            if (!bHoverValid)
+            {
+                FHitResult BlockingHit;
+                Player->GetHitResultUnderCursor(ECC_Visibility, true, BlockingHit);
+                const double RayLength = BlockingHit.bBlockingHit ? BlockingHit.Distance + 60.0 : 10000.0;
+                for (TActorIterator<AGeoPathLayerActor> It(GetWorld()); It; ++It)
+                {
+                    if (It->IsHidden())
+                    {
+                        continue;
+                    }
+                    FGeoMessageEnvelope Path;
+                    if (It->FindClosestMessageToRay(RayOrigin, RayDirection, RayLength, 32.0, Path))
+                    {
+                        HoverTitle = Path.Properties.FindRef(TEXT("display.title"));
+                        HoverPrimary = Path.Properties.FindRef(TEXT("display.primary"));
+                        HoverSecondary = Path.Properties.FindRef(TEXT("display.secondary"));
+                        HoverTertiary = Path.Properties.FindRef(TEXT("display.tertiary"));
+                        HoverDomain = Path.Domain.ToUpper();
+                        LastHoverPickX = MouseX;
+                        LastHoverPickY = MouseY;
+                        bHoverValid = true;
+                    }
+                    break;
+                }
             }
         }
     }

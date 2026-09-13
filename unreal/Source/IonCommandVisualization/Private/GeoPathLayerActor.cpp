@@ -500,6 +500,10 @@ void AGeoPathLayerActor::RefreshSelectionHighlight()
 
 bool AGeoPathLayerActor::FindClosestMessageToRay(const FVector& RayOrigin, const FVector& RayDirection, double RayLength, double MaxDistance, FGeoMessageEnvelope& OutMessage) const
 {
+    if (IsHidden())
+    {
+        return false;
+    }
     const FVector RayEnd = RayOrigin + RayDirection.GetSafeNormal() * RayLength;
     double BestDistanceSquared = FMath::Square(MaxDistance);
     bool bFound = false;
