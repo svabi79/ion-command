@@ -18,6 +18,14 @@ superseded configurations, is in
   dark globe. Intensity is now 0.4; the five planned / length-bucket
   classes stay, slightly desaturated. Collector `visual.color` strings
   match. Hover/pick from `#19` is unchanged.
+- **Cable thickness follows camera distance like FT8 arcs.** Paths kept a
+  fixed `PathThickness` cube scale, so close zoom read as fat tubes.
+  They already use `MI_Track` (`M_HolographicSignal`), which squeezes
+  segment width via `ZoomThickness`. The path layer now drives that the
+  same way `AGeoArcLayerActor` does (orbit-normalised, 0.012 floor,
+  update when the value moves by 0.002). Instances are not rebuilt.
+  Arc `ZoomDim` is left at 1 — cables are a sparse layer already at
+  Intensity 0.4, not a stacking additive weave.
 
 ### Fixed
 

@@ -62,11 +62,17 @@ private:
     void ProjectLine(const TArray<FGeoPosition>& Line, TArray<FVector>& OutWorld) const;
     void AppendSegmentTransforms(TArray<FTransform>& Out, const TArray<FVector>& WorldLine) const;
     void RefreshSelectionHighlight();
+    // Same camera-distance squeeze as AGeoArcLayerActor: MI_Track already
+    // exposes ZoomThickness (vertex shrink) so instances stay at PathThickness
+    // and the material thins them as the camera descends.
+    void UpdateZoomResponse();
 
     UPROPERTY(VisibleAnywhere) TObjectPtr<USceneComponent> SceneRoot;
     UPROPERTY(VisibleAnywhere) TArray<TObjectPtr<UInstancedStaticMeshComponent>> ClassMeshes;
     UPROPERTY(VisibleAnywhere) TObjectPtr<UInstancedStaticMeshComponent> SelectionMesh;
     UPROPERTY(Transient) TArray<TObjectPtr<UMaterialInstanceDynamic>> ClassMaterials;
+    UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> SelectionMaterial;
+    float LastZoomThickness = -1.0f;
     TWeakObjectPtr<UGeoDataSubsystem> DataSubsystem;
     TArray<FRenderedGeoPath> ActivePaths;
     TMap<FString, int32> EntityToPath;
