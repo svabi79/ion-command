@@ -69,7 +69,7 @@ CALLSIGN and GRID LOCATOR rows and type. Your position appears as a green
 | **V** | show/hide paths | | **M** | only my station's paths |
 | **H** | activity heatmap | | **I** | ionosphere shells |
 | **T** | show/hide trails | | **Y** | show/hide areas |
-| **C** | show/hide cable routes | | | |
+| **C** | show/hide cable routes | | **B** | country borders / place labels |
 | **N** | cycle mode filter | | **F** | focus selection |
 | **1–9 / 0** | band presets / all | | **Space** | pause timeline |
 | **R** | replay last 15 min | | **L** | back to live |

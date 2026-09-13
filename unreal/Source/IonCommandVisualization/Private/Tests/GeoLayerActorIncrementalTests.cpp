@@ -318,6 +318,33 @@ bool FGeoPathLayerRayPickHitsSubmittedRouteTest::RunTest(const FString& Paramete
     return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FGeoPathLayerRoleFiltersCartographyTest, "IONCOMMAND.Visualization.PathLayer.RoleFiltersCartography", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FGeoPathLayerRoleFiltersCartographyTest::RunTest(const FString& Parameters)
+{
+    auto MakeLine = [](const FString& SemanticType)
+    {
+        FGeoMessageEnvelope Message;
+        Message.MessageId = SemanticType;
+        Message.EntityId = SemanticType;
+        Message.SemanticType = SemanticType;
+        Message.Geometry.Type = EGeoGeometryType::LineString;
+        FGeoPosition From; From.Longitude = -5.0; From.Latitude = 36.0;
+        FGeoPosition To; To.Longitude = 5.0; To.Latitude = 37.0;
+        Message.Geometry.Positions.Add(From);
+        Message.Geometry.Positions.Add(To);
+        return Message;
+    };
+    AGeoPathLayerActor* Cables = NewObject<AGeoPathLayerActor>(GetTransientPackage());
+    AGeoPathLayerActor* Borders = NewObject<AGeoPathLayerActor>(GetTransientPackage());
+    Borders->Role = EGeoPathLayerRole::Cartography;
+    TestTrue(TEXT("cable role accepts a cable"), Cables->Supports(MakeLine(TEXT("geography.cable"))));
+    TestFalse(TEXT("cable role rejects a border"), Cables->Supports(MakeLine(TEXT("geography.border"))));
+    TestTrue(TEXT("cartography role accepts a border"), Borders->Supports(MakeLine(TEXT("geography.border"))));
+    TestTrue(TEXT("cartography role accepts a river"), Borders->Supports(MakeLine(TEXT("geography.river"))));
+    TestFalse(TEXT("cartography role rejects a cable"), Borders->Supports(MakeLine(TEXT("geography.cable"))));
+    return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FGeoAreaLayerCapacityTrimIsIncrementalTest, "IONCOMMAND.Visualization.AreaLayer.CapacityTrimIsIncremental", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FGeoAreaLayerCapacityTrimIsIncrementalTest::RunTest(const FString& Parameters)
 {

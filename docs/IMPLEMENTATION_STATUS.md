@@ -49,6 +49,10 @@ The component list is in [COMPONENTS.md](COMPONENTS.md) — not repeated here.
   (same ray-to-segment pick as click) shows name, planned vs in-service,
   route km, and linked landing names. Toggle: `C` or the overlay menu's
   CABLES row (legend under the row)
+- Cartography path role: Natural Earth admin-0 borders and major rivers as
+  muted LineStrings (thinner, lower intensity than cables; same ZoomThickness).
+  HUD draws zoom-aware city / country / landmark / region labels. Toggle: `B`
+  or the overlay menu's BORDERS row. Cable hover and `C` stay on the cable role.
 - Cockpit HUD: status bar, band histogram, path-rate sparkline, top DXCC
   regions with flags, auroral oval, HF conditions estimate, hop/MUF path
   analysis, hover tooltips, own-station reticle
@@ -92,7 +96,8 @@ The component list is in [COMPONENTS.md](COMPONENTS.md) — not repeated here.
   credit budget, and `Retry-After` are covered by httptest. A live OpenSky
   account was not available in this environment.
 - **Additional geospatial sources** (Launch Library 2 upcoming launches and
-  Earth spaceports, Open-Meteo, Natural Earth, TeleGeography cables, NASA
+  Earth spaceports, Open-Meteo, Natural Earth 110m cartography (borders,
+  cities, rivers, landmarks), TeleGeography cables, NASA
   EONET, GDACS, gpsjam.org, OpenAQ, IMF PortWatch, NOAA NHC storm centres,
   HDX HAPI displacement) are implemented as Go source plugins against the
   upstream APIs. OpenAQ and HAPI ship disabled (need an operator

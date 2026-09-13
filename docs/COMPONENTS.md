@@ -32,7 +32,7 @@ messages itself — that is the domain's job.
 | `space.launchlibrary` | The Space Devs Launch Library 2 upcoming launches | HTTP poll | **on** | optional (`apiKey` as `Authorization: Token`) | 15 calls/hour anonymous; 15 min floor |
 | `weather.openmeteo` | Open-Meteo current weather at a configured cell | HTTP poll | **on** (one example cell) | no | attribution required: "Weather data by Open-Meteo.com" |
 | `weather.openaq` | OpenAQ v3 air-quality stations near a point | HTTP poll | **off** (needs a free API key) | **yes** (Explorer API key in `local.json`) | fail-closed without a key |
-| `geography.naturalearth` | Named regions from a bundled Natural Earth extract | in-process | **on** | no | public domain |
+| `geography.naturalearth` | Bundled Natural Earth 110m borders, places, rivers, landmarks, regions | in-process | **on** | no | public domain |
 | `geography.cables` | TeleGeography submarine-cable **routes** + landings | HTTP poll | **on** | no | CC BY-NC-SA 3.0; removable on-disk cache |
 | `geophysics.eonet` | NASA EONET open natural events | HTTP poll | **on** | no | public NASA API |
 | `geophysics.gdacs` | GDACS disaster alerts | HTTP poll | **on** | no | public GeoJSON search |
@@ -66,7 +66,7 @@ envelope. Domains own the vocabulary; nothing above them does.
 | `geophysics` | `geophysics.earthquake`, `geophysics.event` | `earthquake.usgs`, `geophysics.eonet`, `geophysics.gdacs` |
 | `orbital` | `orbital.position` | `orbital.celestrak` |
 | `space` | `space.launch`, `space.pad` | `space.launchlibrary`, `space.pads` |
-| `geography` | `geography.region`, `geography.cable`, `geography.landing` | `geography.naturalearth`, `geography.cables` |
+| `geography` | `geography.region`, `geography.border`, `geography.city`, `geography.country`, `geography.landmark`, `geography.river`, `geography.cable`, `geography.landing` | `geography.naturalearth`, `geography.cables` |
 | `humanitarian` | `humanitarian.displacement` | `humanitarian.hapi` |
 | `wildfire` | `wildfire.detection` | `wildfire.firms` |
 | `maritime` | `maritime.vessel`, `maritime.chokepoint`, `maritime.disruption` | `ais.aisstream`, `maritime.portwatch` |

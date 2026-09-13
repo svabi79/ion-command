@@ -224,6 +224,35 @@ void AIonCockpitHudActor::OnMessageAccepted(const FGeoMessageEnvelope& Message)
         if (!XrayClass.IsEmpty() && XrayClass != TEXT("null")) EnvXrayClass = XrayClass;
         return;
     }
+    const bool bPlace = Message.SemanticType == TEXT("geography.city")
+        || Message.SemanticType == TEXT("geography.country")
+        || Message.SemanticType == TEXT("geography.landmark")
+        || Message.SemanticType == TEXT("geography.region");
+    if (bPlace && Message.Geometry.Type == EGeoGeometryType::Point && Message.Geometry.Positions.Num() == 1)
+    {
+        const FString Title = Message.Properties.FindRef(TEXT("display.title"));
+        if (!Title.IsEmpty())
+        {
+            const FString Key = !Message.EntityId.IsEmpty() ? Message.EntityId : Message.MessageId;
+            if (PlaceLabels.Num() < MaxPlaceLabels || PlaceLabels.Contains(Key))
+            {
+                FIonPlaceLabel& Place = PlaceLabels.FindOrAdd(Key);
+                Place.Label = Title;
+                Place.Kind = Message.SemanticType;
+                const FString Primary = Message.Properties.FindRef(TEXT("display.primary"));
+                if (Primary.StartsWith(TEXT("river")))
+                {
+                    Place.Kind = TEXT("geography.river");
+                }
+                else if (Primary == TEXT("marine"))
+                {
+                    Place.Kind = TEXT("geography.marine");
+                }
+                Place.Position = Message.Geometry.Positions[0];
+                Place.Lod = FCString::Atoi(*Message.Properties.FindRef(TEXT("visual.lod")));
+            }
+        }
+    }
     const bool bPathTraffic = (Message.Geometry.Type == EGeoGeometryType::GreatCircle || Message.Geometry.Type == EGeoGeometryType::Arc) && Message.Geometry.Positions.Num() >= 2;
     if (!bPathTraffic) return;
     const int64 NowSecond = static_cast<int64>(FPlatformTime::Seconds());
@@ -244,6 +273,7 @@ void AIonCockpitHudActor::OnMessageAccepted(const FGeoMessageEnvelope& Message)
 void AIonCockpitHudActor::OnDataReset()
 {
     EndpointStats.Reset();
+    PlaceLabels.Reset();
     RegionWeights.Reset();
     CachedTopRegions.Reset();
     CachedTopEndpoints.Reset();
@@ -386,6 +416,10 @@ void AIonCockpitHudActor::DrawHUD()
         DrawPolarPanel(Scale, Alpha);
         DrawProviderPanels(Scale, Alpha, PolarPanelBottomY + 16.0f * Scale);
         DrawEndpointLabels(Scale, Alpha);
+    }
+    if (Mode != EIonCockpitMode::Hidden)
+    {
+        DrawPlaceLabels(Scale, Alpha);
     }
     // Apply persisted display settings once the point layer exists.
     if (!bSettingsLoaded && FindPointLayer())
@@ -697,6 +731,105 @@ void AIonCockpitHudActor::DrawEndpointLabels(float Scale, float Alpha)
     }
 }
 
+bool AIonCockpitHudActor::IsCartographyVisible() const
+{
+    bool bSawCartography = false;
+    for (TActorIterator<AGeoPathLayerActor> It(GetWorld()); It; ++It)
+    {
+        if (It->IsCartography())
+        {
+            bSawCartography = true;
+            if (It->IsHidden())
+            {
+                return false;
+            }
+        }
+    }
+    return bSawCartography || PlaceLabels.Num() > 0;
+}
+
+void AIonCockpitHudActor::DrawPlaceLabels(float Scale, float Alpha)
+{
+    if (!IsCartographyVisible() || PlaceLabels.IsEmpty() || !Canvas) return;
+    APlayerController* Player = PlayerOwner.Get();
+    if (!Player || !Player->PlayerCameraManager) return;
+    const FVector CameraLocation = Player->PlayerCameraManager->GetCameraLocation();
+    const double Altitude = FMath::Max(0.0, CameraLocation.Length() - 1000.0);
+    const double Orbit = FMath::Clamp(Altitude / 2400.0, 0.0, 1.0);
+    const int32 MaxLod = Orbit > 0.72 ? 0 : (Orbit > 0.38 ? 1 : 2);
+    const int32 Budget = Orbit > 0.72 ? 18 : (Orbit > 0.38 ? 36 : 56);
+
+    TArray<const FIonPlaceLabel*> Candidates;
+    Candidates.Reserve(PlaceLabels.Num());
+    for (const TPair<FString, FIonPlaceLabel>& Pair : PlaceLabels)
+    {
+        if (Pair.Value.Lod <= MaxLod)
+        {
+            Candidates.Add(&Pair.Value);
+        }
+    }
+    Candidates.Sort([](const FIonPlaceLabel* A, const FIonPlaceLabel* B)
+    {
+        if (A->Lod != B->Lod) return A->Lod < B->Lod;
+        return A->Label < B->Label;
+    });
+
+    TArray<FVector2D> Occupied;
+    int32 Drawn = 0;
+    for (const FIonPlaceLabel* Place : Candidates)
+    {
+        if (Drawn >= Budget) break;
+        const FVector Unit = UGeoMathLibrary::LatitudeLongitudeToUnitSphere(Place->Position.Latitude, Place->Position.Longitude);
+        const FVector WorldPosition = Unit * LabelRadiusUnits;
+        if (FVector::DotProduct(Unit, (CameraLocation - WorldPosition).GetSafeNormal()) < 0.12) continue;
+        const FVector Screen = Canvas->Project(WorldPosition);
+        if (Screen.Z <= 0.0f) continue;
+        bool bOverlap = false;
+        for (const FVector2D& Taken : Occupied)
+        {
+            if (FVector2D::DistSquared(Taken, FVector2D(Screen.X, Screen.Y)) < FMath::Square(52.0f * Scale))
+            {
+                bOverlap = true;
+                break;
+            }
+        }
+        if (bOverlap) continue;
+
+        FLinearColor Color = FLinearColor(0.78f, 0.86f, 0.92f);
+        float TextScale = 0.95f * Scale;
+        if (Place->Kind == TEXT("geography.country"))
+        {
+            Color = FLinearColor(0.70f, 0.78f, 0.86f);
+            TextScale = 1.08f * Scale;
+        }
+        else if (Place->Kind == TEXT("geography.region") || Place->Kind == TEXT("geography.marine"))
+        {
+            Color = Place->Kind == TEXT("geography.marine")
+                ? FLinearColor(0.38f, 0.68f, 0.86f)
+                : FLinearColor(0.52f, 0.76f, 0.88f);
+            TextScale = 1.12f * Scale;
+        }
+        else if (Place->Kind == TEXT("geography.river"))
+        {
+            Color = FLinearColor(0.42f, 0.60f, 0.70f);
+            TextScale = 0.88f * Scale;
+        }
+        else if (Place->Kind == TEXT("geography.landmark"))
+        {
+            Color = FLinearColor(0.76f, 0.68f, 0.50f);
+            TextScale = 0.90f * Scale;
+        }
+        else if (Place->Kind == TEXT("geography.city"))
+        {
+            Color = FLinearColor(0.84f, 0.90f, 0.96f);
+        }
+        DrawRect(Screen.X - 1.4f * Scale, Screen.Y - 1.4f * Scale, 2.8f * Scale, 2.8f * Scale, WithAlpha(Color, Alpha * 0.85f));
+        DrawTextAt(Place->Label, Screen.X + 5.0f * Scale, Screen.Y - 12.0f * Scale, WithAlpha(Color, Alpha * 0.9f), TextScale);
+        Occupied.Add(FVector2D(Screen.X, Screen.Y));
+        ++Drawn;
+    }
+}
+
 void AIonCockpitHudActor::DrawOwnStationReticle(float Scale, float Alpha)
 {
     APlayerController* Player = PlayerOwner.Get();
@@ -786,8 +919,21 @@ void AIonCockpitHudActor::DrawOverlayMenu(float Scale, float Alpha)
     FString PathLegend;
     for (TActorIterator<AGeoPathLayerActor> It(GetWorld()); It; ++It)
     {
+        if (It->IsCartography())
+        {
+            continue;
+        }
         MenuRows.Add({TEXT("CABLES"), TEXT("cables"), FString(), !It->IsHidden()});
         PathLegend = It->GetLegendNote();
+        break;
+    }
+    for (TActorIterator<AGeoPathLayerActor> It(GetWorld()); It; ++It)
+    {
+        if (!It->IsCartography())
+        {
+            continue;
+        }
+        MenuRows.Add({TEXT("BORDERS"), TEXT("borders"), FString(), !It->IsHidden()});
         break;
     }
     if (PointLayer)
@@ -891,7 +1037,17 @@ void AIonCockpitHudActor::ApplyMenuToggle(const FMenuRow& Row)
     }
     else if (Row.Kind == TEXT("cables"))
     {
-        for (TActorIterator<AGeoPathLayerActor> It(GetWorld()); It; ++It) It->SetActorHiddenInGame(!It->IsHidden());
+        for (TActorIterator<AGeoPathLayerActor> It(GetWorld()); It; ++It)
+        {
+            if (!It->IsCartography()) It->SetActorHiddenInGame(!It->IsHidden());
+        }
+    }
+    else if (Row.Kind == TEXT("borders"))
+    {
+        for (TActorIterator<AGeoPathLayerActor> It(GetWorld()); It; ++It)
+        {
+            if (It->IsCartography()) It->SetActorHiddenInGame(!It->IsHidden());
+        }
     }
     else if (Row.Kind == TEXT("altscale"))
     {
@@ -1242,25 +1398,31 @@ void AIonCockpitHudActor::DrawHoverTooltip(float Scale, float Alpha)
                 FHitResult BlockingHit;
                 Player->GetHitResultUnderCursor(ECC_Visibility, true, BlockingHit);
                 const double RayLength = BlockingHit.bBlockingHit ? BlockingHit.Distance + 60.0 : 10000.0;
+                AGeoPathLayerActor* CableLayer = nullptr;
+                AGeoPathLayerActor* CartographyLayer = nullptr;
                 for (TActorIterator<AGeoPathLayerActor> It(GetWorld()); It; ++It)
                 {
-                    if (It->IsHidden())
-                    {
-                        continue;
-                    }
+                    if (It->IsCartography()) CartographyLayer = *It;
+                    else CableLayer = *It;
+                }
+                auto HoverPath = [&](AGeoPathLayerActor* Layer)
+                {
+                    if (!Layer || Layer->IsHidden()) return false;
                     FGeoMessageEnvelope Path;
-                    if (It->FindClosestMessageToRay(RayOrigin, RayDirection, RayLength, 32.0, Path))
-                    {
-                        HoverTitle = Path.Properties.FindRef(TEXT("display.title"));
-                        HoverPrimary = Path.Properties.FindRef(TEXT("display.primary"));
-                        HoverSecondary = Path.Properties.FindRef(TEXT("display.secondary"));
-                        HoverTertiary = Path.Properties.FindRef(TEXT("display.tertiary"));
-                        HoverDomain = Path.Domain.ToUpper();
-                        LastHoverPickX = MouseX;
-                        LastHoverPickY = MouseY;
-                        bHoverValid = true;
-                    }
-                    break;
+                    if (!Layer->FindClosestMessageToRay(RayOrigin, RayDirection, RayLength, 32.0, Path)) return false;
+                    HoverTitle = Path.Properties.FindRef(TEXT("display.title"));
+                    HoverPrimary = Path.Properties.FindRef(TEXT("display.primary"));
+                    HoverSecondary = Path.Properties.FindRef(TEXT("display.secondary"));
+                    HoverTertiary = Path.Properties.FindRef(TEXT("display.tertiary"));
+                    HoverDomain = Path.Domain.ToUpper();
+                    LastHoverPickX = MouseX;
+                    LastHoverPickY = MouseY;
+                    bHoverValid = true;
+                    return true;
+                };
+                if (!HoverPath(CableLayer))
+                {
+                    HoverPath(CartographyLayer);
                 }
             }
         }

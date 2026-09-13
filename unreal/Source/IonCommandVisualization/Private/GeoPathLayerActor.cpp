@@ -19,6 +19,15 @@ constexpr int32 LegendClassCount = 5;
 // 3.6 * the old saturated legend set bloomed into neon tubes on the dark globe.
 // ~0.4 keeps the five class hues readable as matte map lines.
 constexpr float PathIntensity = 0.4f;
+constexpr float CartographyIntensity = 0.28f;
+
+const FLinearColor CartographyColors[LegendClassCount] = {
+    FLinearColor(0.40f, 0.46f, 0.52f),
+    FLinearColor(0.26f, 0.40f, 0.50f),
+    FLinearColor(0.34f, 0.40f, 0.46f),
+    FLinearColor(0.34f, 0.40f, 0.46f),
+    FLinearColor(0.34f, 0.40f, 0.46f),
+};
 
 // Keep in lockstep with collector geography cableLegend RGB strings.
 // Same five classes (planned / short / regional / ocean / trunk); lower
@@ -132,8 +141,11 @@ void AGeoPathLayerActor::BeginPlay()
         UMaterialInstanceDynamic* Material = ClassMeshes[Index] ? ClassMeshes[Index]->CreateAndSetMaterialInstanceDynamic(0) : nullptr;
         if (Material)
         {
-            Material->SetVectorParameterValue(TEXT("Color"), LegendColors[Index]);
-            Material->SetScalarParameterValue(TEXT("Intensity"), PathIntensity);
+            const FLinearColor ClassColor = Role == EGeoPathLayerRole::Cartography
+                ? CartographyColors[Index]
+                : LegendColors[Index];
+            Material->SetVectorParameterValue(TEXT("Color"), ClassColor);
+            Material->SetScalarParameterValue(TEXT("Intensity"), Role == EGeoPathLayerRole::Cartography ? CartographyIntensity : PathIntensity);
         }
         ClassMaterials.Add(Material);
     }
@@ -232,8 +244,13 @@ void AGeoPathLayerActor::Tick(float DeltaSeconds)
 
 bool AGeoPathLayerActor::Supports(const FGeoMessageEnvelope& Message) const
 {
-    return (Message.Geometry.Type == EGeoGeometryType::LineString || Message.Geometry.Type == EGeoGeometryType::MultiLineString)
-        && Message.Geometry.Positions.Num() >= 2;
+    if ((Message.Geometry.Type != EGeoGeometryType::LineString && Message.Geometry.Type != EGeoGeometryType::MultiLineString)
+        || Message.Geometry.Positions.Num() < 2)
+    {
+        return false;
+    }
+    const bool bCartographyType = Message.SemanticType == TEXT("geography.border") || Message.SemanticType == TEXT("geography.river");
+    return Role == EGeoPathLayerRole::Cartography ? bCartographyType : !bCartographyType;
 }
 
 void AGeoPathLayerActor::Submit(const FGeoMessageEnvelope& Message)
@@ -328,7 +345,16 @@ int32 AGeoPathLayerActor::ResolveLegendIndex(const FGeoMessageEnvelope& Message)
 
 FString AGeoPathLayerActor::GetLegendNote() const
 {
+    if (Role == EGeoPathLayerRole::Cartography)
+    {
+        return FString();
+    }
     return TEXT("planned amber · short teal\nregional cyan · ocean blue · trunk magenta");
+}
+
+FString AGeoPathLayerActor::GetOverlayLayerId() const
+{
+    return Role == EGeoPathLayerRole::Cartography ? TEXT("core.cartography") : TEXT("core.paths");
 }
 
 bool AGeoPathLayerActor::IsExpired(const FRenderedGeoPath& Path, double NowSeconds) const
@@ -579,7 +605,7 @@ bool AGeoPathLayerActor::FindClosestMessageToRay(const FVector& RayOrigin, const
 
 void AGeoPathLayerActor::OnLayerVisibilityChanged(const FString& LayerId, bool bVisible)
 {
-    if (LayerId == TEXT("core.paths"))
+    if (LayerId == GetOverlayLayerId())
     {
         SetActorHiddenInGame(!bVisible);
     }
@@ -588,8 +614,11 @@ void AGeoPathLayerActor::OnLayerVisibilityChanged(const FString& LayerId, bool b
 FGeoLayerManifest AGeoPathLayerActor::CreateLayerManifest() const
 {
     FGeoLayerManifest Manifest;
-    Manifest.LayerId = TEXT("core.paths");
-    Manifest.DisplayName = TEXT("Geospatial Paths");
+    Manifest.LayerId = GetOverlayLayerId();
+    Manifest.DisplayName = Role == EGeoPathLayerRole::Cartography ? TEXT("Country Borders") : TEXT("Geospatial Paths");
+    Manifest.AcceptedSemanticTypes = Role == EGeoPathLayerRole::Cartography
+        ? TArray<FString>{TEXT("geography.border"), TEXT("geography.river")}
+        : TArray<FString>{TEXT("geography.cable")};
     Manifest.GeometryTypes = {EGeoGeometryType::LineString, EGeoGeometryType::MultiLineString};
     Manifest.bSupportsAggregation = false;
     return Manifest;

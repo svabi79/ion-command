@@ -123,3 +123,97 @@ func TestCableLandingSecondaryCapsAtEight(t *testing.T) {
 		t.Fatalf("cap %#v", messages[0].Properties["display.secondary"])
 	}
 }
+
+func TestBorderCityRiverLandmark(t *testing.T) {
+	domain := New()
+	border, _ := json.Marshal(map[string]any{
+		"kind": "border", "borderId": "fr-de", "name": "France / Germany",
+		"segments": [][][]float64{{{6.0, 49.0}, {8.0, 48.0}}},
+	})
+	messages, err := domain.Normalize(context.Background(), plugins.RawRecord{
+		SourcePluginID: "naturalearth", SourceInstanceID: "t", OriginalID: "b", Domain: "geography",
+		ObservedUTC: time.Now().UTC(), Payload: border,
+	})
+	if err != nil || len(messages) != 1 || messages[0].SemanticType != "geography.border" {
+		t.Fatalf("border %v %#v", err, messages)
+	}
+	if err := messages[0].Validate(); err != nil {
+		t.Fatal(err)
+	}
+	if messages[0].Geometry.Type != "LineString" || messages[0].Properties["visual.legendIndex"] != 0 {
+		t.Fatalf("border geometry/legend %#v", messages[0])
+	}
+
+	city, _ := json.Marshal(map[string]any{
+		"kind": "city", "placeId": "tokyo", "name": "Tokyo", "latitude": 35.68, "longitude": 139.75,
+		"population": 37732000, "capital": true, "lod": 0,
+	})
+	messages, err = domain.Normalize(context.Background(), plugins.RawRecord{
+		SourcePluginID: "naturalearth", SourceInstanceID: "t", OriginalID: "c", Domain: "geography",
+		ObservedUTC: time.Now().UTC(), Payload: city,
+	})
+	if err != nil || messages[0].SemanticType != "geography.city" || messages[0].Geometry.Type != "Point" {
+		t.Fatalf("city %v %#v", err, messages)
+	}
+	if messages[0].Properties["visual.lod"] != 0 || messages[0].Properties["display.title"] != "Tokyo" {
+		t.Fatalf("city props %#v", messages[0].Properties)
+	}
+	if err := messages[0].Validate(); err != nil {
+		t.Fatal(err)
+	}
+
+	river, _ := json.Marshal(map[string]any{
+		"kind": "river", "riverId": "nile", "name": "Nile", "lod": 0,
+		"segments": [][][]float64{{{32.0, 15.0}, {31.0, 30.0}}},
+		"labelLon": 32.0, "labelLat": 22.0,
+	})
+	messages, err = domain.Normalize(context.Background(), plugins.RawRecord{
+		SourcePluginID: "naturalearth", SourceInstanceID: "t", OriginalID: "r", Domain: "geography",
+		ObservedUTC: time.Now().UTC(), Payload: river,
+	})
+	if err != nil || len(messages) != 2 {
+		t.Fatalf("river %v %#v", err, messages)
+	}
+	if messages[0].SemanticType != "geography.river" || messages[0].Geometry.Type != "LineString" {
+		t.Fatalf("river path %#v", messages[0])
+	}
+	if messages[1].SemanticType != "geography.landmark" || messages[1].Geometry.Type != "Point" {
+		t.Fatalf("river label %#v", messages[1])
+	}
+	if err := messages[0].Validate(); err != nil {
+		t.Fatal(err)
+	}
+	if err := messages[1].Validate(); err != nil {
+		t.Fatal(err)
+	}
+
+	peak, _ := json.Marshal(map[string]any{
+		"kind": "peak", "placeId": "everest", "name": "Mount Everest",
+		"latitude": 27.99, "longitude": 86.92, "elevation": 8848, "lod": 0,
+	})
+	messages, err = domain.Normalize(context.Background(), plugins.RawRecord{
+		SourcePluginID: "naturalearth", SourceInstanceID: "t", OriginalID: "p", Domain: "geography",
+		ObservedUTC: time.Now().UTC(), Payload: peak,
+	})
+	if err != nil || messages[0].SemanticType != "geography.landmark" {
+		t.Fatalf("peak %v %#v", err, messages)
+	}
+	if err := messages[0].Validate(); err != nil {
+		t.Fatal(err)
+	}
+
+	country, _ := json.Marshal(map[string]any{
+		"kind": "country", "placeId": "country-DEU", "name": "Germany",
+		"latitude": 51.1, "longitude": 10.4, "lod": 0,
+	})
+	messages, err = domain.Normalize(context.Background(), plugins.RawRecord{
+		SourcePluginID: "naturalearth", SourceInstanceID: "t", OriginalID: "g", Domain: "geography",
+		ObservedUTC: time.Now().UTC(), Payload: country,
+	})
+	if err != nil || messages[0].SemanticType != "geography.country" {
+		t.Fatalf("country %v %#v", err, messages)
+	}
+	if err := messages[0].Validate(); err != nil {
+		t.Fatal(err)
+	}
+}

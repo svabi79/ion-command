@@ -10,6 +10,20 @@ superseded configurations, is in
 
 ## [Unreleased]
 
+### Added
+
+- **Country borders and place labels on the globe.** `geography.naturalearth`
+  now embeds a 110m Natural Earth extract of admin-0 boundary lines, cities,
+  country names, major river centerlines, and physical landmarks — not just
+  the old region/ocean points. The collector emits `geography.border`,
+  `.city`, `.country`, `.river`, and `.landmark`. A second
+  `AGeoPathLayerActor` role (`Cartography`) draws muted borders and rivers
+  with the same `ZoomThickness` squeeze as cables, without joining the
+  cable legend or `C` toggle. HUD place labels are zoom-aware (far:
+  continents / oceans / megacities; closer: more cities and landmarks).
+  Overlay **BORDERS** or `B`. Recook with `go run ./cmd/neextract`. Enabled
+  in `live.json`. Wall visual check still remaining (no UE on this VM).
+
 ### Changed
 
 - **Cable paths are map lines, not neon tubes.** `AGeoPathLayerActor`
