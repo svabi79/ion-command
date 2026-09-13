@@ -22,15 +22,18 @@ import (
 )
 
 const (
-	defaultCablesURL   = "https://www.submarinecablemap.com/api/v3/cable/cable-geo.json"
-	defaultLandingsURL = "https://www.submarinecablemap.com/api/v3/landing-point/landing-point-geo.json"
-	pollDefault        = 24 * time.Hour
-	pollFloor          = 6 * time.Hour
-	maxCables          = 800
-	maxLandings        = 400
-	maxVerticesPerLine = 64
-	minVertexKm        = 25.0
-	attribution        = "Submarine cables © TeleGeography (CC BY-NC-SA 3.0)"
+	defaultCablesURL      = "https://www.submarinecablemap.com/api/v3/cable/cable-geo.json"
+	defaultLandingsURL    = "https://www.submarinecablemap.com/api/v3/landing-point/landing-point-geo.json"
+	pollDefault           = 24 * time.Hour
+	pollFloor             = 6 * time.Hour
+	maxCables             = 800
+	maxLandings           = 400
+	maxLandingJoin        = 2500
+	maxLinkedLandings     = 24
+	maxVerticesPerLine    = 64
+	minVertexKm           = 25.0
+	landingEndpointLinkKm = 80.0
+	attribution           = "Submarine cables © TeleGeography (CC BY-NC-SA 3.0)"
 )
 
 type Source struct {
@@ -185,6 +188,43 @@ func decimateLines(lines [][][]float64) [][][]float64 {
 	return out
 }
 
+func landingNearSegmentEnds(landing simplifiedLanding, cable routedCable, maxKm float64) bool {
+	point := []float64{landing.Lon, landing.Lat}
+	for _, segment := range cable.Segments {
+		if len(segment) < 2 {
+			continue
+		}
+		if distanceKm(point, segment[0]) <= maxKm || distanceKm(point, segment[len(segment)-1]) <= maxKm {
+			return true
+		}
+	}
+	return false
+}
+
+func linkLandingNames(cables []routedCable, landings []simplifiedLanding) {
+	for i := range cables {
+		seen := make(map[string]struct{})
+		names := make([]string, 0)
+		for _, landing := range landings {
+			if landing.Name == "" {
+				continue
+			}
+			if _, ok := seen[landing.Name]; ok {
+				continue
+			}
+			if !landingNearSegmentEnds(landing, cables[i], landingEndpointLinkKm) {
+				continue
+			}
+			seen[landing.Name] = struct{}{}
+			names = append(names, landing.Name)
+			if len(names) >= maxLinkedLandings {
+				break
+			}
+		}
+		cables[i].Landings = names
+	}
+}
+
 func pointCoord(coords json.RawMessage) (lon, lat float64, ok bool) {
 	var point []float64
 	if json.Unmarshal(coords, &point) == nil && len(point) >= 2 {
@@ -203,6 +243,7 @@ type routedCable struct {
 	Name     string        `json:"name"`
 	Color    string        `json:"color,omitempty"`
 	Segments [][][]float64 `json:"segments"`
+	Landings []string      `json:"landings,omitempty"`
 }
 
 type simplifiedLanding struct {
@@ -277,6 +318,7 @@ func (s *Source) refresh(ctx context.Context) (routed, error) {
 	for _, id := range order {
 		out.Cables = append(out.Cables, *byID[id])
 	}
+	allLandings := make([]simplifiedLanding, 0, len(landings.Features))
 	for _, feature := range landings.Features {
 		lon, lat, ok := pointCoord(feature.Geometry.Coordinates)
 		if !ok {
@@ -285,12 +327,18 @@ func (s *Source) refresh(ctx context.Context) (routed, error) {
 		name := propertyString(feature.Properties, "name", "id")
 		id := propertyString(feature.Properties, "id", "name")
 		if id == "" {
-			id = fmt.Sprintf("lp-%d", len(out.Landings))
+			id = fmt.Sprintf("lp-%d", len(allLandings))
 		}
-		out.Landings = append(out.Landings, simplifiedLanding{ID: id, Name: name, Lon: lon, Lat: lat})
-		if len(out.Landings) >= maxLandings {
+		allLandings = append(allLandings, simplifiedLanding{ID: id, Name: name, Lon: lon, Lat: lat})
+		if len(allLandings) >= maxLandingJoin {
 			break
 		}
+	}
+	linkLandingNames(out.Cables, allLandings)
+	if len(allLandings) > maxLandings {
+		out.Landings = allLandings[:maxLandings]
+	} else {
+		out.Landings = allLandings
 	}
 	if dropped > 0 {
 		s.logger.Info("cables dropped", "source", s.id, "dropped", dropped, "kept", len(out.Cables))
@@ -310,14 +358,18 @@ func (s *Source) sample(ctx context.Context) ([]plugins.RawRecord, error) {
 	now := time.Now().UTC()
 	records := make([]plugins.RawRecord, 0, len(data.Cables)+len(data.Landings))
 	for _, cable := range data.Cables {
-		payload, err := json.Marshal(map[string]any{
+		payloadMap := map[string]any{
 			"kind":        "cable",
 			"cableId":     cable.ID,
 			"name":        cable.Name,
 			"color":       strings.ToLower(cable.Color),
 			"segments":    cable.Segments,
 			"attribution": attribution,
-		})
+		}
+		if len(cable.Landings) > 0 {
+			payloadMap["landings"] = cable.Landings
+		}
+		payload, err := json.Marshal(payloadMap)
 		if err != nil {
 			continue
 		}

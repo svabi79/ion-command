@@ -1,1 +1,1 @@
-{"features":[{"properties":{"id":"lp-1","name":"Cadiz"},"geometry":{"type":"Point","coordinates":[-6.3,36.5]}}]}
+{"features":[{"properties":{"id":"lp-1","name":"Cadiz"},"geometry":{"type":"Point","coordinates":[-5.05,36.02]}},{"properties":{"id":"lp-2","name":"Algiers"},"geometry":{"type":"Point","coordinates":[5.02,37.01]}},{"properties":{"id":"lp-far","name":"Nowhere"},"geometry":{"type":"Point","coordinates":[120.0,-10.0]}}]}

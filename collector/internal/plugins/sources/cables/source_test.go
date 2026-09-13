@@ -26,7 +26,7 @@ func TestSampleKeepsRouteAndLandings(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(records) != 3 {
+	if len(records) != 5 {
 		t.Fatalf("got %d records", len(records))
 	}
 	var demo map[string]any
@@ -35,6 +35,10 @@ func TestSampleKeepsRouteAndLandings(t *testing.T) {
 	}
 	if demo["kind"] != "cable" || demo["cableId"] != "cable-a" {
 		t.Fatalf("%v", demo)
+	}
+	linked, ok := demo["landings"].([]any)
+	if !ok || len(linked) != 2 || linked[0] != "Cadiz" || linked[1] != "Algiers" {
+		t.Fatalf("endpoint landings %#v", demo["landings"])
 	}
 	segments, ok := demo["segments"].([]any)
 	if !ok || len(segments) != 2 {
@@ -54,6 +58,9 @@ func TestSampleKeepsRouteAndLandings(t *testing.T) {
 	}
 	if planned["color"] != "#939597" {
 		t.Fatalf("planned color %v", planned["color"])
+	}
+	if _, has := planned["landings"]; has {
+		t.Fatalf("planned cable should not inherit a distant landing: %#v", planned["landings"])
 	}
 	var landing map[string]any
 	if err := json.Unmarshal(records[2].Payload, &landing); err != nil {

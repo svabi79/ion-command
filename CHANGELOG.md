@@ -56,6 +56,11 @@ superseded configurations, is in
 
 ### Added
 
+- **Submarine cable hover names the route.** Hovering a cable LineString
+  shows the TeleGeography name, planned vs in-service class, computed
+  route length in km, and landing names when a landing sits near a
+  kept segment endpoint. Landing-point hover is unchanged. The public
+  GeoJSON has no utilization or capacity; those fields are not shown.
 - **Submarine cables follow TeleGeography routes.** `geography.cables`
   keeps the MultiLineString (decimated for GPU), and the client draws
   LineString / MultiLineString on the sphere shell — not a first↔last

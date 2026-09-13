@@ -75,6 +75,7 @@ func (d *Domain) cable(record plugins.RawRecord) ([]events.Envelope, error) {
 		Name     string        `json:"name"`
 		Color    string        `json:"color"`
 		Segments [][][]float64 `json:"segments"`
+		Landings []string      `json:"landings"`
 	}
 	if err := json.Unmarshal(record.Payload, &raw); err != nil || raw.CableID == "" || len(raw.Segments) == 0 {
 		return nil, fmt.Errorf("geography cable requires id and route")
@@ -102,9 +103,21 @@ func (d *Domain) cable(record plugins.RawRecord) ([]events.Envelope, error) {
 		"visual.legendIndex": cableLegendIndex(planned, lengthKm),
 		"display.title":      raw.Name,
 		"display.primary":    primary,
-		"display.secondary":  "submarine cable",
+		"display.secondary":  formatLandingSecondary(raw.Landings),
 	}
 	return []events.Envelope{event}, nil
+}
+
+const maxNamedLandings = 8
+
+func formatLandingSecondary(names []string) string {
+	if len(names) == 0 {
+		return "submarine cable"
+	}
+	if len(names) <= maxNamedLandings {
+		return strings.Join(names, "  //  ")
+	}
+	return fmt.Sprintf("%s  //  +%d", strings.Join(names[:maxNamedLandings], "  //  "), len(names)-maxNamedLandings)
 }
 
 // TeleGeography paints planned / unbuilt cables #939597 on the public map.

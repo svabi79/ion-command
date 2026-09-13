@@ -1,5 +1,6 @@
 #include "GeoArcLayerActor.h"
 #include "GeoAreaLayerActor.h"
+#include "GeoMathLibrary.h"
 #include "GeoPathLayerActor.h"
 #include "GeoPointLayerActor.h"
 #include "Misc/AutomationTest.h"
@@ -276,6 +277,44 @@ bool FGeoPathLayerCapacityTrimIsIncrementalTest::RunTest(const FString& Paramete
     TestTrue(TEXT("tracked count stays at or under the capacity bound"), Stats.TrackedItems <= Actor->MaxVisiblePaths);
     TestTrue(TEXT("capacity eviction fired"), Stats.CapacityEvictions > 0);
     TestEqual(TEXT("no full rebuild under capacity pressure"), Stats.FullRebuilds, (int64)0);
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FGeoPathLayerRayPickHitsSubmittedRouteTest, "IONCOMMAND.Visualization.PathLayer.RayPickHitsSubmittedRoute", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FGeoPathLayerRayPickHitsSubmittedRouteTest::RunTest(const FString& Parameters)
+{
+    AGeoPathLayerActor* Actor = NewObject<AGeoPathLayerActor>(GetTransientPackage());
+    FGeoMessageEnvelope Message;
+    Message.MessageId = TEXT("cable-demo");
+    Message.EntityId = TEXT("geography:cable:demo");
+    Message.Domain = TEXT("geography");
+    Message.MessageType = EGeoMessageType::Relationship;
+    Message.SemanticType = TEXT("geography.cable");
+    Message.Geometry.Type = EGeoGeometryType::LineString;
+    FGeoPosition From; From.Longitude = -5.0; From.Latitude = 36.0;
+    FGeoPosition To; To.Longitude = 5.0; To.Latitude = 37.0;
+    Message.Geometry.Positions.Add(From);
+    Message.Geometry.Positions.Add(To);
+    Message.Properties.Add(TEXT("display.title"), TEXT("Demo Cable"));
+    Message.Properties.Add(TEXT("display.primary"), TEXT("in service · regional  //  900 km"));
+    Message.Properties.Add(TEXT("display.secondary"), TEXT("Cadiz  //  Algiers"));
+    Actor->Submit(Message);
+
+    const FGeoPosition Mid = UGeoMathLibrary::GreatCircleInterpolation(From, To, 0.5);
+    const FVector Target = UGeoMathLibrary::LatitudeLongitudeToUnitSphere(Mid.Latitude, Mid.Longitude) * (Actor->GlobeRadius + 4.0);
+    const FVector Origin = Target * 3.0;
+    FGeoMessageEnvelope Hit;
+    const bool bFound = Actor->FindClosestMessageToRay(Origin, (Target - Origin).GetSafeNormal(), 10000.0, 32.0, Hit);
+    TestTrue(TEXT("ray aimed at the route hits it"), bFound);
+    TestEqual(TEXT("pick returns the submitted cable"), Hit.MessageId, FString(TEXT("cable-demo")));
+    TestEqual(TEXT("tooltip title is the cable name"), Hit.Properties.FindRef(TEXT("display.title")), FString(TEXT("Demo Cable")));
+    TestEqual(TEXT("tooltip primary keeps class and km"), Hit.Properties.FindRef(TEXT("display.primary")), FString(TEXT("in service · regional  //  900 km")));
+    TestEqual(TEXT("tooltip secondary keeps landing names"), Hit.Properties.FindRef(TEXT("display.secondary")), FString(TEXT("Cadiz  //  Algiers")));
+
+    const FVector Away = UGeoMathLibrary::LatitudeLongitudeToUnitSphere(-40.0, 80.0) * (Actor->GlobeRadius + 4.0);
+    const FVector AwayOrigin = Away * 3.0;
+    FGeoMessageEnvelope Miss;
+    TestFalse(TEXT("ray aimed at empty ocean misses"), Actor->FindClosestMessageToRay(AwayOrigin, (Away - AwayOrigin).GetSafeNormal(), 10000.0, 32.0, Miss));
     return true;
 }
 
