@@ -40,11 +40,13 @@ messages itself — that is the domain's job.
 | `weather.nhc` | NOAA NHC active tropical-cyclone centres and 5-day forecast cones | HTTP poll | **on** | no | public domain; Atlantic and eastern Pacific only |
 | `space.pads` | Launch Library 2 Earth spaceports | HTTP poll | **on** | optional (`apiKey` as `Authorization: Token`) | daily floor; shares the LL2 15/hour budget |
 | `humanitarian.hapi` | UNHCR refugee totals via HDX HAPI (host and origin countries) | HTTP poll | **off** (needs an app identifier) | **yes** (identifier in `local.json`) | fail-closed without identifier; CC BY-IGO |
-| `hamradio.rbn` | Reverse Beacon Network | telnet | off | **yes** (your callsign) | no published licence |
-| `hamradio.dxcluster` | DX cluster spots (DXSpider / AR-Cluster / CC Cluster) | telnet | off | **yes** (your callsign) | no published licence; no single canonical node - address is configured |
+| `hamradio.rbn` | Reverse Beacon Network | telnet | **on** (placeholder login `HB9HSJ`) | **yes** (your callsign in `local.json`) | no published licence |
+| `hamradio.dxcluster` | DX cluster spots (DXSpider / AR-Cluster / CC Cluster) | telnet | **on** (placeholder login `HB9HSJ`) | **yes** (your callsign in `local.json`) | no published licence; no single canonical node - address is configured |
 | `hamradio.wspr` | WSPR reception reports via wspr.live | HTTP poll | **on** | no | non-commercial use only; 20 req/min |
-| `ais.aisstream` | aisstream.io global AIS vessel stream | WebSocket | **off** (needs a free key) | **yes** (free API key) | no explicit commercial/redistribution restriction found; hobby-scale posture applied anyway |
-| `aprs.is` | APRS-IS packet stream | TCP | off | **yes** (callsign; passcode fixed at read-only `-1`) | no published data licence; be a good citizen (see below) |
+| `hamradio.brandmeister` | Brandmeister DMR last-heard | Socket.IO | **on** | no | public last-heard feed; hobby-scale throttle |
+| `ais.aisstream` | aisstream.io global AIS vessel stream | WebSocket | **on** (idles without a key) | **yes** (free API key in `local.json`) | no explicit commercial/redistribution restriction found; hobby-scale posture applied anyway |
+| `aprs.is` | APRS-IS packet stream | TCP | **on** (placeholder login `HB9HSJ`) | **yes** (callsign in `local.json`; passcode fixed at read-only `-1`) | no published data licence; be a good citizen (see below) |
+| `solar.grayline` | Derived solar terminator / nautical-twilight band | in-process | **on** | no | no upstream fetch |
 | `mock.*` | deterministic synthetic traffic | in-process | off | no | development and tests only |
 
 Terms and attribution in full: [DATA-SOURCES.md](DATA-SOURCES.md).
@@ -57,14 +59,15 @@ envelope. Domains own the vocabulary; nothing above them does.
 
 | Domain | Emits (`semanticType`) | Fed by |
 | --- | --- | --- |
-| `hamradio` | `radio.reception`, `radio.station` | `pskreporter.mqtt`, `hamradio.rbn`, `wsjtx.udp`, `hamradio.dxcluster`, `hamradio.wspr` |
+| `hamradio` | `radio.reception`, `radio.station`, `radio.activity` | `pskreporter.mqtt`, `hamradio.rbn`, `wsjtx.udp`, `hamradio.dxcluster`, `hamradio.wspr`, `hamradio.brandmeister` |
 | `aprs` | `aprs.station`, `aprs.object` | `aprs.is` |
 | `aviation` | `aviation.aircraft`, `aviation.interference` | `aviation.adsb`, `aviation.opensky`, `aviation.gpsjam` |
 | `weather` | `weather.lightning`, `weather.observation`, `weather.airquality`, `weather.storm`, `weather.storm.cone` | `lightning.blitzortung`, `weather.openmeteo`, `weather.openaq`, `weather.nhc` |
 | `spaceweather` | `spaceweather.state` | `spaceweather.swpc` |
 | `ionosphere` | `ionosphere.sounding` | `ionosonde.kc2g` |
 | `geophysics` | `geophysics.earthquake`, `geophysics.event` | `earthquake.usgs`, `geophysics.eonet`, `geophysics.gdacs` |
-| `orbital` | `orbital.position` | `orbital.celestrak` |
+| `orbital` | `orbital.position`, `orbital.pass`, `orbital.footprint` | `orbital.celestrak` |
+| `solar` | `solar.grayline` | `solar.grayline` |
 | `space` | `space.launch`, `space.pad` | `space.launchlibrary`, `space.pads` |
 | `geography` | `geography.region`, `geography.border`, `geography.city`, `geography.country`, `geography.landmark`, `geography.river`, `geography.cable`, `geography.landing` | `geography.naturalearth`, `geography.cables` |
 | `humanitarian` | `humanitarian.displacement` | `humanitarian.hapi` |

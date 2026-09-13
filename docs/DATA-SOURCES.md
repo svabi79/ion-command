@@ -38,6 +38,7 @@ non-commercial only.
 | **gpsjam.org** | Daily ADS-B-derived GNSS interference hexes. Public CSV; hex centres are decoded locally and are approximate at globe scale. | [gpsjam.org](https://gpsjam.org) |
 | **IMF PortWatch** | Maritime chokepoint locations, daily transit counts, and recent disruption events from the IMF PortWatch public ArcGIS FeatureServer. | [portwatch.imf.org](https://portwatch.imf.org) |
 | **NOAA / NHC** | Active tropical-cyclone centres from the National Hurricane Center `CurrentStorms.json` feed, plus the 5-day forecast cone of uncertainty KMZ linked from each storm's `trackCone` product (public domain, US Government work). Atlantic and eastern Pacific only. The cone is the official NHC track-uncertainty polygon, not a wind-radii or watch/warning surface. NOAA does not endorse this project. | [nhc.noaa.gov](https://www.nhc.noaa.gov) |
+| **Brandmeister** | DMR last-heard activity from the public Brandmeister Socket.IO feed (`api.brandmeister.network`, path `/lh/socket.io`). No credentials. Talkgroup completions are placed at AD1C country-file centroids (country-level accuracy). No formal data licence published; hobby-scale, one connection, emit-throttled. Contact Brandmeister before any commercial or bulk-redistribution use. | [brandmeister.network](https://brandmeister.network) · [last-heard API](https://wiki.brandmeister.network/index.php/Code_Examples/LastHeard/Python) |
 | **The Space Devs / Launch Library 2 (locations)** | Earth spaceport coordinates from the same Launch Library 2 catalogue as upcoming launches. Anonymous access is limited to 15 calls/hour; this source polls daily. | [ll.thespacedevs.com](https://ll.thespacedevs.com) |
 | **UNHCR / HDX HAPI** | Current-year refugee totals (population group REF, all ages and genders) from the OCHA Humanitarian API. Host and origin countries with at least 100,000 people are placed at public-domain country centroids. Requires a free app identifier (application name + email, not a secret). Licensed **CC BY-IGO**; credit UNHCR and HDX HAPI. Disabled until the operator supplies an identifier in `local.json`. | [hapi.humdata.org](https://hapi.humdata.org) · [HAPI docs](https://docs.humdata.org/build/hdx-apis/hapi/how-to-query-hapi) |
 | **AIS Stream (aisstream.io)** | Vessel AIS data from aisstream.io, free with a self-service API key. No commercial-use restriction or redistribution licence is published as of this writing; treated with the same hobby-scale, attributed posture as the other unlicensed feeds below until the operator confirms otherwise. Direct browser connections to the stream are against its terms — ION COMMAND already only connects from the collector process, never from client JavaScript, so this is satisfied by the existing architecture. See [below](#enabling-ais-ships-aisstreamio) for the full picture. | [aisstream.io](https://aisstream.io) · [docs](https://aisstream.io/documentation) |
@@ -65,7 +66,7 @@ What each source actually does, in the order it appears in `live.json`:
 | `lightning.blitzortung` | `wss://ws*.blitzortung.org/` | streaming | `weather.lightning` | yes — [read this](#a-word-about-blitzortung) |
 | `earthquake.usgs` | earthquake.usgs.gov GeoJSON feed | 600 s | `geophysics.earthquake` | yes |
 | `wildfire.firms` | firms.modaps.eosdis.nasa.gov global per-satellite CSV snapshot (no key), or the MAP_KEY-scoped Area API when `mapKey` is set | 10800 s (floor 1800 s) | `wildfire.detection` | yes — one example area (US West) |
-| `orbital.celestrak` | celestrak.org `gp.php` TLEs, SGP4-propagated locally | TLE refresh 6 h, positions 10 s | `orbital.position` | yes |
+| `orbital.celestrak` | celestrak.org `gp.php` TLEs, SGP4-propagated locally | TLE refresh 6 h, positions 10 s, footprints 30 s | `orbital.position`, `orbital.footprint` | yes |
 | `aviation.adsb` | adsb.lol `/v2/point/<lat>/<lon>/<nm>`; route lookups via api.adsbdb.com (cached, global 2 s gate, `routeLookup: false` disables) | 60 s, global 4 s request gate | `aviation.aircraft` | yes (one example circle) |
 | `aviation.opensky` | opensky-network.org `/api/states/all` (OAuth2 bearer or anonymous) | 1800 s anonymous; 60 s typical with OAuth | `aviation.aircraft` | yes |
 | `aviation.gpsjam` | gpsjam.org `/data/manifest.csv` + `{date}-h3_4.csv` | 86400 s (floor 3600 s) | `aviation.interference` | yes |
@@ -79,13 +80,15 @@ What each source actually does, in the order it appears in `live.json`:
 | `maritime.portwatch` | IMF PortWatch ArcGIS FeatureServer (chokepoints + disruptions) | 21600 s | `maritime.chokepoint`, `maritime.disruption` | yes |
 | `weather.nhc` | nhc.noaa.gov `CurrentStorms.json` plus each storm's `trackCone.kmzFile` | 600 s (floor 300 s) | `weather.storm`, `weather.storm.cone` | yes |
 | `space.pads` | ll.thespacedevs.com `/2.3.0/locations/` | 86400 s (floor 6 h) | `space.pad` | yes |
-| `humanitarian.hapi` | hapi.humdata.org refugees-persons-of-concern | 86400 s (floor 6 h) | `humanitarian.displacement` | **no** (needs app identifier) |
-| `hamradio.rbn` | telnet `telnet.reversebeacon.net` | streaming | `hamradio` spots | **no** (needs your callsign) |
-| `aprs.is` | TCP `rotate.aprs2.net:14580`, read-only login (passcode `-1`) | streaming | `aprs` → `aprs.station`, `aprs.object` | **no** (needs your callsign) |
+| `humanitarian.hapi` | hapi.humdata.org refugees-persons-of-concern | 86400 s (floor 6 h) | `humanitarian.displacement` | **no** (needs app identifier in `local.json`) |
+| `hamradio.rbn` | telnet `telnet.reversebeacon.net` | streaming | `hamradio` spots | yes (placeholder login `HB9HSJ`; overlay your callsign) |
+| `aprs.is` | TCP `rotate.aprs2.net:14580`, read-only login (passcode `-1`) | streaming | `aprs` → `aprs.station`, `aprs.object` | yes (placeholder login `HB9HSJ`; overlay your callsign) |
 | `wsjtx.udp` | local UDP listener | streaming | `hamradio` | no |
-| `ais.aisstream` | `wss://stream.aisstream.io/v0/stream` | streaming | `maritime.vessel` | **no** (needs a free API key) |
-| `hamradio.dxcluster` | telnet, node address configured per install (no default; example `dxc.nc7j.com:7373`) | streaming | `hamradio` spots | **no** (needs your callsign and a chosen node) |
+| `ais.aisstream` | `wss://stream.aisstream.io/v0/stream` | streaming | `maritime.vessel` | yes (idles without `apiKey`; overlay the key in `local.json`) |
+| `hamradio.dxcluster` | telnet, node address configured per install (no default; example `dxc.nc7j.com:7373`) | streaming | `hamradio` spots | yes (placeholder login `HB9HSJ`; overlay your callsign) |
 | `hamradio.wspr` | `db1.wspr.live` HTTP/ClickHouse `?query=` interface | 300 s (floor 120 s) | `hamradio` spots | yes |
+| `hamradio.brandmeister` | `wss://api.brandmeister.network/lh/socket.io` (Engine.IO / Socket.IO last-heard) | streaming, emit-throttled | `hamradio` → `radio.activity` | yes |
+| `solar.grayline` | derived solar terminator / nautical-twilight band | 120 s | `solar.grayline` | yes |
 
 ## A word about Blitzortung
 
@@ -121,21 +124,22 @@ you commercial rights to Blitzortung's data.
 
 ## Enabling AIS ships (aisstream.io)
 
-The maritime layer ships **disabled by default** because it needs a
-credential nothing in this repository can supply. Turning it on is a
-deliberate, three-step operator decision:
+The maritime layer ships **enabled** with an empty `apiKey` and five
+high-traffic boxes (N Atlantic approaches, Suez/Red Sea, Malacca, East
+China Sea / Japan, US East Coast). The collector **idles** that source
+until `local.json` overlays a key — it does not refuse to start. Putting
+a key in tracked `live.json` is still wrong.
 
 1. **Create a free account** at [aisstream.io](https://aisstream.io) and
    generate an API key from its Account page. No payment details are
    requested for the free tier at the time of writing.
-2. **Edit `collector/configs/live.json`**: set `"enabled": true` on the
-   `ais.aisstream` source, paste the key into `"apiKey"`, and replace the
-   example `boundingBoxes` entry with the ocean area(s) you actually want —
-   see [CONFIGURATION.md](CONFIGURATION.md) for the field shapes.
-3. **Restart the collector.** If the key or bounding boxes are missing, the
-   collector refuses to start with a clear error rather than silently doing
-   nothing — the same fail-fast behaviour as the Reverse Beacon Network
-   source when its callsign is missing.
+2. **Copy `collector/configs/local.json.example` to `local.json`** and
+   put the key on `ais-aisstream-example`. Optionally replace the
+   shipped `boundingBoxes` in `live.json` with the ocean area(s) you
+   actually want — see [CONFIGURATION.md](CONFIGURATION.md) for the field
+   shapes.
+3. **Restart the collector.** Bounding boxes are still required; a
+   missing key only parks the source.
 
 ### Why aisstream.io and not something else
 
@@ -242,14 +246,19 @@ these wrong silently produces a globe full of wrong ships:
   not a MAP_KEY is configured) and ships with **one bounded area of interest**
   rather than pulling the whole-world file and keeping all of it. A poll's
   fetched/kept/emitted/duplicate/invalid counts are logged every time.
-- Sources that need an identity (RBN, aisstream.io) ship **disabled** rather
-  than with a placeholder credential.
+- Sources that need an identity (RBN, aisstream.io, APRS-IS, DX cluster)
+  ship with a non-secret placeholder (`HB9HSJ`) or an empty key and take
+  the real callsign/key from `local.json`. AIS idles without a key rather
+  than failing collector startup. OpenAQ and HDX HAPI stay **disabled**
+  until an identifier is supplied — they cannot start without one.
 - The AIS source reconnects with **exponential backoff (10 s → 5 min)**
   rather than a tight retry loop, honouring the provider's three
   connections-per-account / three connections-per-IP limits, and resets the
   backoff only after a connection has proven healthy for a couple of minutes.
-- Sources that need an identity (RBN, the DX cluster) ship **disabled** rather
-  than with a placeholder callsign.
+- RBN, the DX cluster and APRS-IS ship enabled with placeholder login
+  `HB9HSJ`. Overlay your own callsign in `local.json`; do not commit it
+  if you consider it private (a callsign is not a secret, but it is
+  polite to use your own).
 - WSPR queries wspr.live for only the columns actually needed, filtered by
   time, at a default of every 5 minutes (floor 2 minutes) — well under its
   published 20-requests/minute limit and its own guidance to filter by time.
@@ -264,8 +273,9 @@ free because people pay for them with their own time and hardware.
 
 ## A word about APRS-IS
 
-The APRS-IS layer is **off by default**, for the same reason as the RBN: it
-needs your own amateur callsign, so it cannot ship pre-configured.
+The APRS-IS layer ships **enabled** with placeholder login `HB9HSJ`. Overlay
+your own callsign in `local.json`. It still needs a real amateur identity;
+the placeholder is only there so the source is ready when the overlay is.
 
 APRS-IS exists to support Amateur Radio APRS on RF. Its own maintainers ask
 that:
@@ -409,6 +419,9 @@ terraces once the material takes a slope from it.
 - PSKReporter, prop.kc2g.com, the RBN and aisstream.io publish no formal data
   licence. Usage here is hobby-scale and attributed; contact them before any
   larger or commercial use.
+- **NOTAMs are not shipped.** There is no clean, attributable, hobby-usable
+  global NOTAM JSON/API: the FAA developer portal is keyed and US-centric,
+  ICAO feeds are paid, and HTML scraping is out of scope.
 - **The `ais.aisstream` live connection is unverified.** It was built and
   unit-tested against fixtures taken from aisstream.io's published
   documentation and OpenAPI schema, without ever holding a real API key — see

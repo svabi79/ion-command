@@ -41,7 +41,7 @@ public:
     FGeoRenderLayerStatistics GetRenderStatistics() const;
 
     UPROPERTY(EditAnywhere, Category="ION COMMAND|Layer") double GlobeRadius = 1000.0;
-    UPROPERTY(EditAnywhere, Category="ION COMMAND|Layer") int32 MaxVisibleAreas = 64;
+    UPROPERTY(EditAnywhere, Category="ION COMMAND|Layer") int32 MaxVisibleAreas = 256;
     UPROPERTY(EditAnywhere, Category="ION COMMAND|Layer") double AreaLifetimeSeconds = 7200.0;
     UPROPERTY(EditAnywhere, Category="ION COMMAND|Layer") double OutlineThickness = 0.018;
     UPROPERTY(EditAnywhere, Category="ION COMMAND|Layer") int32 MaxRingVertices = 256;

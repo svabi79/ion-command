@@ -106,7 +106,8 @@ Press **O**. Every row is clickable and shows its state:
 - **HEATMAP** — activity density splats
 - **IONOSPHERE SHELLS** — ionosonde shells
 - **TRAILS** — motion trails behind moving markers
-- **AREAS** — filled polygons (NHC forecast cones)
+- **AREAS** — filled polygons (NHC forecast cones, satellite radio
+  footprints, solar grayline / nautical-twilight band)
 - **CABLES** — submarine cable routes (TeleGeography). Color: planned amber;
   in-service by length (short teal / regional cyan / ocean blue / trunk magenta)
 - **BORDERS** — Natural Earth admin-0 country lines and zoom-aware place
@@ -274,13 +275,16 @@ as `mapKey` switches the source to FIRMS' Area API instead, which filters
 server-side to your box — far less bandwidth, at the cost of a five-minute
 sign-up. Never commit a real key; set it only in your local `live.json`.
 
-**Enable the Reverse Beacon Network** — set `enabled: true` and put your own
-callsign in `login`.
+**Reverse Beacon Network / DX cluster / APRS-IS** ship enabled with
+placeholder login `HB9HSJ`. Overlay your own callsign on those source IDs
+in `local.json`. APRS-IS always logs in read-only (passcode `-1`).
 
 **Enable AIS ships** — create a free API key at
-[aisstream.io](https://aisstream.io), then set `enabled: true`, paste the key
-into `apiKey`, and replace the example `boundingBoxes` entry with the area(s)
-you actually want to watch:
+[aisstream.io](https://aisstream.io) and put it on `ais-aisstream-example`
+in `local.json`. The source is already enabled; without a key it idles
+instead of taking the collector down. The shipped boxes are regional
+high-traffic areas (not the whole ocean). Replace them if you want a
+different watch:
 
 ```json
 { "id": "ais-home", "type": "ais.aisstream", "enabled": true,
@@ -290,13 +294,10 @@ you actually want to watch:
   ] }
 ```
 
-The collector refuses to start if `ais.aisstream` is enabled without an
-`apiKey` or without at least one bounding box, rather than connecting with a
-broken subscription. See [DATA-SOURCES.md](DATA-SOURCES.md#enabling-ais-ships-aisstreamio)
+Bounding boxes are still required. See [DATA-SOURCES.md](DATA-SOURCES.md#enabling-ais-ships-aisstreamio)
 for what the provider's terms expect in return.
-**Enable APRS-IS** — set `enabled: true` and put your own callsign in
-`login` (the connection always logs in read-only, passcode `-1`, so no real
-passcode is ever needed or sent). By default it subscribes to an
+
+**Enable APRS-IS** — already on; overlay your callsign. By default it subscribes to an
 illustrative 300 km circle around the same example point as `aviation.adsb`
 plus position/object/item packet types only — not the entire world feed.
 Point it at your own area instead:
@@ -325,13 +326,15 @@ carry secrets. Without credentials the source stays in `anon` mode. Lowering
 **OpenAQ (optional).** Same overlay: put an Explorer API key on
 `openaq-example`, then set `"enabled": true` on that source in `live.json`.
 The collector refuses to start if the source is enabled without a key.
+Left **disabled** in tracked `live.json` for that reason.
 
 **HDX HAPI displacement (optional).** Mint an app identifier (application
 name + contact email, not a secret) from
 [HAPI's encode endpoint](https://hapi.humdata.org/api/v2/encode_app_identifier),
 put it on `hapi-displacement` as `apiKey` in `local.json`, then set
 `"enabled": true` on that source in `live.json`. The collector refuses to
-start if the source is enabled without an identifier.
+start if the source is enabled without an identifier. Left **disabled**
+in tracked `live.json` for that reason.
 
 **Turn on recording** (`recording.enabled: true`) to capture a JSONL event log
 for later replay. Mind the volume — the live feeds produce several GB per hour;

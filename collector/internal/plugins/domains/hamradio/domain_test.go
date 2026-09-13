@@ -121,3 +121,34 @@ func TestSpotUsesPlainRegionFallback(t *testing.T) {
 		t.Fatalf("no dxcc code was supplied, none must be reported: %#v", link.Properties)
 	}
 }
+
+func TestLastHeardBecomesActivityPoint(t *testing.T) {
+	payload, _ := json.Marshal(rawActivity{
+		Kind: "last-heard", SpotID: "bm-1", TXCallsign: "HB9HSJ",
+		TXLongitude: 8.2, TXLatitude: 47.0, TXRegion: "Switzerland",
+		Talkgroup: 91, TalkgroupName: "World-wide", DurationS: 14, Mode: "DMR",
+	})
+	messages, err := New().Normalize(context.Background(), plugins.RawRecord{
+		SourcePluginID: "brandmeister", SourceInstanceID: "test", OriginalID: "bm-1",
+		Domain: "hamradio", ObservedUTC: time.Now().UTC(), Payload: payload,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(messages) != 1 {
+		t.Fatalf("expected one pulse, got %d", len(messages))
+	}
+	msg := messages[0]
+	if msg.SemanticType != "radio.activity" || msg.Geometry.Type != "Point" {
+		t.Fatalf("unexpected activity: %#v", msg)
+	}
+	if msg.EntityID != "radio:activity:HB9HSJ" {
+		t.Fatalf("entity %q", msg.EntityID)
+	}
+	if msg.Properties["display.primary"] != "TG 91  //  World-wide" {
+		t.Fatalf("primary %v", msg.Properties["display.primary"])
+	}
+	if err := msg.Validate(); err != nil {
+		t.Fatalf("invalid activity: %v", err)
+	}
+}

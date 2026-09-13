@@ -148,5 +148,40 @@ func (d *Domain) Normalize(_ context.Context, record plugins.RawRecord) ([]event
 	}
 	modeled := false
 	event.Quality.Measured = &modeled
-	return []events.Envelope{event}, nil
+	result := []events.Envelope{event}
+	// Footprints ride the same SGP4 fix. Emit on a 30 s cadence so the
+	// area layer is not rebuilt on every 10 s position tick.
+	if record.ObservedUTC.Unix()/10%3 == 0 {
+		if fp, ok := d.normalizeFootprint(record, raw); ok {
+			result = append(result, fp)
+		}
+	}
+	return result, nil
+}
+
+func (d *Domain) normalizeFootprint(record plugins.RawRecord, raw rawPosition) (events.Envelope, bool) {
+	ring, ok := visibilityRing(raw.Latitude, raw.Longitude, raw.AltKm, footprintVertices)
+	if !ok {
+		return events.Envelope{}, false
+	}
+	event := events.NewEnvelope(record.OriginalID+":footprint", "orbital", "orbital.footprint", events.MessageArea,
+		events.SourceRef{PluginID: record.SourcePluginID, InstanceID: record.SourceInstanceID, OriginalID: record.OriginalID},
+		record.ObservedUTC)
+	event.EntityID = "orbital:footprint:" + raw.SatID
+	event.Geometry = events.Polygon([][][]float64{ring})
+	validUntil := record.ObservedUTC.Add(45 * time.Second)
+	event.Time.ValidUntilUTC = &validUntil
+	event.Properties = map[string]any{
+		"noradId":           raw.SatID,
+		"altKm":             raw.AltKm,
+		"visual.color":      "0.32,0.55,0.50",
+		"visual.opacity":    0.10,
+		"display.title":     raw.Name,
+		"display.primary":   "radio / visibility footprint",
+		"display.secondary": fmt.Sprintf("alt %.0f km", raw.AltKm),
+	}
+	modeled := false
+	event.Quality.Measured = &modeled
+	event.Quality.Classification = "modelled"
+	return event, true
 }

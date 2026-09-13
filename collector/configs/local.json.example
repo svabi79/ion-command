@@ -7,6 +7,22 @@
       "pollSeconds": 60
     },
     {
+      "id": "ais-aisstream-example",
+      "apiKey": "YOUR_AISSTREAM_API_KEY"
+    },
+    {
+      "id": "rbn-primary",
+      "login": "YOUR-CALLSIGN"
+    },
+    {
+      "id": "dxcluster-primary",
+      "login": "YOUR-CALLSIGN"
+    },
+    {
+      "id": "aprsis-primary",
+      "login": "YOUR-CALLSIGN"
+    },
+    {
       "id": "openaq-example",
       "apiKey": "YOUR_OPENAQ_API_KEY"
     },

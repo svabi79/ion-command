@@ -34,7 +34,10 @@
       "geography.landing",
       "geophysics.event",
       "space.pad",
-      "humanitarian.displacement"
+      "humanitarian.displacement",
+      "orbital.footprint",
+      "solar.grayline",
+      "radio.activity"
     ]
   },
   "recording": {
@@ -113,23 +116,27 @@
     {
       "id": "rbn-primary",
       "type": "hamradio.rbn",
-      "enabled": false,
-      "login": "N0CALL"
+      "enabled": true,
+      "login": "HB9HSJ"
     },
     {
       "id": "ais-aisstream-example",
       "type": "ais.aisstream",
-      "enabled": false,
+      "enabled": true,
       "apiKey": "",
       "boundingBoxes": [
-        { "minLatitude": 25.603, "maxLatitude": 25.835, "minLongitude": -80.208, "maxLongitude": -79.879 }
+        { "minLatitude": 48.0, "maxLatitude": 51.5, "minLongitude": -6.0, "maxLongitude": 2.0 },
+        { "minLatitude": 12.0, "maxLatitude": 31.5, "minLongitude": 32.0, "maxLongitude": 44.0 },
+        { "minLatitude": 1.0, "maxLatitude": 6.5, "minLongitude": 98.0, "maxLongitude": 105.0 },
+        { "minLatitude": 24.0, "maxLatitude": 36.0, "minLongitude": 118.0, "maxLongitude": 142.0 },
+        { "minLatitude": 32.0, "maxLatitude": 41.0, "minLongitude": -80.0, "maxLongitude": -70.0 }
       ]
     },
     {
       "id": "dxcluster-primary",
       "type": "hamradio.dxcluster",
-      "enabled": false,
-      "login": "N0CALL",
+      "enabled": true,
+      "login": "HB9HSJ",
       "broker": "dxc.nc7j.com:7373"
     },
     {
@@ -141,8 +148,19 @@
     {
       "id": "aprsis-primary",
       "type": "aprs.is",
-      "enabled": false,
-      "login": "NOCALL"
+      "enabled": true,
+      "login": "HB9HSJ"
+    },
+    {
+      "id": "brandmeister-lastheard",
+      "type": "hamradio.brandmeister",
+      "enabled": true
+    },
+    {
+      "id": "solar-grayline",
+      "type": "solar.grayline",
+      "enabled": true,
+      "pollSeconds": 120
     },
     {
       "id": "launchlibrary-upcoming",
