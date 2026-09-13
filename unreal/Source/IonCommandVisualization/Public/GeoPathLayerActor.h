@@ -13,7 +13,7 @@ struct FRenderedGeoPath
 {
     FString EntityKey;
     FGeoMessageEnvelope Message;
-    FLinearColor Color = FLinearColor(0.20f, 0.85f, 1.0f);
+    FLinearColor Color = FLinearColor(0.34f, 0.60f, 0.70f);
     int32 LegendIndex = 2;
     double LastSeenSeconds = 0.0;
     double ExpireAtSeconds = 0.0;

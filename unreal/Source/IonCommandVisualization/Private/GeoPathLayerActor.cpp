@@ -15,12 +15,20 @@ constexpr double PathHeight = 4.0;
 constexpr double MaxEdgeDegrees = 2.8;
 constexpr int32 LegendClassCount = 5;
 
+// M_HolographicSignal / MI_Track is unlit additive: emissive = Color * Intensity.
+// 3.6 * the old saturated legend set bloomed into neon tubes on the dark globe.
+// ~0.4 keeps the five class hues readable as matte map lines.
+constexpr float PathIntensity = 0.4f;
+
+// Keep in lockstep with collector geography cableLegend RGB strings.
+// Same five classes (planned / short / regional / ocean / trunk); lower
+// saturation and value so they do not read as light tubes.
 const FLinearColor LegendColors[LegendClassCount] = {
-    FLinearColor(1.00f, 0.72f, 0.18f),
-    FLinearColor(0.25f, 0.70f, 0.62f),
-    FLinearColor(0.20f, 0.85f, 1.00f),
-    FLinearColor(0.22f, 0.45f, 0.95f),
-    FLinearColor(0.92f, 0.28f, 0.72f),
+    FLinearColor(0.78f, 0.58f, 0.26f),
+    FLinearColor(0.30f, 0.56f, 0.50f),
+    FLinearColor(0.34f, 0.60f, 0.70f),
+    FLinearColor(0.30f, 0.42f, 0.66f),
+    FLinearColor(0.66f, 0.34f, 0.52f),
 };
 
 FLinearColor ParseColorProperty(const FString& Text, const FLinearColor& Fallback)
@@ -125,7 +133,7 @@ void AGeoPathLayerActor::BeginPlay()
         if (Material)
         {
             Material->SetVectorParameterValue(TEXT("Color"), LegendColors[Index]);
-            Material->SetScalarParameterValue(TEXT("Intensity"), 3.6f);
+            Material->SetScalarParameterValue(TEXT("Intensity"), PathIntensity);
         }
         ClassMaterials.Add(Material);
     }

@@ -10,6 +10,15 @@ superseded configurations, is in
 
 ## [Unreleased]
 
+### Changed
+
+- **Cable paths are map lines, not neon tubes.** `AGeoPathLayerActor`
+  drove `MI_Track` at Intensity 3.6 with hot legend hues. The material is
+  unlit additive (`emissive = Color * Intensity`), so that bloomed on the
+  dark globe. Intensity is now 0.4; the five planned / length-bucket
+  classes stay, slightly desaturated. Collector `visual.color` strings
+  match. Hover/pick from `#19` is unchanged.
+
 ### Fixed
 
 - **UE 5.8 Area fill bootstrap after `#16`.** `create_material_instances.py`
