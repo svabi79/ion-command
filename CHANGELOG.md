@@ -43,6 +43,12 @@ superseded configurations, is in
 
 ### Fixed
 
+- **UE 5.8 path-layer `Role` shadow after `#21`.** `#21` added
+  `AGeoPathLayerActor::Role` (`EGeoPathLayerRole` Cartography vs cables).
+  That name is already `AActor::Role` (`ENetRole`), and UHT rejects the
+  shadow (`GeoPathLayerActor.h(52)`, UAT exit 6). The property is now
+  `PathRole`. Cartography vs cable filtering is unchanged. Wall re-package
+  still needed.
 - **UE 5.8 Area fill bootstrap after `#16`.** `create_material_instances.py`
   set `used_with_procedural_meshes` on `M_AreaFill`. That property is not
   on Material in 5.8 (Python API: `used_with_static_mesh`,
