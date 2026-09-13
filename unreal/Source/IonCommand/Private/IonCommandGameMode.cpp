@@ -46,7 +46,34 @@ void AIonCommandGameMode::BeginPlay()
     TActorIterator<AGeoPointLayerActor> Points(World); if (!Points) World->SpawnActor<AGeoPointLayerActor>(FVector::ZeroVector, FRotator::ZeroRotator);
     TActorIterator<AGeoTrackLayerActor> Trails(World); if (!Trails) World->SpawnActor<AGeoTrackLayerActor>(FVector::ZeroVector, FRotator::ZeroRotator);
     TActorIterator<AGeoAreaLayerActor> Areas(World); if (!Areas) World->SpawnActor<AGeoAreaLayerActor>(FVector::ZeroVector, FRotator::ZeroRotator);
-    TActorIterator<AGeoPathLayerActor> Paths(World); if (!Paths) World->SpawnActor<AGeoPathLayerActor>(FVector::ZeroVector, FRotator::ZeroRotator);
+    bool bHasCablePaths = false;
+    bool bHasCartography = false;
+    for (TActorIterator<AGeoPathLayerActor> It(World); It; ++It)
+    {
+        if (It->IsCartography())
+        {
+            bHasCartography = true;
+        }
+        else
+        {
+            bHasCablePaths = true;
+        }
+    }
+    if (!bHasCablePaths)
+    {
+        World->SpawnActor<AGeoPathLayerActor>(FVector::ZeroVector, FRotator::ZeroRotator);
+    }
+    if (!bHasCartography)
+    {
+        const FTransform Identity;
+        if (AGeoPathLayerActor* Cartography = World->SpawnActorDeferred<AGeoPathLayerActor>(AGeoPathLayerActor::StaticClass(), Identity))
+        {
+            Cartography->Role = EGeoPathLayerRole::Cartography;
+            Cartography->PathThickness = 0.008;
+            Cartography->MaxVisiblePaths = 400;
+            UGameplayStatics::FinishSpawningActor(Cartography, Identity);
+        }
+    }
     TActorIterator<AIonIonosphereActor> Ionosphere(World); if (!Ionosphere) World->SpawnActor<AIonIonosphereActor>(FVector::ZeroVector, FRotator::ZeroRotator);
     TActorIterator<AIonAuroraActor> Aurora(World); if (!Aurora) World->SpawnActor<AIonAuroraActor>(FVector::ZeroVector, FRotator::ZeroRotator);
     TActorIterator<AIonActivityHeatmapActor> Heatmap(World); if (!Heatmap) World->SpawnActor<AIonActivityHeatmapActor>(FVector::ZeroVector, FRotator::ZeroRotator);

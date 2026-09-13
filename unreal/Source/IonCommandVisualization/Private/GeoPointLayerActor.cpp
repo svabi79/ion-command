@@ -217,7 +217,19 @@ void AGeoPointLayerActor::BeginPlay()
 }
 
 void AGeoPointLayerActor::EndPlay(const EEndPlayReason::Type EndPlayReason) { if (DataSubsystem.IsValid()) { DataSubsystem->OnMessageAccepted().RemoveAll(this); DataSubsystem->OnDataReset().RemoveAll(this); } if (UGameInstance* GameInstance = GetGameInstance()) if (UGeoLayerSubsystem* LayerSubsystem = GameInstance->GetSubsystem<UGeoLayerSubsystem>()) LayerSubsystem->OnLayerVisibilityChanged().RemoveAll(this); Super::EndPlay(EndPlayReason); }
-bool AGeoPointLayerActor::Supports(const FGeoMessageEnvelope& Message) const { return Message.Geometry.Type == EGeoGeometryType::Point && Message.Geometry.Positions.Num() == 1; }
+bool AGeoPointLayerActor::Supports(const FGeoMessageEnvelope& Message) const
+{
+    if (Message.Geometry.Type != EGeoGeometryType::Point || Message.Geometry.Positions.Num() != 1)
+    {
+        return false;
+    }
+    // Cartographic labels are drawn in screen space by the HUD. Putting a
+    // station pictogram on every city/country/region fights that overlay.
+    return Message.SemanticType != TEXT("geography.city")
+        && Message.SemanticType != TEXT("geography.country")
+        && Message.SemanticType != TEXT("geography.landmark")
+        && Message.SemanticType != TEXT("geography.region");
+}
 void AGeoPointLayerActor::Submit(const FGeoMessageEnvelope& Message)
 {
     if (!Supports(Message)) return;

@@ -100,6 +100,7 @@ void AIonCommandPlayerController::SetupInputComponent()
     InputComponent->BindAction(TEXT("ToggleTrails"), IE_Pressed, this, &AIonCommandPlayerController::ToggleTrails);
     InputComponent->BindAction(TEXT("ToggleAreas"), IE_Pressed, this, &AIonCommandPlayerController::ToggleAreas);
     InputComponent->BindAction(TEXT("ToggleRoutes"), IE_Pressed, this, &AIonCommandPlayerController::ToggleRoutes);
+    InputComponent->BindAction(TEXT("ToggleCartography"), IE_Pressed, this, &AIonCommandPlayerController::ToggleCartography);
     InputComponent->BindAction(TEXT("CycleModeFilter"), IE_Pressed, this, &AIonCommandPlayerController::CycleModeFilter);
     InputComponent->BindAction(TEXT("ToggleOverlayMenu"), IE_Pressed, this, &AIonCommandPlayerController::ToggleOverlayMenu);
     InputComponent->BindAction(TEXT("OpenSearch"), IE_Pressed, this, &AIonCommandPlayerController::OpenSearchOverlay);
@@ -224,7 +225,22 @@ void AIonCommandPlayerController::ToggleRoutes()
     if (IsTypingText()) return;
     for (TActorIterator<AGeoPathLayerActor> It(GetWorld()); It; ++It)
     {
-        It->SetActorHiddenInGame(!It->IsHidden());
+        if (!It->IsCartography())
+        {
+            It->SetActorHiddenInGame(!It->IsHidden());
+        }
+    }
+}
+
+void AIonCommandPlayerController::ToggleCartography()
+{
+    if (IsTypingText()) return;
+    for (TActorIterator<AGeoPathLayerActor> It(GetWorld()); It; ++It)
+    {
+        if (It->IsCartography())
+        {
+            It->SetActorHiddenInGame(!It->IsHidden());
+        }
     }
 }
 
@@ -361,16 +377,16 @@ void AIonCommandPlayerController::SelectUnderCursor()
             }
         }
     }
-    for (TActorIterator<AGeoPathLayerActor> It(GetWorld()); It; ++It)
+    auto ConsiderPathLayer = [&](AGeoPathLayerActor* Layer)
     {
-        if (It->IsHidden())
+        if (!Layer || Layer->IsHidden())
         {
-            continue;
+            return;
         }
         FGeoMessageEnvelope Candidate;
-        if (It->FindClosestMessageToRay(RayOrigin, RayDirection, RayLength, 32.0, Candidate))
+        if (Layer->FindClosestMessageToRay(RayOrigin, RayDirection, RayLength, 32.0, Candidate))
         {
-            const FVector CandidateLocation = It->GetActorLocation();
+            const FVector CandidateLocation = Layer->GetActorLocation();
             const double CandidateDistance = FVector::DistSquared(RayOrigin, CandidateLocation);
             if (CandidateDistance < BestMessageDistance)
             {
@@ -378,7 +394,23 @@ void AIonCommandPlayerController::SelectUnderCursor()
                 BestMessage = MoveTemp(Candidate);
             }
         }
+    };
+    AGeoPathLayerActor* CableLayer = nullptr;
+    AGeoPathLayerActor* CartographyLayer = nullptr;
+    for (TActorIterator<AGeoPathLayerActor> It(GetWorld()); It; ++It)
+    {
+        if (It->IsCartography())
+        {
+            CartographyLayer = *It;
+        }
+        else
+        {
+            CableLayer = *It;
+        }
     }
+    // Cables first so a muted border under a cable does not steal the pick.
+    ConsiderPathLayer(CableLayer);
+    ConsiderPathLayer(CartographyLayer);
 
     // Point markers (Part A: "generalise focus/selection for Point and path
     // results") only expose the lightweight render record a ray pick finds -

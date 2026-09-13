@@ -55,6 +55,7 @@ remaining `Field` geometry work. `Area` is now rendered.
 | **Ionospheric maps** (foF2, MUF, TEC) | Already fetched from KC2G as soundings | `Field` / raster |
 | **Tropical storm tracks and cones** | NOAA NHC | `Track` + `Area` — **centres and 5-day cones shipped** as `weather.nhc` / `weather.storm` + `weather.storm.cone` |
 | **Submarine cables** — context for global connectivity | TeleGeography | `LineString` / `MultiLineString` — **shipped** as real routes + landing points (`geography.cables`); color = planned vs in-service length band |
+| **Country borders and place labels** | Natural Earth 110m (bundled) | `LineString` borders + river centerlines + Point labels — **shipped** as `geography.naturalearth` (`geography.border` / `.city` / `.country` / `.river` / `.landmark`); overlay **BORDERS** / `B` |
 
 ## Wave 4 — the operator's own receiver
 

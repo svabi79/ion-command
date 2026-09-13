@@ -101,6 +101,8 @@ private:
     void DrawPolarPanel(float Scale, float Alpha);
     void DrawProviderPanels(float Scale, float Alpha, float PanelY);
     void DrawEndpointLabels(float Scale, float Alpha);
+    void DrawPlaceLabels(float Scale, float Alpha);
+    bool IsCartographyVisible() const;
     // Always-on-top "you are here" reticle for the configured own station, so
     // dense traffic can never bury it the way world-space markers do.
     void DrawOwnStationReticle(float Scale, float Alpha);
@@ -145,6 +147,16 @@ private:
     static constexpr int32 MaxEndpointStats = 4096;
     static constexpr double EndpointRetentionSeconds = 120.0;
 
+    struct FIonPlaceLabel
+    {
+        FString Label;
+        FString Kind;
+        FGeoPosition Position;
+        int32 Lod = 0;
+    };
+    TMap<FString, FIonPlaceLabel> PlaceLabels;
+    static constexpr int32 MaxPlaceLabels = 800;
+
     // Bounded aggregation of generic display regions for the top-regions panel.
     TMap<FString, double> RegionWeights;
     static constexpr int32 MaxRegionStats = 512;
@@ -171,7 +183,7 @@ private:
     struct FMenuRow
     {
         FString Label;
-        FString Kind;   // "paths", "heatmap", "ionosphere", "trails", or "domain"
+        FString Kind;   // "paths", "cables", "borders", "heatmap", "ionosphere", "trails", or "domain"
         FString Domain; // set for kind == "domain"
         bool bVisible = true;
         FVector2D Min = FVector2D::ZeroVector;

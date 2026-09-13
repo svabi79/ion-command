@@ -109,6 +109,8 @@ Press **O**. Every row is clickable and shows its state:
 - **AREAS** — filled polygons (NHC forecast cones)
 - **CABLES** — submarine cable routes (TeleGeography). Color: planned amber;
   in-service by length (short teal / regional cyan / ocean blue / trunk magenta)
+- **BORDERS** — Natural Earth admin-0 country lines and zoom-aware place
+  labels (cities, rivers, landmarks, regions)
 - **ALT EXAGGERATION 12X** — aircraft altitude exaggerated so flight level is
   visible at globe scale; off renders true scale
 - **&lt;DOMAIN&gt; MARKERS** — one row per marker domain currently present
@@ -132,6 +134,7 @@ Press **O**. Every row is clickable and shows its state:
 | **T** | show/hide trails |
 | **Y** | show/hide areas |
 | **C** | show/hide cable routes |
+| **B** | show/hide country borders and place labels |
 | **N** | cycle transmission-mode filter |
 | **F** | focus the selected path |
 | **Esc** | clear selection |
@@ -218,7 +221,7 @@ Additional fields by type:
 | `space.launchlibrary` | `pollSeconds`, `apiKey`, `broker`, `cacheDirectory` | Upcoming launches, 15 min floor. Optional `Authorization: Token`. |
 | `weather.openmeteo` | `latitude`, `longitude`, `pollSeconds` | Current weather at a 0.1° cell. Requires coordinates. |
 | `weather.openaq` | `apiKey`, `latitude`, `longitude`, `radiusNm`, `pollSeconds` | Air-quality stations. **Requires a free Explorer key** in `local.json`; refuse to start if enabled without one. |
-| `geography.naturalearth` | — | Bundled public-domain region labels. |
+| `geography.naturalearth` | — | Bundled public-domain 110m cartography (borders, cities, rivers, landmarks, regions). |
 | `geography.cables` | `pollSeconds`, `cacheDirectory` | TeleGeography cable **routes** + landings, 6 h floor, removable `routes.json` cache. |
 | `geophysics.eonet` | `pollSeconds` | NASA EONET open events. |
 | `geophysics.gdacs` | `pollSeconds` | GDACS disaster alerts. |

@@ -9,6 +9,13 @@ class UGeoDataSubsystem;
 class UInstancedStaticMeshComponent;
 class UMaterialInstanceDynamic;
 
+UENUM(BlueprintType)
+enum class EGeoPathLayerRole : uint8
+{
+    Cables UMETA(DisplayName = "Cables"),
+    Cartography UMETA(DisplayName = "Cartography")
+};
+
 struct FRenderedGeoPath
 {
     FString EntityKey;
@@ -39,7 +46,10 @@ public:
     bool FindClosestMessageToRay(const FVector& RayOrigin, const FVector& RayDirection, double RayLength, double MaxDistance, FGeoMessageEnvelope& OutMessage) const;
     FGeoRenderLayerStatistics GetRenderStatistics() const;
     FString GetLegendNote() const;
+    FString GetOverlayLayerId() const;
+    bool IsCartography() const { return Role == EGeoPathLayerRole::Cartography; }
 
+    UPROPERTY(EditAnywhere, Category="ION COMMAND|Layer") EGeoPathLayerRole Role = EGeoPathLayerRole::Cables;
     UPROPERTY(EditAnywhere, Category="ION COMMAND|Layer") double GlobeRadius = 1000.0;
     UPROPERTY(EditAnywhere, Category="ION COMMAND|Layer") int32 MaxVisiblePaths = 800;
     UPROPERTY(EditAnywhere, Category="ION COMMAND|Layer") double PathLifetimeSeconds = 2592000.0;

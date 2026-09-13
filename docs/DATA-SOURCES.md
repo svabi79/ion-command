@@ -31,7 +31,7 @@ non-commercial only.
 | **The Space Devs / Launch Library 2** | Upcoming orbital launches from The Space Devs Launch Library 2. Anonymous access is limited to 15 calls/hour. Optional API token via `Authorization: Token`. | [ll.thespacedevs.com](https://ll.thespacedevs.com) |
 | **Open-Meteo** | Current weather. Required credit, shown in the HUD: "Weather data by Open-Meteo.com". | [open-meteo.com](https://open-meteo.com) · [license](https://open-meteo.com/en/license) |
 | **OpenAQ** | Air-quality station locations from OpenAQ v3. Requires a free Explorer API key (`X-API-Key`). Disabled until the operator supplies one in `local.json`. | [openaq.org](https://openaq.org) |
-| **Natural Earth** | Named geographic labels from a bundled public-domain extract of Natural Earth 10m cultural and marine regions. | [naturalearthdata.com](https://www.naturalearthdata.com) |
+| **Natural Earth** | Bundled public-domain 110m extract: admin-0 country boundary lines, populated places (mostly capitals), country label points, major river centerlines, elevation landmarks, plus the original continent/region/ocean name points. Recook with `collector/cmd/neextract` to bump to 50m later. No live fetch. | [naturalearthdata.com](https://www.naturalearthdata.com) |
 | **TeleGeography** | Submarine cable **routes** (MultiLineString, decimated) and landing points from the public cable map. Licensed **CC BY-NC-SA 3.0**; required credit, shown in the HUD. The collector caches a removable local copy under `data/cables/` (`routes.json`). Color: planned cables use TeleGeography's `#939597` (amber on the globe); in-service cables are banded by computed route length (short teal / regional cyan / ocean blue / trunk magenta). Hover lists landing names only when a landing is near a kept segment endpoint; the public GeoJSON has no cable–landing ids and no utilization or capacity. Do not republish the cached dataset. | [submarinecablemap.com](https://www.submarinecablemap.com) |
 | **NASA EONET** | Open natural events from NASA's Earth Observatory Natural Event Tracker. Public API; NASA does not endorse this project. | [eonet.gsfc.nasa.gov](https://eonet.gsfc.nasa.gov) |
 | **GDACS** | Disaster alerts from the Global Disaster Alert and Coordination System (European Commission / UN). Public GeoJSON search. | [gdacs.org](https://www.gdacs.org) |
@@ -72,7 +72,7 @@ What each source actually does, in the order it appears in `live.json`:
 | `space.launchlibrary` | ll.thespacedevs.com `/2.3.0/launches/upcoming/` | 900 s (floor 900 s) | `space.launch` | yes |
 | `weather.openmeteo` | api.open-meteo.com `/v1/forecast` current | 300 s (floor 300 s) | `weather.observation` | yes (one example cell) |
 | `weather.openaq` | api.openaq.org `/v3/locations` | 900 s | `weather.airquality` | **no** (needs Explorer API key) |
-| `geography.naturalearth` | bundled `regions.json` | once at start | `geography.region` | yes |
+| `geography.naturalearth` | bundled 110m `regions.json` + `borders.json` + `places.json` + `rivers.json` | once at start | `geography.region`, `geography.border`, `geography.city`, `geography.country`, `geography.landmark`, `geography.river` | yes |
 | `geography.cables` | submarinecablemap.com GeoJSON **routes** + landings | 86400 s (floor 6 h) | `geography.cable` (LineString/MultiLineString), `geography.landing` | yes |
 | `geophysics.eonet` | eonet.gsfc.nasa.gov `/api/v3/events?status=open` | 900 s | `geophysics.event` | yes |
 | `geophysics.gdacs` | gdacs.org SEARCH GeoJSON | 600 s | `geophysics.event` | yes |

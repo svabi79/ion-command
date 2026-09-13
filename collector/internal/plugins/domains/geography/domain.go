@@ -1,5 +1,5 @@
-// Package geography normalizes static cartographic labels: named regions
-// and submarine-cable routes.
+// Package geography normalizes static cartography: named regions, country
+// borders, cities, rivers, landmarks, and submarine-cable routes.
 package geography
 
 import (
@@ -34,6 +34,16 @@ func (d *Domain) Normalize(_ context.Context, record plugins.RawRecord) ([]event
 		return d.cable(record)
 	case "landing":
 		return d.landing(record)
+	case "border":
+		return d.border(record)
+	case "city":
+		return d.city(record)
+	case "river":
+		return d.river(record)
+	case "country":
+		return d.country(record)
+	case "peak", "landmark":
+		return d.landmark(record)
 	default:
 		return nil, fmt.Errorf("geography record has unknown kind %q", kind.Kind)
 	}
@@ -45,6 +55,7 @@ func (d *Domain) region(record plugins.RawRecord) ([]events.Envelope, error) {
 		RegionKind string  `json:"regionKind"`
 		Latitude   float64 `json:"latitude"`
 		Longitude  float64 `json:"longitude"`
+		LOD        int     `json:"lod"`
 	}
 	if err := json.Unmarshal(record.Payload, &raw); err != nil || raw.Name == "" {
 		return nil, fmt.Errorf("geography region requires a name")
@@ -62,9 +73,222 @@ func (d *Domain) region(record plugins.RawRecord) ([]events.Envelope, error) {
 	}
 	event.Properties = map[string]any{
 		"visual.icon":        icon,
-		"visual.markerScale": 0.7,
+		"visual.markerScale": 0.55,
+		"visual.lod":         raw.LOD,
 		"display.title":      raw.Name,
 		"display.primary":    raw.RegionKind,
+	}
+	return []events.Envelope{event}, nil
+}
+
+func cartographicUntil(observed time.Time) time.Time {
+	return observed.Add(30 * 24 * time.Hour)
+}
+
+func (d *Domain) border(record plugins.RawRecord) ([]events.Envelope, error) {
+	var raw struct {
+		BorderID string        `json:"borderId"`
+		Name     string        `json:"name"`
+		Segments [][][]float64 `json:"segments"`
+	}
+	if err := json.Unmarshal(record.Payload, &raw); err != nil || raw.BorderID == "" || len(raw.Segments) == 0 {
+		return nil, fmt.Errorf("geography border requires id and line")
+	}
+	event := events.NewEnvelope(record.OriginalID, "geography", "geography.border", events.MessageRelationship,
+		events.SourceRef{PluginID: record.SourcePluginID, InstanceID: record.SourceInstanceID, OriginalID: record.OriginalID},
+		record.ObservedUTC)
+	event.EntityID = "geography:border:" + raw.BorderID
+	if len(raw.Segments) == 1 {
+		event.Geometry = events.LineString(raw.Segments[0])
+	} else {
+		event.Geometry = events.MultiLineString(raw.Segments)
+	}
+	validUntil := cartographicUntil(record.ObservedUTC)
+	event.Time.ValidUntilUTC = &validUntil
+	title := raw.Name
+	if title == "" {
+		title = "Country border"
+	}
+	event.Properties = map[string]any{
+		"visual.color":       "0.40,0.46,0.52",
+		"visual.legendIndex": 0,
+		"display.title":      title,
+		"display.primary":    "admin-0 boundary",
+	}
+	return []events.Envelope{event}, nil
+}
+
+func (d *Domain) city(record plugins.RawRecord) ([]events.Envelope, error) {
+	var raw struct {
+		PlaceID    string  `json:"placeId"`
+		Name       string  `json:"name"`
+		Latitude   float64 `json:"latitude"`
+		Longitude  float64 `json:"longitude"`
+		Population int     `json:"population"`
+		Capital    bool    `json:"capital"`
+		LOD        int     `json:"lod"`
+	}
+	if err := json.Unmarshal(record.Payload, &raw); err != nil || raw.Name == "" {
+		return nil, fmt.Errorf("geography city requires a name")
+	}
+	id := raw.PlaceID
+	if id == "" {
+		id = raw.Name
+	}
+	event := events.NewEnvelope(record.OriginalID, "geography", "geography.city", events.MessageAnnotation,
+		events.SourceRef{PluginID: record.SourcePluginID, InstanceID: record.SourceInstanceID, OriginalID: record.OriginalID},
+		record.ObservedUTC)
+	event.EntityID = "geography:city:" + id
+	event.Geometry = events.Point(raw.Longitude, raw.Latitude, 0)
+	validUntil := cartographicUntil(record.ObservedUTC)
+	event.Time.ValidUntilUTC = &validUntil
+	primary := "city"
+	if raw.Capital {
+		primary = "capital"
+	}
+	if raw.Population > 0 {
+		primary = fmt.Sprintf("%s  //  %s", primary, formatPopulation(raw.Population))
+	}
+	event.Properties = map[string]any{
+		"visual.icon":        "station",
+		"visual.markerScale": 0.45,
+		"visual.lod":         raw.LOD,
+		"display.title":      raw.Name,
+		"display.primary":    primary,
+	}
+	return []events.Envelope{event}, nil
+}
+
+func formatPopulation(n int) string {
+	switch {
+	case n >= 1000000:
+		return fmt.Sprintf("%.1fM", float64(n)/1000000)
+	case n >= 1000:
+		return fmt.Sprintf("%.0fk", float64(n)/1000)
+	default:
+		return fmt.Sprintf("%d", n)
+	}
+}
+
+func (d *Domain) river(record plugins.RawRecord) ([]events.Envelope, error) {
+	var raw struct {
+		RiverID  string        `json:"riverId"`
+		Name     string        `json:"name"`
+		Segments [][][]float64 `json:"segments"`
+		LabelLon float64       `json:"labelLon"`
+		LabelLat float64       `json:"labelLat"`
+		LOD      int           `json:"lod"`
+	}
+	if err := json.Unmarshal(record.Payload, &raw); err != nil || raw.RiverID == "" || raw.Name == "" || len(raw.Segments) == 0 {
+		return nil, fmt.Errorf("geography river requires id, name and centerline")
+	}
+	event := events.NewEnvelope(record.OriginalID, "geography", "geography.river", events.MessageRelationship,
+		events.SourceRef{PluginID: record.SourcePluginID, InstanceID: record.SourceInstanceID, OriginalID: record.OriginalID},
+		record.ObservedUTC)
+	event.EntityID = "geography:river:" + raw.RiverID
+	if len(raw.Segments) == 1 {
+		event.Geometry = events.LineString(raw.Segments[0])
+	} else {
+		event.Geometry = events.MultiLineString(raw.Segments)
+	}
+	validUntil := cartographicUntil(record.ObservedUTC)
+	event.Time.ValidUntilUTC = &validUntil
+	event.Properties = map[string]any{
+		"visual.color":       "0.26,0.40,0.50",
+		"visual.legendIndex": 1,
+		"visual.lod":         raw.LOD,
+		"display.title":      raw.Name,
+		"display.primary":    "river",
+	}
+	out := []events.Envelope{event}
+	if raw.LabelLon != 0 || raw.LabelLat != 0 {
+		label := events.NewEnvelope(record.OriginalID+":label", "geography", "geography.landmark", events.MessageAnnotation,
+			events.SourceRef{PluginID: record.SourcePluginID, InstanceID: record.SourceInstanceID, OriginalID: record.OriginalID + ":label"},
+			record.ObservedUTC)
+		label.EntityID = "geography:riverlabel:" + raw.RiverID
+		label.Geometry = events.Point(raw.LabelLon, raw.LabelLat, 0)
+		label.Time.ValidUntilUTC = &validUntil
+		label.Properties = map[string]any{
+			"visual.icon":        "signal",
+			"visual.markerScale": 0.4,
+			"visual.lod":         raw.LOD,
+			"display.title":      raw.Name,
+			"display.primary":    "river",
+		}
+		out = append(out, label)
+	}
+	return out, nil
+}
+
+func (d *Domain) country(record plugins.RawRecord) ([]events.Envelope, error) {
+	var raw struct {
+		PlaceID   string  `json:"placeId"`
+		Name      string  `json:"name"`
+		Latitude  float64 `json:"latitude"`
+		Longitude float64 `json:"longitude"`
+		LOD       int     `json:"lod"`
+	}
+	if err := json.Unmarshal(record.Payload, &raw); err != nil || raw.Name == "" {
+		return nil, fmt.Errorf("geography country requires a name")
+	}
+	id := raw.PlaceID
+	if id == "" {
+		id = raw.Name
+	}
+	event := events.NewEnvelope(record.OriginalID, "geography", "geography.country", events.MessageAnnotation,
+		events.SourceRef{PluginID: record.SourcePluginID, InstanceID: record.SourceInstanceID, OriginalID: record.OriginalID},
+		record.ObservedUTC)
+	event.EntityID = "geography:country:" + id
+	event.Geometry = events.Point(raw.Longitude, raw.Latitude, 0)
+	validUntil := cartographicUntil(record.ObservedUTC)
+	event.Time.ValidUntilUTC = &validUntil
+	event.Properties = map[string]any{
+		"visual.icon":        "station",
+		"visual.markerScale": 0.5,
+		"visual.lod":         raw.LOD,
+		"display.title":      raw.Name,
+		"display.primary":    "country",
+	}
+	return []events.Envelope{event}, nil
+}
+
+func (d *Domain) landmark(record plugins.RawRecord) ([]events.Envelope, error) {
+	var raw struct {
+		PlaceID    string  `json:"placeId"`
+		Name       string  `json:"name"`
+		Kind       string  `json:"kind"`
+		Latitude   float64 `json:"latitude"`
+		Longitude  float64 `json:"longitude"`
+		Elevation  int     `json:"elevation"`
+		LOD        int     `json:"lod"`
+	}
+	if err := json.Unmarshal(record.Payload, &raw); err != nil || raw.Name == "" {
+		return nil, fmt.Errorf("geography landmark requires a name")
+	}
+	id := raw.PlaceID
+	if id == "" {
+		id = raw.Name
+	}
+	event := events.NewEnvelope(record.OriginalID, "geography", "geography.landmark", events.MessageAnnotation,
+		events.SourceRef{PluginID: record.SourcePluginID, InstanceID: record.SourceInstanceID, OriginalID: record.OriginalID},
+		record.ObservedUTC)
+	event.EntityID = "geography:landmark:" + id
+	event.Geometry = events.Point(raw.Longitude, raw.Latitude, 0)
+	validUntil := cartographicUntil(record.ObservedUTC)
+	event.Time.ValidUntilUTC = &validUntil
+	primary := raw.Kind
+	if primary == "" {
+		primary = "landmark"
+	}
+	if raw.Elevation != 0 {
+		primary = fmt.Sprintf("%s  //  %d m", primary, raw.Elevation)
+	}
+	event.Properties = map[string]any{
+		"visual.icon":        "station",
+		"visual.markerScale": 0.45,
+		"visual.lod":         raw.LOD,
+		"display.title":      raw.Name,
+		"display.primary":    primary,
 	}
 	return []events.Envelope{event}, nil
 }

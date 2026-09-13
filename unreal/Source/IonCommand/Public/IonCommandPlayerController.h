@@ -35,6 +35,7 @@ private:
     void ToggleTrails();
     void ToggleAreas();
     void ToggleRoutes();
+    void ToggleCartography();
     void CycleModeFilter();
     void ToggleOverlayMenu();
     FString ActiveModeFilter;
