@@ -208,6 +208,10 @@ func (d *Domain) normalizeActivity(record plugins.RawRecord) ([]events.Envelope,
 		"display.title":      title,
 		"display.primary":    primary,
 		"display.secondary":  secondary,
+		// Country-file centroid, not a measured fix. The point layer
+		// will not stack this on top of a GPS/APRS marker with the
+		// same display title, and must not drag that marker here.
+		"visual.centroid": true,
 	}
 	if raw.Talkgroup > 0 {
 		event.Properties["talkgroup"] = raw.Talkgroup
@@ -221,8 +225,9 @@ func (d *Domain) normalizeActivity(record plugins.RawRecord) ([]events.Envelope,
 	if raw.TalkerAlias != "" {
 		event.Properties["talkerAlias"] = raw.TalkerAlias
 	}
-	measured := true
+	measured := false
 	event.Quality.Measured = &measured
+	event.Quality.Classification = "modelled"
 	return []events.Envelope{event}, nil
 }
 

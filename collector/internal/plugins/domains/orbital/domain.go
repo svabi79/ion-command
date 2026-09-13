@@ -179,6 +179,10 @@ func (d *Domain) normalizeFootprint(record plugins.RawRecord, raw rawPosition) (
 		"display.title":     raw.Name,
 		"display.primary":   "radio / visibility footprint",
 		"display.secondary": fmt.Sprintf("alt %.0f km", raw.AltKm),
+		// Hidden until the client pins this satellite. AREAS (grayline,
+		// NHC cones) stay independent of the pin set.
+		"visual.defaultHidden": true,
+		"visual.pinKey":        raw.SatID,
 	}
 	modeled := false
 	event.Quality.Measured = &modeled

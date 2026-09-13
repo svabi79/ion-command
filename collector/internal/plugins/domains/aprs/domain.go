@@ -46,6 +46,7 @@ type Domain struct {
 
 type lastPosition struct {
 	lon, lat float64
+	station  bool
 }
 
 func New() *Domain {
@@ -68,6 +69,10 @@ func (d *Domain) Normalize(_ context.Context, record plugins.RawRecord) ([]event
 	if !ok {
 		return nil, nil
 	}
+	packet, ok = unwrapThirdParty(packet)
+	if !ok {
+		return nil, nil
+	}
 	f, ok := decode(packet)
 	if !ok {
 		return nil, nil
@@ -78,7 +83,9 @@ func (d *Domain) Normalize(_ context.Context, record plugins.RawRecord) ([]event
 		// Suppress the extremely common case of the identical position
 		// being redelivered via a different digipeater/igate path; a real
 		// state change (including a kill report) always gets through.
-		if !d.positionChanged(entityID, f.lon, f.lat) {
+		// An object/item that only restates a callsign must not relocate a
+		// station that has already reported itself.
+		if !d.positionChanged(entityID, f.lon, f.lat, f.kind == "station") {
 			return nil, nil
 		}
 	} else {
@@ -127,8 +134,9 @@ func decode(packet tnc2Packet) (fix, bool) {
 		return asStation(f), true
 	default:
 		// Status ">", messages ":", telemetry "T", positionless/raw
-		// weather "_"/"#"/"$"/"*", third-party "}", queries "?" and
-		// anything else this domain does not plot.
+		// weather "_"/"#"/"$"/"*", leftover third-party "}", queries "?"
+		// and anything else this domain does not plot. Third-party hops
+		// are unwrapped in Normalize before decode is called.
 		return fix{}, false
 	}
 }
@@ -138,30 +146,17 @@ func asStation(f fix) fix {
 	return f
 }
 
-// entityIdentity derives the stable per-entity ID and display title. A
-// plain position report (or Mic-E, which carries the real callsign in the
-// AX.25 source field even though its destination field is repurposed for
-// position data) is identified by its transmitting callsign; an Object or
-// Item is identified by its own name, independent of whichever station is
-// currently relaying it - replacing or killing an Object is a normal part
-// of the protocol (APRS101 chapter 11).
-func entityIdentity(packet tnc2Packet, f fix) (entityID, title string) {
-	switch f.kind {
-	case "object":
-		return "aprs:object:" + f.name, f.name
-	case "item":
-		return "aprs:item:" + f.name, f.name
-	default:
-		call := strings.ToUpper(strings.TrimSpace(packet.source))
-		return "aprs:station:" + call, call
-	}
-}
-
-func (d *Domain) positionChanged(entityID string, lon, lat float64) bool {
+func (d *Domain) positionChanged(entityID string, lon, lat float64, station bool) bool {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	prev, seen := d.lastFix[entityID]
 	if seen && prev.lon == lon && prev.lat == lat {
+		if station && !prev.station {
+			d.lastFix[entityID] = lastPosition{lon: lon, lat: lat, station: true}
+		}
+		return false
+	}
+	if seen && prev.station && !station {
 		return false
 	}
 	if !seen && len(d.lastFix) >= d.capacity {
@@ -174,7 +169,7 @@ func (d *Domain) positionChanged(entityID string, lon, lat float64) bool {
 			}
 		}
 	}
-	d.lastFix[entityID] = lastPosition{lon: lon, lat: lat}
+	d.lastFix[entityID] = lastPosition{lon: lon, lat: lat, station: station}
 	return true
 }
 

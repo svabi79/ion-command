@@ -67,6 +67,12 @@ bool UGeoSearchSubsystem::Tick(float DeltaSeconds)
 
 void UGeoSearchSubsystem::IngestMessage(const FGeoMessageEnvelope& Message)
 {
+    // Pin-gated derived coverage (satellite footprints) is not a
+    // discoverable object. The operator finds the satellite, then pins.
+    if (Message.Properties.FindRef(TEXT("visual.defaultHidden")) == TEXT("true"))
+    {
+        return;
+    }
     const FString Key = !Message.EntityId.IsEmpty() ? Message.EntityId : Message.MessageId;
     if (Key.IsEmpty())
     {
@@ -258,11 +264,51 @@ TArray<FGeoSearchResult> UGeoSearchSubsystem::Search(const FString& Query, int32
         return A.Result->Key < B.Result->Key;
     });
 
-    const int32 Count = FMath::Min(MaxResults, Scored.Num());
+    // One visible station should be one row. A country-file centroid and a
+    // GPS fix that share a display title collapse here; the measured (or
+    // non-centroid) document wins so FOCUS lands on the real position.
+    TArray<FScoredResult> Collapsed;
+    Collapsed.Reserve(Scored.Num());
+    TSet<FString> SeenLabels;
+    for (const FScoredResult& Candidate : Scored)
+    {
+        const FString Label = Candidate.Result->DisplayLabel.ToUpper();
+        if (Label.IsEmpty())
+        {
+            Collapsed.Add(Candidate);
+            continue;
+        }
+        if (SeenLabels.Contains(Label))
+        {
+            continue;
+        }
+        const bool bCandidateCentroid = Candidate.Result->Envelope.Properties.FindRef(TEXT("visual.centroid")) == TEXT("true");
+        if (bCandidateCentroid)
+        {
+            bool bHasBetter = false;
+            for (const FScoredResult& Other : Scored)
+            {
+                if (Other.Result->DisplayLabel.ToUpper() != Label) continue;
+                if (Other.Result->Envelope.Properties.FindRef(TEXT("visual.centroid")) != TEXT("true"))
+                {
+                    bHasBetter = true;
+                    break;
+                }
+            }
+            if (bHasBetter)
+            {
+                continue;
+            }
+        }
+        SeenLabels.Add(Label);
+        Collapsed.Add(Candidate);
+    }
+
+    const int32 Count = FMath::Min(MaxResults, Collapsed.Num());
     Results.Reserve(Count);
     for (int32 Index = 0; Index < Count; ++Index)
     {
-        Results.Add(*Scored[Index].Result);
+        Results.Add(*Collapsed[Index].Result);
     }
     return Results;
 }

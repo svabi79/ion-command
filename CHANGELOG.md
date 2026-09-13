@@ -12,6 +12,13 @@ superseded configurations, is in
 
 ### Added
 
+- **Per-satellite footprint pin.** `orbital.footprint` Areas still ride the
+  30 s Celestrak cadence but carry `visual.defaultHidden` / `visual.pinKey`.
+  They stay off the globe until the operator hovers or selects that sat and
+  presses **P** (HUD: `P FOOTPRINT ON/OFF`; overlay lists pinned sats).
+  Toggling one sat does not dump every cone. Overlay **AREAS** / `Y` still
+  shows grayline and NHC cones with no sat pins. CodeFred[Agent].
+
 - **OSINT wave: live sources, sat footprints, grayline, Brandmeister.**
   Tracked `live.json` now enables AIS (empty `apiKey`, idle until
   `local.json` overlays a key), APRS-IS / RBN / DX cluster (placeholder
@@ -23,7 +30,7 @@ superseded configurations, is in
   Grayline is a restrained nautical-twilight Area (`solar.grayline`), no
   external API. Brandmeister uses the public Socket.IO last-heard feed
   and places pulses via the country file. Overlay **AREAS** / `Y` shows
-  cones, footprints, and grayline together. OpenAQ and HDX HAPI stay
+  cones and grayline; sat footprints are per-sat pins (`P`). OpenAQ and HDX HAPI stay
   disabled (need keys). NOTAMs skipped — no clean global hobby JSON/API.
   CodeFred[Agent].
 
@@ -38,6 +45,21 @@ superseded configurations, is in
   continents / oceans / megacities; closer: more cities and landmarks).
   Overlay **BORDERS** or `B`. Recook with `go run ./cmd/neextract`. Enabled
   in `live.json`. Wall visual check still remaining (no UE on this VM).
+
+### Fixed
+
+- **APRS one station, one marker.** A station beacon, an object/item named
+  with the same callsign, and a third-party `}` wrap used to become three
+  EntityIDs (`aprs:station:` / `:object:` / `:item:`), so search for
+  `HB9SVT-5` listed it three times at disagreeing positions. Callsign-like
+  objects/items now share `aprs:station:<CALL>`; third-party hops unwrap to
+  the inner source; a later object cannot relocate a station that already
+  reported itself. Brandmeister last-heard is marked `visual.centroid` so
+  it will not stack on or drag that GPS marker. Search skips hidden
+  footprints and collapses the same display title, preferring the
+  non-centroid fix. `aprs.station` / `aprs.object` join `retainLatest`.
+  Fixture: station + object + item + third-party for `HB9SVT-5`.
+  CodeFred[Agent].
 
 ### Changed
 

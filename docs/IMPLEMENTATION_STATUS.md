@@ -42,7 +42,10 @@ The component list is in [COMPONENTS.md](COMPONENTS.md) — not repeated here.
 - Batched area layer: closed Polygon/MultiPolygon rings projected onto the
   globe shell with a translucent fill and a brighter outline. One fill mesh
   and one outline batch for the whole layer; not one Actor per area.
-  Toggle: `Y` key or the overlay menu's AREAS row
+  Toggle: `Y` key or the overlay menu's AREAS row. Satellite
+  `orbital.footprint` Areas stay hidden until the operator pins that
+  satellite (`P` while hovered/selected); grayline and NHC cones do not
+  require those pins.
 - Batched path layer: open LineString/MultiLineString routes projected onto
   the globe shell (densified like Area edges). Used for TeleGeography
   submarine cables; color is planned vs in-service length band. Hover

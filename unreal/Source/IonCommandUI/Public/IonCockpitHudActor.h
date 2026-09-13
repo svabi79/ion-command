@@ -83,6 +83,9 @@ public:
     void SearchTextControl(int32 Control);
     void SearchMoveHighlight(int32 Delta);
 
+    // Hovered satellite coverage pin, if the cursor is on an orbital marker.
+    bool GetHoverCoverage(FString& OutPinKey, FString& OutLabel) const;
+
     // Watch/alert panel ("W"): saved watches and recent matches from
     // UGeoWatchSubsystem.
     void ToggleWatchPanel();
@@ -274,6 +277,8 @@ private:
     FString HoverSecondary;
     FString HoverTertiary;
     FString HoverDomain;
+    FString HoverPinKey;
+    FString HoverEntityKey;
     double LastHoverPickSeconds = 0.0;
     // Screen position the cached pick was taken at, so the tooltip anchors to
     // the marker and invalidates the moment the cursor leaves it, instead of

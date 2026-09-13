@@ -66,7 +66,7 @@ What each source actually does, in the order it appears in `live.json`:
 | `lightning.blitzortung` | `wss://ws*.blitzortung.org/` | streaming | `weather.lightning` | yes — [read this](#a-word-about-blitzortung) |
 | `earthquake.usgs` | earthquake.usgs.gov GeoJSON feed | 600 s | `geophysics.earthquake` | yes |
 | `wildfire.firms` | firms.modaps.eosdis.nasa.gov global per-satellite CSV snapshot (no key), or the MAP_KEY-scoped Area API when `mapKey` is set | 10800 s (floor 1800 s) | `wildfire.detection` | yes — one example area (US West) |
-| `orbital.celestrak` | celestrak.org `gp.php` TLEs, SGP4-propagated locally | TLE refresh 6 h, positions 10 s, footprints 30 s | `orbital.position`, `orbital.footprint` | yes |
+| `orbital.celestrak` | celestrak.org `gp.php` TLEs, SGP4-propagated locally | TLE refresh 6 h, positions 10 s, footprints 30 s (client-hidden until pinned) | `orbital.position`, `orbital.footprint` | yes |
 | `aviation.adsb` | adsb.lol `/v2/point/<lat>/<lon>/<nm>`; route lookups via api.adsbdb.com (cached, global 2 s gate, `routeLookup: false` disables) | 60 s, global 4 s request gate | `aviation.aircraft` | yes (one example circle) |
 | `aviation.opensky` | opensky-network.org `/api/states/all` (OAuth2 bearer or anonymous) | 1800 s anonymous; 60 s typical with OAuth | `aviation.aircraft` | yes |
 | `aviation.gpsjam` | gpsjam.org `/data/manifest.csv` + `{date}-h3_4.csv` | 86400 s (floor 3600 s) | `aviation.interference` | yes |

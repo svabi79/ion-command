@@ -65,6 +65,10 @@ struct FRenderedGeoPoint
     // tint, enlarged scale, and alarm title survive later non-emergency
     // sightings from another source until the marker expires.
     bool bEmergency = false;
+    // Country-file / region centroid rather than a measured fix. A later
+    // precise sighting with the same display title reuses this slot; a
+    // later centroid must not drag a measured marker.
+    bool bCentroid = false;
     // Stable render slot: the index into MarkerInstances currently showing
     // this marker, or INDEX_NONE while it is tracked but not rendered (e.g.
     // hidden by a domain/altitude/ground filter or expired but not yet
@@ -220,6 +224,9 @@ private:
     // EntityToPoint/HiddenDomains below.
     TArray<FRenderedGeoPoint> ActivePoints;
     TMap<FString, int32> EntityToPoint;
+    // Latest display title (or callsign) → entity key, so a modelled
+    // centroid and a measured fix for the same label share one marker.
+    TMap<FString, FString> TitleToEntity;
     // Render-slot reverse map; see the stable-render-slots comment above.
     TArray<int32> SlotToPointIndex;
     TSet<FString> HiddenDomains;

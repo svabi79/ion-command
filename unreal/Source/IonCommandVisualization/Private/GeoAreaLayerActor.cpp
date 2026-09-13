@@ -6,6 +6,7 @@
 #include "GeoDataSubsystem.h"
 #include "GeoLayerSubsystem.h"
 #include "GeoMathLibrary.h"
+#include "GeoCoveragePinSubsystem.h"
 #include "GeoSelectionSubsystem.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "ProceduralMeshComponent.h"
@@ -202,6 +203,11 @@ void AGeoAreaLayerActor::BeginPlay()
             LayerSubsystem->OnLayerVisibilityChanged().AddUObject(this, &AGeoAreaLayerActor::OnLayerVisibilityChanged);
             SetActorHiddenInGame(!LayerSubsystem->IsLayerVisible(Manifest.LayerId));
         }
+        if (UGeoCoveragePinSubsystem* Pins = GameInstance->GetSubsystem<UGeoCoveragePinSubsystem>())
+        {
+            Pins->OnPinsChanged.AddDynamic(this, &AGeoAreaLayerActor::OnCoveragePinsChanged);
+            OnCoveragePinsChanged();
+        }
     }
 }
 
@@ -217,6 +223,10 @@ void AGeoAreaLayerActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
         if (UGeoLayerSubsystem* LayerSubsystem = GameInstance->GetSubsystem<UGeoLayerSubsystem>())
         {
             LayerSubsystem->OnLayerVisibilityChanged().RemoveAll(this);
+        }
+        if (UGeoCoveragePinSubsystem* Pins = GameInstance->GetSubsystem<UGeoCoveragePinSubsystem>())
+        {
+            Pins->OnPinsChanged.RemoveAll(this);
         }
     }
     Super::EndPlay(EndPlayReason);
@@ -251,6 +261,14 @@ void AGeoAreaLayerActor::Submit(const FGeoMessageEnvelope& Message)
     if (!Supports(Message))
     {
         return;
+    }
+    if (IsCoverageGated(Message))
+    {
+        HoldGatedArea(Message);
+        if (!EnabledCoveragePins.Contains(CoveragePinKey(Message)))
+        {
+            return;
+        }
     }
     const FString Key = ResolveEntityKey(Message);
     const double NowSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
@@ -287,6 +305,7 @@ void AGeoAreaLayerActor::Reset()
 {
     ActiveAreas.Reset();
     EntityToArea.Reset();
+    HeldPinAreas.Reset();
     HighlightedMessageId.Reset();
     bNeedsRebuild = false;
     if (FillMesh)
@@ -306,6 +325,107 @@ void AGeoAreaLayerActor::Reset()
 void AGeoAreaLayerActor::OnMessageAccepted(const FGeoMessageEnvelope& Message)
 {
     Submit(Message);
+}
+
+bool AGeoAreaLayerActor::IsCoverageGated(const FGeoMessageEnvelope& Message)
+{
+    return Message.Properties.FindRef(TEXT("visual.defaultHidden")) == TEXT("true")
+        && !CoveragePinKey(Message).IsEmpty();
+}
+
+FString AGeoAreaLayerActor::CoveragePinKey(const FGeoMessageEnvelope& Message)
+{
+    return Message.Properties.FindRef(TEXT("visual.pinKey"));
+}
+
+void AGeoAreaLayerActor::HoldGatedArea(const FGeoMessageEnvelope& Message)
+{
+    const FString Key = CoveragePinKey(Message);
+    if (Key.IsEmpty())
+    {
+        return;
+    }
+    HeldPinAreas.Add(Key, Message);
+    if (HeldPinAreas.Num() <= 256)
+    {
+        return;
+    }
+    TArray<FString> Extra;
+    for (const TPair<FString, FGeoMessageEnvelope>& Pair : HeldPinAreas)
+    {
+        if (!EnabledCoveragePins.Contains(Pair.Key))
+        {
+            Extra.Add(Pair.Key);
+        }
+    }
+    Extra.Sort();
+    const int32 Drop = FMath::Max(1, Extra.Num() / 8);
+    for (int32 Index = 0; Index < Drop && Index < Extra.Num(); ++Index)
+    {
+        HeldPinAreas.Remove(Extra[Index]);
+    }
+}
+
+void AGeoAreaLayerActor::SetCoveragePin(const FString& PinKey, bool bEnabled)
+{
+    if (PinKey.IsEmpty())
+    {
+        return;
+    }
+    if (bEnabled)
+    {
+        EnabledCoveragePins.Add(PinKey);
+        if (const FGeoMessageEnvelope* Held = HeldPinAreas.Find(PinKey))
+        {
+            Submit(*Held);
+        }
+        return;
+    }
+    EnabledCoveragePins.Remove(PinKey);
+    DropPinnedAreas(PinKey);
+}
+
+void AGeoAreaLayerActor::DropPinnedAreas(const FString& PinKey)
+{
+    int32 Index = 0;
+    while (Index < ActiveAreas.Num())
+    {
+        if (CoveragePinKey(ActiveAreas[Index].Message) == PinKey)
+        {
+            RemoveAreaAt(Index);
+            continue;
+        }
+        ++Index;
+    }
+}
+
+void AGeoAreaLayerActor::OnCoveragePinsChanged()
+{
+    const UGameInstance* GameInstance = GetGameInstance();
+    const UGeoCoveragePinSubsystem* Pins = GameInstance ? GameInstance->GetSubsystem<UGeoCoveragePinSubsystem>() : nullptr;
+    TSet<FString> Next;
+    if (Pins)
+    {
+        for (const FGeoCoveragePin& Pin : Pins->GetPins())
+        {
+            Next.Add(Pin.Key);
+        }
+    }
+    TArray<FString> Previous = EnabledCoveragePins.Array();
+    for (const FString& Key : Previous)
+    {
+        if (!Next.Contains(Key))
+        {
+            SetCoveragePin(Key, false);
+        }
+    }
+    for (const FString& Key : Next)
+    {
+        if (!EnabledCoveragePins.Contains(Key))
+        {
+            SetCoveragePin(Key, true);
+        }
+    }
 }
 
 FString AGeoAreaLayerActor::ResolveEntityKey(const FGeoMessageEnvelope& Message) const

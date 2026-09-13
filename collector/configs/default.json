@@ -37,7 +37,9 @@
       "humanitarian.displacement",
       "orbital.footprint",
       "solar.grayline",
-      "radio.activity"
+      "radio.activity",
+      "aprs.station",
+      "aprs.object"
     ]
   },
   "recording": {

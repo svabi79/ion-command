@@ -49,7 +49,7 @@ remaining `Field` geometry work. `Area` is now rendered.
 
 | Layer | Feed | Geometry needed |
 | --- | --- | --- |
-| **Satellite footprints** — who can hear which satellite now | Derived from SGP4 | `Area` — **shipped** as `orbital.footprint` (visibility circle from altitude) |
+| **Satellite footprints** — who can hear which satellite now | Derived from SGP4 | `Area` — **shipped** as `orbital.footprint` (visibility circle from altitude); default hidden, pinned per sat with `P` |
 | **Grayline as a real surface** rather than an implied line | Derived from solar geometry | `Area` — **shipped** as `solar.grayline` (terminator → nautical twilight) |
 | **Precipitation radar** | RainViewer or national services | `Field` / raster — no clean hobby-globe API/terms found; left deferred |
 | **Ionospheric maps** (foF2, MUF, TEC) | Already fetched from KC2G as soundings | `Field` / raster |
