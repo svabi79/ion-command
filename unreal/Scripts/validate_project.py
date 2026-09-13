@@ -21,6 +21,8 @@ REQUIRED_ASSETS = [
     "/Game/ION/Maps/L_CommandDeck",
     "/Game/ION/Materials/MI_Atmosphere",
     "/Game/ION/Materials/MI_Ionosphere",
+    "/Game/ION/Materials/M_AreaFill",
+    "/Game/ION/Materials/MI_AreaFill",
     "/Game/ION/Materials/M_EarthSurface",
     "/Game/ION/Materials/M_Starfield",
     "/Game/ION/Materials/M_HolographicSignal",

@@ -169,7 +169,11 @@ def build_area_fill_master() -> unreal.Material:
     material.set_editor_property("blend_mode", unreal.BlendMode.BLEND_TRANSLUCENT)
     material.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
     material.set_editor_property("two_sided", True)
-    material.set_editor_property("used_with_procedural_meshes", True)
+    # ProceduralMeshComponent consumes the default static-mesh permutation.
+    # UE 5.8 Material has no used_with_procedural_meshes (that name raises and
+    # aborted M_AreaFill / MI_AreaFill on Jan's bootstrap). Same used_with_*
+    # style as the ISM and Nanite masters, with the flag PMC actually needs.
+    material.set_editor_property("used_with_static_mesh", True)
 
     color = vector(material, "Color", unreal.LinearColor(1.0, 0.55, 0.12, 1.0), -700, -120)
     intensity = scalar(material, "Intensity", 1.4, -700, 40)
