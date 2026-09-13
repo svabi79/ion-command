@@ -147,19 +147,21 @@ func routeLengthKm(segments [][][]float64) float64 {
 	return total
 }
 
+// Globe-side linear RGB. Must match AGeoPathLayerActor LegendColors.
+// Same five classes; muted so additive MI_Track reads as map lines.
 func cableLegend(planned bool, lengthKm float64) (class, color string) {
 	if planned {
-		return "planned", "1.00,0.72,0.18"
+		return "planned", "0.78,0.58,0.26"
 	}
 	switch {
 	case lengthKm < 500:
-		return "in service · short", "0.25,0.70,0.62"
+		return "in service · short", "0.30,0.56,0.50"
 	case lengthKm < 3000:
-		return "in service · regional", "0.20,0.85,1.00"
+		return "in service · regional", "0.34,0.60,0.70"
 	case lengthKm < 12000:
-		return "in service · ocean", "0.22,0.45,0.95"
+		return "in service · ocean", "0.30,0.42,0.66"
 	default:
-		return "in service · trunk", "0.92,0.28,0.72"
+		return "in service · trunk", "0.66,0.34,0.52"
 	}
 }
 

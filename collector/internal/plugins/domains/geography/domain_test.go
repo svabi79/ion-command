@@ -75,8 +75,33 @@ func TestRegionAndCable(t *testing.T) {
 	if err != nil || messages[0].Geometry.Type != "LineString" {
 		t.Fatalf("%v %#v", err, messages)
 	}
-	if messages[0].Properties["visual.legendIndex"] != 0 || messages[0].Properties["visual.color"] != "1.00,0.72,0.18" {
+	if messages[0].Properties["visual.legendIndex"] != 0 || messages[0].Properties["visual.color"] != "0.78,0.58,0.26" {
 		t.Fatalf("planned class expected, got %#v", messages[0].Properties)
+	}
+}
+
+func TestCableLegendColors(t *testing.T) {
+	cases := []struct {
+		planned  bool
+		lengthKm float64
+		class    string
+		color    string
+		index    int
+	}{
+		{true, 100, "planned", "0.78,0.58,0.26", 0},
+		{false, 100, "in service · short", "0.30,0.56,0.50", 1},
+		{false, 1000, "in service · regional", "0.34,0.60,0.70", 2},
+		{false, 5000, "in service · ocean", "0.30,0.42,0.66", 3},
+		{false, 15000, "in service · trunk", "0.66,0.34,0.52", 4},
+	}
+	for _, tc := range cases {
+		class, color := cableLegend(tc.planned, tc.lengthKm)
+		if class != tc.class || color != tc.color {
+			t.Fatalf("legend(%v, %.0f) = %q %q, want %q %q", tc.planned, tc.lengthKm, class, color, tc.class, tc.color)
+		}
+		if got := cableLegendIndex(tc.planned, tc.lengthKm); got != tc.index {
+			t.Fatalf("index(%v, %.0f) = %d, want %d", tc.planned, tc.lengthKm, got, tc.index)
+		}
 	}
 }
 

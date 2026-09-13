@@ -15,12 +15,20 @@ constexpr double PathHeight = 4.0;
 constexpr double MaxEdgeDegrees = 2.8;
 constexpr int32 LegendClassCount = 5;
 
+// M_HolographicSignal / MI_Track is unlit additive: emissive = Color * Intensity.
+// 3.6 * the old saturated legend set bloomed into neon tubes on the dark globe.
+// ~0.4 keeps the five class hues readable as matte map lines.
+constexpr float PathIntensity = 0.4f;
+
+// Keep in lockstep with collector geography cableLegend RGB strings.
+// Same five classes (planned / short / regional / ocean / trunk); lower
+// saturation and value so they do not read as light tubes.
 const FLinearColor LegendColors[LegendClassCount] = {
-    FLinearColor(1.00f, 0.72f, 0.18f),
-    FLinearColor(0.25f, 0.70f, 0.62f),
-    FLinearColor(0.20f, 0.85f, 1.00f),
-    FLinearColor(0.22f, 0.45f, 0.95f),
-    FLinearColor(0.92f, 0.28f, 0.72f),
+    FLinearColor(0.78f, 0.58f, 0.26f),
+    FLinearColor(0.30f, 0.56f, 0.50f),
+    FLinearColor(0.34f, 0.60f, 0.70f),
+    FLinearColor(0.30f, 0.42f, 0.66f),
+    FLinearColor(0.66f, 0.34f, 0.52f),
 };
 
 FLinearColor ParseColorProperty(const FString& Text, const FLinearColor& Fallback)
@@ -63,9 +71,9 @@ AGeoPathLayerActor::AGeoPathLayerActor()
     SelectionMesh->SetStaticMesh(SegmentMesh.Object);
     SelectionMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
     SelectionMesh->SetCastShadow(false);
-    if (UMaterialInterface* SelectionMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/ION/Materials/MI_Signal_Selected.MI_Signal_Selected")))
+    if (UMaterialInterface* SelectionParent = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/ION/Materials/MI_Signal_Selected.MI_Signal_Selected")))
     {
-        SelectionMesh->SetMaterial(0, SelectionMaterial);
+        SelectionMesh->SetMaterial(0, SelectionParent);
     }
 }
 
@@ -125,13 +133,14 @@ void AGeoPathLayerActor::BeginPlay()
         if (Material)
         {
             Material->SetVectorParameterValue(TEXT("Color"), LegendColors[Index]);
-            Material->SetScalarParameterValue(TEXT("Intensity"), 3.6f);
+            Material->SetScalarParameterValue(TEXT("Intensity"), PathIntensity);
         }
         ClassMaterials.Add(Material);
     }
-    if (UMaterialInstanceDynamic* Selection = SelectionMesh->CreateAndSetMaterialInstanceDynamic(0))
+    SelectionMaterial = SelectionMesh->CreateAndSetMaterialInstanceDynamic(0);
+    if (SelectionMaterial)
     {
-        Selection->SetVectorParameterValue(TEXT("Color"), FLinearColor(0.82f, 1.0f, 1.0f));
+        SelectionMaterial->SetVectorParameterValue(TEXT("Color"), FLinearColor(0.82f, 1.0f, 1.0f));
     }
     if (UGameInstance* GameInstance = GetGameInstance())
     {
@@ -172,9 +181,40 @@ void AGeoPathLayerActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
     Super::EndPlay(EndPlayReason);
 }
 
+void AGeoPathLayerActor::UpdateZoomResponse()
+{
+    const APlayerController* Player = GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr;
+    if (!Player || !Player->PlayerCameraManager)
+    {
+        return;
+    }
+    // Same orbit normalisation as AGeoArcLayerActor: default view is 1.0,
+    // so far-out cables keep PathThickness and only shrink on the way in.
+    const double Altitude = FMath::Max(0.0, Player->PlayerCameraManager->GetCameraLocation().Length() - 1000.0);
+    const double Orbit = FMath::Clamp(Altitude / 2400.0, 0.0, 1.0);
+    const float ZoomThickness = static_cast<float>(FMath::Max(0.012, Orbit));
+    if (FMath::IsNearlyEqual(ZoomThickness, LastZoomThickness, 0.002f))
+    {
+        return;
+    }
+    LastZoomThickness = ZoomThickness;
+    for (UMaterialInstanceDynamic* Material : ClassMaterials)
+    {
+        if (Material)
+        {
+            Material->SetScalarParameterValue(TEXT("ZoomThickness"), ZoomThickness);
+        }
+    }
+    if (SelectionMaterial)
+    {
+        SelectionMaterial->SetScalarParameterValue(TEXT("ZoomThickness"), ZoomThickness);
+    }
+}
+
 void AGeoPathLayerActor::Tick(float DeltaSeconds)
 {
     Super::Tick(DeltaSeconds);
+    UpdateZoomResponse();
     RefreshSelectionHighlight();
     const double Now = FPlatformTime::Seconds();
     if (Now - LastExpiryCheck < 3.0 && !bNeedsRebuild)
