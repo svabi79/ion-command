@@ -161,6 +161,40 @@ bool FIonSearchExpiryTest::RunTest(const FString& Parameters)
 
 // Reset (replay start / return-to-live) clears the index so live state can
 // never leak into a paused or replayed view.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FIonSearchSkipsDefaultHiddenTest, "IONCOMMAND.Data.Search.SkipsDefaultHidden", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FIonSearchSkipsDefaultHiddenTest::RunTest(const FString& Parameters)
+{
+    UGameInstance* GameInstance = NewObject<UGameInstance>();
+    UGeoSearchSubsystem* Search = NewObject<UGeoSearchSubsystem>(GameInstance);
+    const FDateTime Now(2026, 9, 13, 12, 0, 0);
+    Search->IngestMessage(MakeEnvelope(TEXT("pos"), TEXT("orbital:sat:25544"), TEXT("orbital"), TEXT("orbital.position"), TEXT("ISS"), TEXT("alt 420 km"), Now));
+    FGeoMessageEnvelope Footprint = MakeEnvelope(TEXT("fp"), TEXT("orbital:footprint:25544"), TEXT("orbital"), TEXT("orbital.footprint"), TEXT("ISS"), TEXT("radio / visibility footprint"), Now);
+    Footprint.Properties.Add(TEXT("visual.defaultHidden"), TEXT("true"));
+    Search->IngestMessage(Footprint);
+    TestEqual(TEXT("hidden footprint is not a search document"), Search->GetDocumentCount(), 1);
+    TestEqual(TEXT("ISS search is the position only"), Search->Search(TEXT("ISS")).Num(), 1);
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FIonSearchCollapsesSameTitlePreferringFixTest, "IONCOMMAND.Data.Search.CollapsesCentroidTitle", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FIonSearchCollapsesSameTitlePreferringFixTest::RunTest(const FString& Parameters)
+{
+    UGameInstance* GameInstance = NewObject<UGameInstance>();
+    UGeoSearchSubsystem* Search = NewObject<UGeoSearchSubsystem>(GameInstance);
+    const FDateTime Now(2026, 9, 13, 12, 0, 0);
+    Search->IngestMessage(MakeEnvelope(TEXT("aprs-1"), TEXT("aprs:station:HB9SVT-5"), TEXT("aprs"), TEXT("aprs.station"), TEXT("HB9SVT-5"), TEXT("Car"), Now));
+    FGeoMessageEnvelope Activity = MakeEnvelope(TEXT("bm-1"), TEXT("radio:activity:HB9SVT-5"), TEXT("hamradio"), TEXT("radio.activity"), TEXT("HB9SVT-5"), TEXT("TG 228"), Now + FTimespan::FromSeconds(5));
+    Activity.Properties.Add(TEXT("visual.centroid"), TEXT("true"));
+    Search->IngestMessage(Activity);
+    const TArray<FGeoSearchResult> Hits = Search->Search(TEXT("HB9SVT-5"));
+    TestEqual(TEXT("same title collapses to one result"), Hits.Num(), 1);
+    if (Hits.Num() == 1)
+    {
+        TestEqual(TEXT("FOCUS keeps the measured APRS station"), Hits[0].Key, FString(TEXT("aprs:station:HB9SVT-5")));
+    }
+    return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FIonSearchResetTest, "IONCOMMAND.Data.Search.Reset", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FIonSearchResetTest::RunTest(const FString& Parameters)
 {

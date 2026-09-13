@@ -7,6 +7,7 @@
 #include "Engine/HitResult.h"
 #include "EngineUtils.h"
 #include "IonGlobeActor.h"
+#include "GeoCoveragePinSubsystem.h"
 #include "GeoDataSubsystem.h"
 #include "GeoMathLibrary.h"
 #include "GeoAreaLayerActor.h"
@@ -919,6 +920,16 @@ void AIonCockpitHudActor::DrawOverlayMenu(float Scale, float Alpha)
         MenuRows.Add({TEXT("AREAS"), TEXT("areas"), FString(), !It->IsHidden()});
         break;
     }
+    if (const UGameInstance* GameInstance = GetGameInstance())
+    {
+        if (const UGeoCoveragePinSubsystem* Pins = GameInstance->GetSubsystem<UGeoCoveragePinSubsystem>())
+        {
+            for (const FGeoCoveragePin& Pin : Pins->GetPins())
+            {
+                MenuRows.Add({Pin.Label.ToUpper() + TEXT(" FOOTPRINT"), TEXT("footprint"), Pin.Key, true});
+            }
+        }
+    }
     FString PathLegend;
     for (TActorIterator<AGeoPathLayerActor> It(GetWorld()); It; ++It)
     {
@@ -1037,6 +1048,16 @@ void AIonCockpitHudActor::ApplyMenuToggle(const FMenuRow& Row)
     else if (Row.Kind == TEXT("areas"))
     {
         for (TActorIterator<AGeoAreaLayerActor> It(GetWorld()); It; ++It) It->SetActorHiddenInGame(!It->IsHidden());
+    }
+    else if (Row.Kind == TEXT("footprint"))
+    {
+        if (UGameInstance* GameInstance = GetGameInstance())
+        {
+            if (UGeoCoveragePinSubsystem* Pins = GameInstance->GetSubsystem<UGeoCoveragePinSubsystem>())
+            {
+                Pins->Unpin(Row.Domain);
+            }
+        }
     }
     else if (Row.Kind == TEXT("cables"))
     {
@@ -1365,7 +1386,7 @@ void AIonCockpitHudActor::DrawHoverTooltip(float Scale, float Alpha)
         MouseY = Canvas->SizeY * 0.5f;
         bHaveMouse = true;
     }
-    if (!bHaveMouse) { bHoverValid = false; return; }
+    if (!bHaveMouse) { bHoverValid = false; HoverPinKey.Reset(); return; }
 
     const double NowSeconds = FPlatformTime::Seconds();
     // Invalidate immediately once the cursor leaves the picked marker instead
@@ -1373,11 +1394,15 @@ void AIonCockpitHudActor::DrawHoverTooltip(float Scale, float Alpha)
     if (bHoverValid && FVector2D(MouseX - LastHoverPickX, MouseY - LastHoverPickY).SizeSquared() > FMath::Square(24.0f * Scale))
     {
         bHoverValid = false;
+        HoverPinKey.Reset();
+        HoverEntityKey.Reset();
     }
     if (NowSeconds - LastHoverPickSeconds > 0.15)
     {
         LastHoverPickSeconds = NowSeconds;
         bHoverValid = false;
+        HoverPinKey.Reset();
+        HoverEntityKey.Reset();
         FVector RayOrigin, RayDirection;
         if (Player->DeprojectScreenPositionToWorld(MouseX, MouseY, RayOrigin, RayDirection))
         {
@@ -1390,6 +1415,22 @@ void AIonCockpitHudActor::DrawHoverTooltip(float Scale, float Alpha)
                     HoverSecondary = Point->Secondary;
                     HoverTertiary = Point->Tertiary;
                     HoverDomain = Point->Domain.ToUpper();
+                    HoverEntityKey = Point->EntityKey;
+                    HoverPinKey.Reset();
+                    if (const UGameInstance* GameInstance = GetGameInstance())
+                    {
+                        if (const UGeoSearchSubsystem* Search = GameInstance->GetSubsystem<UGeoSearchSubsystem>())
+                        {
+                            if (const FGeoSearchResult* Found = Search->FindByKey(Point->EntityKey))
+                            {
+                                HoverPinKey = Found->Envelope.Properties.FindRef(TEXT("noradId"));
+                            }
+                        }
+                    }
+                    if (HoverPinKey.IsEmpty() && Point->EntityKey.StartsWith(TEXT("orbital:sat:")))
+                    {
+                        HoverPinKey = Point->EntityKey.RightChop(12);
+                    }
                     LastHoverPickX = MouseX;
                     LastHoverPickY = MouseY;
                     bHoverValid = true;
@@ -1438,6 +1479,18 @@ void AIonCockpitHudActor::DrawHoverTooltip(float Scale, float Alpha)
     if (!HoverSecondary.IsEmpty()) Lines.Add(HoverSecondary);
     if (!HoverTertiary.IsEmpty()) Lines.Add(HoverTertiary);
     if (!HoverDomain.IsEmpty()) Lines.Add(HoverDomain);
+    if (!HoverPinKey.IsEmpty())
+    {
+        bool bPinned = false;
+        if (const UGameInstance* GameInstance = GetGameInstance())
+        {
+            if (const UGeoCoveragePinSubsystem* Pins = GameInstance->GetSubsystem<UGeoCoveragePinSubsystem>())
+            {
+                bPinned = Pins->IsPinned(HoverPinKey);
+            }
+        }
+        Lines.Add(bPinned ? TEXT("P FOOTPRINT  ON") : TEXT("P FOOTPRINT  OFF"));
+    }
     if (Lines.IsEmpty()) return;
     const UFont* Font = GEngine->GetMediumFont();
     float Widest = 0.0f;
@@ -1466,6 +1519,17 @@ void AIonCockpitHudActor::DrawHoverTooltip(float Scale, float Alpha)
         const FLinearColor Color = Index == 0 ? CockpitWhite : (Index == Lines.Num() - 1 ? CockpitDim : CockpitCyan);
         DrawTextAt(Lines[Index], BoxX + 12.0f * Scale, BoxY + 7.0f * Scale + Index * LineHeight, WithAlpha(Color, Alpha), 1.15f * Scale);
     }
+}
+
+bool AIonCockpitHudActor::GetHoverCoverage(FString& OutPinKey, FString& OutLabel) const
+{
+    if (!bHoverValid || HoverPinKey.IsEmpty())
+    {
+        return false;
+    }
+    OutPinKey = HoverPinKey;
+    OutLabel = HoverTitle;
+    return true;
 }
 
 void AIonCockpitHudActor::DrawModeHint(float Scale, float Alpha)
@@ -1906,6 +1970,17 @@ void AIonCockpitHudActor::DrawSelectionReticle(float Scale, float Alpha)
     FString Label = Selected.Properties.FindRef(TEXT("display.title"));
     if (Label.IsEmpty()) Label = !Selected.EntityId.IsEmpty() ? Selected.EntityId : Selected.SemanticType;
     DrawTextAt(Label, Screen.X, Screen.Y - Radius - 18.0f * Scale, WithAlpha(CockpitAmber, Alpha), 1.05f * Scale, true);
+    const FString PinKey = Selected.Properties.FindRef(TEXT("noradId"));
+    if (!PinKey.IsEmpty())
+    {
+        bool bPinned = false;
+        if (const UGeoCoveragePinSubsystem* Pins = GameInstance->GetSubsystem<UGeoCoveragePinSubsystem>())
+        {
+            bPinned = Pins->IsPinned(PinKey);
+        }
+        DrawTextAt(bPinned ? TEXT("P FOOTPRINT  ON") : TEXT("P FOOTPRINT  OFF"),
+            Screen.X, Screen.Y + Radius + 4.0f * Scale, WithAlpha(CockpitCyan, Alpha), 0.9f * Scale, true);
+    }
 }
 
 void AIonCockpitHudActor::DrawAlertIndicator(float Scale, float Alpha)

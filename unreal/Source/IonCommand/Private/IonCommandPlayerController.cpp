@@ -4,6 +4,7 @@
 #include "EngineUtils.h"
 #include "GeoArcLayerActor.h"
 #include "GeoAreaLayerActor.h"
+#include "GeoCoveragePinSubsystem.h"
 #include "GeoPathLayerActor.h"
 #include "GeoDataSubsystem.h"
 #include "GeoPointLayerActor.h"
@@ -99,6 +100,7 @@ void AIonCommandPlayerController::SetupInputComponent()
     InputComponent->BindAction(TEXT("TogglePaths"), IE_Pressed, this, &AIonCommandPlayerController::TogglePaths);
     InputComponent->BindAction(TEXT("ToggleTrails"), IE_Pressed, this, &AIonCommandPlayerController::ToggleTrails);
     InputComponent->BindAction(TEXT("ToggleAreas"), IE_Pressed, this, &AIonCommandPlayerController::ToggleAreas);
+    InputComponent->BindAction(TEXT("ToggleCoveragePin"), IE_Pressed, this, &AIonCommandPlayerController::ToggleCoveragePin);
     InputComponent->BindAction(TEXT("ToggleRoutes"), IE_Pressed, this, &AIonCommandPlayerController::ToggleRoutes);
     InputComponent->BindAction(TEXT("ToggleCartography"), IE_Pressed, this, &AIonCommandPlayerController::ToggleCartography);
     InputComponent->BindAction(TEXT("CycleModeFilter"), IE_Pressed, this, &AIonCommandPlayerController::CycleModeFilter);
@@ -218,6 +220,43 @@ void AIonCommandPlayerController::ToggleAreas()
     {
         It->SetActorHiddenInGame(!It->IsHidden());
     }
+}
+
+void AIonCommandPlayerController::ToggleCoveragePin()
+{
+    if (IsTypingText()) return;
+    UGameInstance* GameInstance = GetGameInstance();
+    UGeoCoveragePinSubsystem* Pins = GameInstance ? GameInstance->GetSubsystem<UGeoCoveragePinSubsystem>() : nullptr;
+    if (!Pins) return;
+
+    FString PinKey;
+    FString Label;
+    if (const UGeoSelectionSubsystem* Selection = GameInstance->GetSubsystem<UGeoSelectionSubsystem>())
+    {
+        if (Selection->HasSelection())
+        {
+            const FGeoMessageEnvelope Selected = Selection->GetSelection();
+            PinKey = Selected.Properties.FindRef(TEXT("noradId"));
+            Label = Selected.Properties.FindRef(TEXT("display.title"));
+            if (PinKey.IsEmpty() && Selected.EntityId.StartsWith(TEXT("orbital:sat:")))
+            {
+                PinKey = Selected.EntityId.RightChop(12);
+            }
+            if (PinKey.IsEmpty() && Selected.EntityId.StartsWith(TEXT("orbital:footprint:")))
+            {
+                PinKey = Selected.EntityId.RightChop(18);
+            }
+        }
+    }
+    if (PinKey.IsEmpty())
+    {
+        if (AIonCockpitHudActor* Cockpit = Cast<AIonCockpitHudActor>(GetHUD()))
+        {
+            Cockpit->GetHoverCoverage(PinKey, Label);
+        }
+    }
+    if (PinKey.IsEmpty()) return;
+    Pins->TogglePin(PinKey, Label);
 }
 
 void AIonCommandPlayerController::ToggleRoutes()

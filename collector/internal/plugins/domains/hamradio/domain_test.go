@@ -148,6 +148,12 @@ func TestLastHeardBecomesActivityPoint(t *testing.T) {
 	if msg.Properties["display.primary"] != "TG 91  //  World-wide" {
 		t.Fatalf("primary %v", msg.Properties["display.primary"])
 	}
+	if msg.Properties["visual.centroid"] != true {
+		t.Fatalf("last-heard is a country centroid, centroid=%v", msg.Properties["visual.centroid"])
+	}
+	if msg.Quality.Measured == nil || *msg.Quality.Measured {
+		t.Fatal("last-heard must not claim a measured position")
+	}
 	if err := msg.Validate(); err != nil {
 		t.Fatalf("invalid activity: %v", err)
 	}

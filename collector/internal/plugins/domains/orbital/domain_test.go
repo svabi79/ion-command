@@ -35,6 +35,12 @@ func TestPositionEmitsFootprintOnCadence(t *testing.T) {
 	if fp.Properties["visual.opacity"] != 0.10 {
 		t.Fatalf("footprint should stay restrained, opacity %v", fp.Properties["visual.opacity"])
 	}
+	if fp.Properties["visual.defaultHidden"] != true {
+		t.Fatalf("footprints must default hidden, defaultHidden=%v", fp.Properties["visual.defaultHidden"])
+	}
+	if fp.Properties["visual.pinKey"] != "25544" {
+		t.Fatalf("pinKey %v", fp.Properties["visual.pinKey"])
+	}
 	if err := fp.Validate(); err != nil {
 		t.Fatalf("invalid footprint: %v", err)
 	}

@@ -236,7 +236,31 @@ void AGeoPointLayerActor::Submit(const FGeoMessageEnvelope& Message)
     // Markers are stable per entity: a new sighting refreshes the existing
     // marker instead of stacking another instance on top of it. Messages
     // without an entity id fall back to their message id (one-shot events).
-    const FString& EntityKey = !Message.EntityId.IsEmpty() ? Message.EntityId : Message.MessageId;
+    FString EntityKey = !Message.EntityId.IsEmpty() ? Message.EntityId : Message.MessageId;
+    FString TitleKey = Message.Properties.FindRef(TEXT("display.title"));
+    if (TitleKey.IsEmpty()) TitleKey = Message.Properties.FindRef(TEXT("callsign"));
+    TitleKey = TitleKey.ToUpper();
+    const bool bCentroid = Message.Properties.FindRef(TEXT("visual.centroid")) == TEXT("true");
+    if (!TitleKey.IsEmpty())
+    {
+        if (const FString* Aliased = TitleToEntity.Find(TitleKey))
+        {
+            if (int32* ExistingTitle = EntityToPoint.Find(*Aliased))
+            {
+                if (bCentroid)
+                {
+                    // Same station already plotted from a precise feed: keep
+                    // that marker, refresh labels only, do not relocate.
+                    EntityKey = *Aliased;
+                }
+                else if (ActivePoints[*ExistingTitle].bCentroid)
+                {
+                    // Precise fix replaces a country-file centroid in place.
+                    EntityKey = *Aliased;
+                }
+            }
+        }
+    }
     const double NowSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
     const FGeoPosition& Position = Message.Geometry.Positions[0];
     // Altitude lifts markers off the surface at globe scale (satellites);
@@ -293,6 +317,17 @@ void AGeoPointLayerActor::Submit(const FGeoMessageEnvelope& Message)
         FRenderedGeoPoint& Point = ActivePoints[*ExistingIndex];
         const double PreviousSeen = Point.LastSeenSeconds;
         Point.LastSeenSeconds = NowSeconds;
+        if (bCentroid && !Point.bCentroid)
+        {
+            const FString NewTertiary = Message.Properties.FindRef(TEXT("display.tertiary"));
+            const FString NewPrimary = Message.Properties.FindRef(TEXT("display.primary"));
+            if (!NewPrimary.IsEmpty()) Point.Primary = NewPrimary;
+            if (!NewTertiary.IsEmpty()) Point.Tertiary = NewTertiary;
+            else if (!NewPrimary.IsEmpty()) Point.Tertiary = NewPrimary;
+            return;
+        }
+        Point.bCentroid = bCentroid;
+        if (!TitleKey.IsEmpty()) TitleToEntity.Add(TitleKey, EntityKey);
         // Option A: park the instance at the previous authoritative fix
         // and let the material interpolate toward this one. No 1.6 km
         // CPU hop — custom data carries velocity + epoch instead.
@@ -386,6 +421,8 @@ void AGeoPointLayerActor::Submit(const FGeoMessageEnvelope& Message)
     }
     FRenderedGeoPoint& Point = ActivePoints.AddDefaulted_GetRef();
     Point.EntityKey = EntityKey;
+    Point.bCentroid = bCentroid;
+    if (!TitleKey.IsEmpty()) TitleToEntity.Add(TitleKey, EntityKey);
     Point.Location = Location;
     Point.RenderedLocation = Location;
     Point.RadialDirection = Radial;
@@ -657,6 +694,12 @@ void AGeoPointLayerActor::RemoveTrackedPoint(int32 Index)
     if (Point.RenderSlot != INDEX_NONE) RemoveRenderInstance(Index);
     EntityToPoint.Remove(Point.EntityKey);
     DirtyEntityKeys.Remove(Point.EntityKey);
+    TArray<FString> StaleTitles;
+    for (const TPair<FString, FString>& Pair : TitleToEntity)
+    {
+        if (Pair.Value == Point.EntityKey) StaleTitles.Add(Pair.Key);
+    }
+    for (const FString& Title : StaleTitles) TitleToEntity.Remove(Title);
     const int32 LastIndex = ActivePoints.Num() - 1;
     if (Index != LastIndex)
     {
@@ -831,6 +874,7 @@ void AGeoPointLayerActor::Reset()
 {
     ActivePoints.Reset();
     EntityToPoint.Reset();
+    TitleToEntity.Reset();
     SlotToPointIndex.Reset();
     DirtyEntityKeys.Reset();
     bHasKinematicPoints = false;

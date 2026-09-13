@@ -80,7 +80,6 @@ func TestNormalizeUnsupportedTypesSkipCleanly(t *testing.T) {
 		"N0CALL>APRS:>a status report",
 		"N0CALL>APRS:T#123,456,789,012,345,678,00000000",
 		"N0CALL>APRS:_10090556c220s004g005t077r000p000P000h50b09900wRSW",
-		"N0CALL>APRS:}third>party:!4903.50N/07201.75W-",
 		"not even a valid tnc2 line",
 	}
 	for _, line := range lines {
@@ -193,6 +192,97 @@ func TestNormalizeConcurrentAccess(t *testing.T) {
 		}(g)
 	}
 	wg.Wait()
+}
+
+func TestNormalizeCallsignObjectItemThirdPartyCollapseToOneStation(t *testing.T) {
+	// HB9SVT-5 as Jan saw it: a station beacon, an object and an item
+	// carrying the same callsign, plus a third-party igate wrap. Before
+	// identity unification this emitted three (or four) distinct EntityIDs
+	// and therefore three globe markers.
+	d := New()
+	lines := []string{
+		"HB9SVT-5>APRS,TCPIP*:!4726.50N/00832.00E>APRS station",
+		"N0GATE>APRS,TCPIP*:;HB9SVT-5 *092345z4730.00N/00840.00E>object clone",
+		"N0GATE>APRS,TCPIP*:)HB9SVT-5!4740.00N/00850.00E>item clone",
+		"HB9IGate>APRS,TCPIP*:}HB9SVT-5>APRS,WIDE1-1:!4726.50N/00832.00E>via third party",
+	}
+	var emitted []string
+	for i, line := range lines {
+		record := rawRecordFor(t, line)
+		record.OriginalID = fmt.Sprintf("aprsis-test-%d", i+1)
+		msgs, err := d.Normalize(context.Background(), record)
+		if err != nil {
+			t.Fatalf("line %d: %v", i, err)
+		}
+		for _, m := range msgs {
+			emitted = append(emitted, m.EntityID)
+			if m.EntityID != "aprs:station:HB9SVT-5" {
+				t.Fatalf("line %d: entity %q, want one station id", i, m.EntityID)
+			}
+			if m.SemanticType != "aprs.station" {
+				t.Fatalf("line %d: semantic %q, want aprs.station", i, m.SemanticType)
+			}
+			if m.Properties["display.title"] != "HB9SVT-5" {
+				t.Fatalf("line %d: title %v", i, m.Properties["display.title"])
+			}
+		}
+	}
+	if len(emitted) != 1 {
+		t.Fatalf("expected a single envelope (later clones/wraps suppressed), got %d ids %v", len(emitted), emitted)
+	}
+	var point []float64
+	first, _ := d.Normalize(context.Background(), rawRecordFor(t, "HB9SVT-7>APRS,TCPIP*:!4726.50N/00832.00E>other ssid"))
+	if len(first) != 1 || first[0].EntityID != "aprs:station:HB9SVT-7" {
+		t.Fatalf("a different SSID must stay a distinct station, got %#v", first)
+	}
+	// Re-decode the first station line through a fresh domain to assert
+	// the surviving coordinate is the station GPS, not the object clone.
+	fresh := New()
+	station, err := fresh.Normalize(context.Background(), rawRecordFor(t, lines[0]))
+	if err != nil || len(station) != 1 {
+		t.Fatalf("station line should emit on a fresh domain, got %d, err=%v", len(station), err)
+	}
+	if err := json.Unmarshal(station[0].Geometry.Coordinates, &point); err != nil {
+		t.Fatal(err)
+	}
+	if !almostEqual(point[0], 8+32.00/60, 1e-9) || !almostEqual(point[1], 47+26.50/60, 1e-9) {
+		t.Fatalf("station GPS must win, got lon/lat %v", point)
+	}
+}
+
+func TestNormalizeThirdPartyUnwrapsInnerStation(t *testing.T) {
+	d := New()
+	msgs, err := d.Normalize(context.Background(), rawRecordFor(t, "HB9IGate>APRS,TCPIP*:}HB9SVT-5>APRS,WIDE1-1:!4726.50N/00832.00E-"))
+	if err != nil || len(msgs) != 1 {
+		t.Fatalf("third-party wrap should emit the inner station, got %d, err=%v", len(msgs), err)
+	}
+	if msgs[0].EntityID != "aprs:station:HB9SVT-5" {
+		t.Fatalf("entity %q", msgs[0].EntityID)
+	}
+}
+
+func TestNormalizeNamedObjectStaysDistinct(t *testing.T) {
+	d := New()
+	msgs, err := d.Normalize(context.Background(), rawRecordFor(t, "N0CALL>APRS,TCPIP*:;LEADER   *092345z4903.50N/07201.75W>088/036"))
+	if err != nil || len(msgs) != 1 {
+		t.Fatalf("named object should emit, got %d, err=%v", len(msgs), err)
+	}
+	if msgs[0].EntityID != "aprs:object:LEADER" {
+		t.Fatalf("entity %q", msgs[0].EntityID)
+	}
+}
+
+func TestLooksLikeStationCall(t *testing.T) {
+	for _, call := range []string{"HB9SVT-5", "N0CALL", "W1AW", "9A1A", "4X1AB", "hb9svt-5"} {
+		if !looksLikeStationCall(call) {
+			t.Fatalf("%q should look like a station call", call)
+		}
+	}
+	for _, name := range []string{"LEADER", "MEETING", "AID#2", "MOBIL"} {
+		if looksLikeStationCall(name) {
+			t.Fatalf("%q must stay a named object", name)
+		}
+	}
 }
 
 func TestDomainIdentity(t *testing.T) {

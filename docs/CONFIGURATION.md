@@ -106,8 +106,9 @@ Press **O**. Every row is clickable and shows its state:
 - **HEATMAP** — activity density splats
 - **IONOSPHERE SHELLS** — ionosonde shells
 - **TRAILS** — motion trails behind moving markers
-- **AREAS** — filled polygons (NHC forecast cones, satellite radio
-  footprints, solar grayline / nautical-twilight band)
+- **AREAS** — filled polygons (NHC forecast cones, solar grayline /
+  nautical-twilight band). Satellite footprints stay off until pinned.
+- **&lt;SAT&gt; FOOTPRINT** — one row per pinned satellite; click to unpin
 - **CABLES** — submarine cable routes (TeleGeography). Color: planned amber;
   in-service by length (short teal / regional cyan / ocean blue / trunk magenta)
 - **BORDERS** — Natural Earth admin-0 country lines and zoom-aware place
@@ -125,7 +126,7 @@ Press **O**. Every row is clickable and shows its state:
 | **Left mouse** | select a path / click menu rows |
 | **Right mouse** (drag) | orbit the globe |
 | **Mouse wheel** | zoom — steps scale with distance, down to ~32 km above the surface |
-| **Hover a marker** | tooltip with callsign/flight level/type/…; aircraft seen by an `aviation.adsb` circle also show their filed route (`CDG Paris  >  TUN Tunis`) once resolved |
+| **Hover a marker** | tooltip with callsign/flight level/type/…; aircraft seen by an `aviation.adsb` circle also show their filed route (`CDG Paris  >  TUN Tunis`) once resolved. Over a satellite: **P FOOTPRINT** |
 | **Tab** | cycle HUD: full → minimal → hidden |
 | **O** | overlay menu |
 | **V** | show/hide paths |
@@ -133,7 +134,8 @@ Press **O**. Every row is clickable and shows its state:
 | **H** | activity heatmap |
 | **I** | ionosphere shells |
 | **T** | show/hide trails |
-| **Y** | show/hide areas |
+| **Y** | show/hide areas (grayline, NHC cones; not a global sat-footprint dump) |
+| **P** | pin/unpin the hovered or selected satellite's footprint |
 | **C** | show/hide cable routes |
 | **B** | show/hide country borders and place labels |
 | **N** | cycle transmission-mode filter |

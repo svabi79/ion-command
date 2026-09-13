@@ -345,6 +345,48 @@ bool FGeoPathLayerRoleFiltersCartographyTest::RunTest(const FString& Parameters)
     return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FGeoAreaLayerCoveragePinGatesHiddenAreasTest, "IONCOMMAND.Visualization.AreaLayer.CoveragePinGatesHidden", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FGeoAreaLayerCoveragePinGatesHiddenAreasTest::RunTest(const FString& Parameters)
+{
+    AGeoAreaLayerActor* Actor = NewObject<AGeoAreaLayerActor>(GetTransientPackage());
+    FGeoMessageEnvelope Gated = MakeAreaMessage(0);
+    Gated.Properties.Add(TEXT("visual.defaultHidden"), TEXT("true"));
+    Gated.Properties.Add(TEXT("visual.pinKey"), TEXT("25544"));
+    FGeoMessageEnvelope Open = MakeAreaMessage(1);
+    Actor->Submit(Gated);
+    Actor->Submit(Open);
+    TestEqual(TEXT("ungated area is drawn"), Actor->GetRenderStatistics().TrackedItems, 1);
+    Actor->SetCoveragePin(TEXT("25544"), true);
+    TestEqual(TEXT("pinning reveals only that gated area"), Actor->GetRenderStatistics().TrackedItems, 2);
+    Actor->SetCoveragePin(TEXT("25544"), false);
+    TestEqual(TEXT("unpinning removes the footprint and keeps the open area"), Actor->GetRenderStatistics().TrackedItems, 1);
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FGeoPointLayerCentroidDoesNotStackOrMoveTest, "IONCOMMAND.Visualization.PointLayer.CentroidSharesTitle", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FGeoPointLayerCentroidDoesNotStackOrMoveTest::RunTest(const FString& Parameters)
+{
+    AGeoPointLayerActor* Actor = NewObject<AGeoPointLayerActor>(GetTransientPackage());
+    FGeoMessageEnvelope Station = MakePointMessage(0, TEXT("aprs"));
+    Station.EntityId = TEXT("aprs:station:HB9SVT-5");
+    Station.Properties.Add(TEXT("display.title"), TEXT("HB9SVT-5"));
+    Station.Geometry.Positions[0].Longitude = 8.5;
+    Station.Geometry.Positions[0].Latitude = 47.4;
+    Actor->Submit(Station);
+
+    FGeoMessageEnvelope Centroid = MakePointMessage(1, TEXT("hamradio"));
+    Centroid.EntityId = TEXT("radio:activity:HB9SVT-5");
+    Centroid.Properties.Add(TEXT("display.title"), TEXT("HB9SVT-5"));
+    Centroid.Properties.Add(TEXT("visual.centroid"), TEXT("true"));
+    Centroid.Properties.Add(TEXT("display.primary"), TEXT("TG 228"));
+    Centroid.Geometry.Positions[0].Longitude = 8.2;
+    Centroid.Geometry.Positions[0].Latitude = 47.0;
+    Actor->Submit(Centroid);
+
+    TestEqual(TEXT("centroid does not add a second marker"), Actor->GetRenderStatistics().TrackedItems, 1);
+    return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FGeoAreaLayerCapacityTrimIsIncrementalTest, "IONCOMMAND.Visualization.AreaLayer.CapacityTrimIsIncremental", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FGeoAreaLayerCapacityTrimIsIncrementalTest::RunTest(const FString& Parameters)
 {

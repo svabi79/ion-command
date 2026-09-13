@@ -40,6 +40,12 @@ public:
     bool FindClosestMessageToRay(const FVector& RayOrigin, const FVector& RayDirection, double RayLength, double MaxDistance, FGeoMessageEnvelope& OutMessage) const;
     FGeoRenderLayerStatistics GetRenderStatistics() const;
 
+    // Coverage pins (visual.pinKey / visual.defaultHidden). Gated areas are
+    // held, not drawn, until the operator pins that key. Grayline and NHC
+    // cones have no pin key and are unaffected.
+    void SetCoveragePin(const FString& PinKey, bool bEnabled);
+    bool IsCoveragePinned(const FString& PinKey) const { return EnabledCoveragePins.Contains(PinKey); }
+
     UPROPERTY(EditAnywhere, Category="ION COMMAND|Layer") double GlobeRadius = 1000.0;
     UPROPERTY(EditAnywhere, Category="ION COMMAND|Layer") int32 MaxVisibleAreas = 256;
     UPROPERTY(EditAnywhere, Category="ION COMMAND|Layer") double AreaLifetimeSeconds = 7200.0;
@@ -64,6 +70,12 @@ private:
     void AppendOutlineTransforms(TArray<FTransform>& Out, const TArray<FVector>& WorldRing) const;
     void TessellateRing(const TArray<FGeoPosition>& Unwrapped, const TArray<FVector>& WorldRing, TArray<FVector>& OutVertices, TArray<int32>& OutTriangles) const;
     void RefreshSelectionHighlight();
+    UFUNCTION()
+    void OnCoveragePinsChanged();
+    static bool IsCoverageGated(const FGeoMessageEnvelope& Message);
+    static FString CoveragePinKey(const FGeoMessageEnvelope& Message);
+    void HoldGatedArea(const FGeoMessageEnvelope& Message);
+    void DropPinnedAreas(const FString& PinKey);
 
     UPROPERTY(VisibleAnywhere) TObjectPtr<USceneComponent> SceneRoot;
     UPROPERTY(VisibleAnywhere) TObjectPtr<UProceduralMeshComponent> FillMesh;
@@ -73,6 +85,8 @@ private:
     TWeakObjectPtr<UGeoDataSubsystem> DataSubsystem;
     TArray<FRenderedGeoArea> ActiveAreas;
     TMap<FString, int32> EntityToArea;
+    TSet<FString> EnabledCoveragePins;
+    TMap<FString, FGeoMessageEnvelope> HeldPinAreas;
     FString HighlightedMessageId;
     double LastExpiryCheck = 0.0;
     bool bNeedsRebuild = false;

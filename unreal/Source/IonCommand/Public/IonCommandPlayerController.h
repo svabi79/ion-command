@@ -34,6 +34,7 @@ private:
     void TogglePaths();
     void ToggleTrails();
     void ToggleAreas();
+    void ToggleCoveragePin();
     void ToggleRoutes();
     void ToggleCartography();
     void CycleModeFilter();
