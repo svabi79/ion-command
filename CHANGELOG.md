@@ -12,6 +12,21 @@ superseded configurations, is in
 
 ### Added
 
+- **OSINT wave: live sources, sat footprints, grayline, Brandmeister.**
+  Tracked `live.json` now enables AIS (empty `apiKey`, idle until
+  `local.json` overlays a key), APRS-IS / RBN / DX cluster (placeholder
+  login `HB9HSJ`, overlay the operator callsign), Brandmeister DMR
+  last-heard, and a derived solar grayline band. AIS bounding boxes cover
+  N Atlantic approaches, Suez/Red Sea, Malacca, East China Sea / Japan,
+  and the US East Coast. Satellite radio/visibility footprints come from
+  the existing Celestrak/SGP4 positions as `orbital.footprint` Areas.
+  Grayline is a restrained nautical-twilight Area (`solar.grayline`), no
+  external API. Brandmeister uses the public Socket.IO last-heard feed
+  and places pulses via the country file. Overlay **AREAS** / `Y` shows
+  cones, footprints, and grayline together. OpenAQ and HDX HAPI stay
+  disabled (need keys). NOTAMs skipped — no clean global hobby JSON/API.
+  CodeFred[Agent].
+
 - **Country borders and place labels on the globe.** `geography.naturalearth`
   now embeds a 110m Natural Earth extract of admin-0 boundary lines, cities,
   country names, major river centerlines, and physical landmarks — not just
@@ -25,6 +40,13 @@ superseded configurations, is in
   in `live.json`. Wall visual check still remaining (no UE on this VM).
 
 ### Changed
+
+- **Emergency squawks stay sticky globally.** Aviation remembers
+  7500/7600/7700 for two hours even when a later OpenSky snapshot omits
+  the squawk or the airframe is on the ground, and keeps the marker
+  valid for two hours so the 30-minute anonymous poll cannot drop it.
+  Area layer capacity raised to 256 so amateur-sat footprints fit next
+  to NHC cones and the grayline band.
 
 - **Cable paths are map lines, not neon tubes.** `AGeoPathLayerActor`
   drove `MI_Track` at Intensity 3.6 with hot legend hues. The material is

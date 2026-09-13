@@ -58,9 +58,9 @@ func New(sourceConfig config.Source, logger *slog.Logger) (*Source, error) {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	if strings.TrimSpace(sourceConfig.ApiKey) == "" {
-		return nil, fmt.Errorf("ais.aisstream source requires apiKey (see docs/DATA-SOURCES.md for how to obtain a free key)")
-	}
+	// Empty apiKey is allowed so live.json can ship enabled:true and the
+	// operator overlays the key in gitignored local.json. Start() idles
+	// instead of refusing the whole collector.
 	if len(sourceConfig.BoundingBoxes) == 0 {
 		return nil, fmt.Errorf("ais.aisstream source requires at least one entry in boundingBoxes")
 	}
@@ -109,6 +109,11 @@ func (s *Source) subscribeMessage() ([]byte, error) {
 }
 
 func (s *Source) Start(ctx context.Context, output chan<- plugins.RawRecord) error {
+	if strings.TrimSpace(s.apiKey) == "" {
+		s.logger.Warn("ais.aisstream enabled without apiKey; idle until local.json overlays one", "source", s.id)
+		<-ctx.Done()
+		return nil
+	}
 	backoff := reconnectFloor
 	for ctx.Err() == nil {
 		connectedAt := time.Now()

@@ -73,6 +73,12 @@ func (d *Domain) ID() string     { return "domain.hamradio" }
 func (d *Domain) Domain() string { return "hamradio" }
 
 func (d *Domain) Normalize(_ context.Context, record plugins.RawRecord) ([]events.Envelope, error) {
+	var kind struct {
+		Kind string `json:"kind"`
+	}
+	if json.Unmarshal(record.Payload, &kind) == nil && (kind.Kind == "last-heard" || kind.Kind == "activity") {
+		return d.normalizeActivity(record)
+	}
 	var raw rawSpot
 	if err := json.Unmarshal(record.Payload, &raw); err != nil {
 		return nil, fmt.Errorf("decode ham-radio record: %w", err)
@@ -146,6 +152,78 @@ func (d *Domain) markSeen(entityID string, observed time.Time) bool {
 	}
 	d.seenEntities[entityID] = observed
 	return seen
+}
+
+type rawActivity struct {
+	Kind          string  `json:"kind"`
+	SpotID        string  `json:"spotId"`
+	TXCallsign    string  `json:"txCallsign"`
+	TXLongitude   float64 `json:"txLongitude"`
+	TXLatitude    float64 `json:"txLatitude"`
+	TXRegion      string  `json:"txRegion"`
+	Talkgroup     int64   `json:"talkgroup"`
+	TalkgroupName string  `json:"talkgroupName"`
+	DurationS     float64 `json:"durationS"`
+	Mode          string  `json:"mode"`
+	TalkerAlias   string  `json:"talkerAlias"`
+}
+
+func (d *Domain) normalizeActivity(record plugins.RawRecord) ([]events.Envelope, error) {
+	var raw rawActivity
+	if err := json.Unmarshal(record.Payload, &raw); err != nil {
+		return nil, fmt.Errorf("decode last-heard record: %w", err)
+	}
+	if raw.SpotID == "" || raw.TXCallsign == "" {
+		return nil, fmt.Errorf("last-heard requires id and callsign")
+	}
+	event := events.NewEnvelope(record.OriginalID, "hamradio", "radio.activity", events.MessageObservation,
+		events.SourceRef{PluginID: record.SourcePluginID, InstanceID: record.SourceInstanceID, OriginalID: record.OriginalID},
+		record.ObservedUTC)
+	event.EntityID = "radio:activity:" + raw.TXCallsign
+	event.Geometry = events.Point(raw.TXLongitude, raw.TXLatitude, 0)
+	validUntil := record.ObservedUTC.Add(90 * time.Second)
+	event.Time.ValidUntilUTC = &validUntil
+	mode := raw.Mode
+	if mode == "" {
+		mode = "DMR"
+	}
+	title := raw.TXCallsign
+	primary := mode
+	if raw.Talkgroup > 0 {
+		primary = fmt.Sprintf("TG %d", raw.Talkgroup)
+		if raw.TalkgroupName != "" {
+			primary += "  //  " + raw.TalkgroupName
+		}
+	}
+	secondary := mode
+	if raw.DurationS > 0 {
+		secondary = fmt.Sprintf("%s  //  %.0fs", mode, raw.DurationS)
+	}
+	event.Properties = map[string]any{
+		"callsign":           raw.TXCallsign,
+		"mode":               mode,
+		"visual.icon":        "signal",
+		"visual.markerScale": 1.35,
+		"visual.tint":        "0.75,0.45,0.28",
+		"display.title":      title,
+		"display.primary":    primary,
+		"display.secondary":  secondary,
+	}
+	if raw.Talkgroup > 0 {
+		event.Properties["talkgroup"] = raw.Talkgroup
+	}
+	if raw.TalkgroupName != "" {
+		event.Properties["talkgroupName"] = raw.TalkgroupName
+	}
+	if raw.TXRegion != "" {
+		event.Properties["display.fromRegion"] = raw.TXRegion
+	}
+	if raw.TalkerAlias != "" {
+		event.Properties["talkerAlias"] = raw.TalkerAlias
+	}
+	measured := true
+	event.Quality.Measured = &measured
+	return []events.Envelope{event}, nil
 }
 
 func stationEntity(messageID, entityID, callsign string, lon, lat float64, source events.SourceRef, observed time.Time) events.Envelope {

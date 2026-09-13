@@ -7,31 +7,40 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ion-command/ion-command/collector/internal/events"
 	"github.com/ion-command/ion-command/collector/internal/plugins"
 )
 
-type Domain struct{}
+type rememberedEmergency struct {
+	alarm string
+	until time.Time
+}
+
+type Domain struct {
+	mu          sync.Mutex
+	emergencies map[string]rememberedEmergency
+}
 
 type rawAircraft struct {
-	Hex           string  `json:"hex"`
-	Callsign      string  `json:"callsign"`
-	AcType        string  `json:"acType"`
-	Registration  string  `json:"registration"`
-	Kind          string  `json:"kind"` // aircraft | helicopter | glider | balloon | drone
-	Squawk        string  `json:"squawk"`
-	OriginCountry string  `json:"originCountry"`
-	BaroRateFpm   float64 `json:"baroRateFpm"`
-	Lat           float64 `json:"lat"`
-	Lon           float64 `json:"lon"`
-	AltFt         float64 `json:"altFt"`
-	GsKt          float64 `json:"gsKt"`
-	Track         float64 `json:"track"`
-	OnGround      bool    `json:"onGround"`
-	ValidSeconds      int `json:"validSeconds"`
-	LastContactAgeSec int `json:"lastContactAgeSec"`
+	Hex               string  `json:"hex"`
+	Callsign          string  `json:"callsign"`
+	AcType            string  `json:"acType"`
+	Registration      string  `json:"registration"`
+	Kind              string  `json:"kind"` // aircraft | helicopter | glider | balloon | drone
+	Squawk            string  `json:"squawk"`
+	OriginCountry     string  `json:"originCountry"`
+	BaroRateFpm       float64 `json:"baroRateFpm"`
+	Lat               float64 `json:"lat"`
+	Lon               float64 `json:"lon"`
+	AltFt             float64 `json:"altFt"`
+	GsKt              float64 `json:"gsKt"`
+	Track             float64 `json:"track"`
+	OnGround          bool    `json:"onGround"`
+	ValidSeconds      int     `json:"validSeconds"`
+	LastContactAgeSec int     `json:"lastContactAgeSec"`
 	// Filed route, when the source resolved one for the callsign.
 	RouteOriginCode string `json:"routeOriginCode"`
 	RouteOriginCity string `json:"routeOriginCity"`
@@ -47,7 +56,15 @@ var emergencySquawks = map[string]string{
 	"7700": "EMERGENCY",
 }
 
-func New() *Domain               { return &Domain{} }
+const (
+	emergencyMemory   = 2 * time.Hour
+	emergencyValidFor = 2 * time.Hour
+	maxRemembered     = 4096
+)
+
+func New() *Domain {
+	return &Domain{emergencies: make(map[string]rememberedEmergency)}
+}
 func (d *Domain) ID() string     { return "domain.aviation" }
 func (d *Domain) Domain() string { return "aviation" }
 
@@ -73,6 +90,11 @@ func (d *Domain) Normalize(_ context.Context, record plugins.RawRecord) ([]event
 	validFor := 3 * time.Minute
 	if raw.ValidSeconds > 0 {
 		validFor = time.Duration(raw.ValidSeconds) * time.Second
+	}
+	hex := strings.ToLower(raw.Hex)
+	alarm, isEmergency := d.rememberEmergency(hex, raw.Squawk, record.ObservedUTC)
+	if isEmergency && validFor < emergencyValidFor {
+		validFor = emergencyValidFor
 	}
 	validUntil := record.ObservedUTC.Add(validFor)
 	event.Time.ValidUntilUTC = &validUntil
@@ -125,13 +147,12 @@ func (d *Domain) Normalize(_ context.Context, record plugins.RawRecord) ([]event
 		"display.title":        title,
 		"display.primary":      primary,
 	}
-	if alarm, isEmergency := emergencySquawks[raw.Squawk]; isEmergency && !raw.OnGround {
+	if isEmergency {
 		event.Properties["display.title"] = title + "  //  " + alarm
 		event.Properties["visual.tint"] = "1.0,0.15,0.1"
-		event.Properties["visual.markerScale"] = 2.0
-		// Explicit flag so the renderer keeps the alarm sticky when a later
-		// source (e.g. OpenSky with a null squawk) re-reports the same hex
-		// without emergency context.
+		event.Properties["visual.markerScale"] = 2.4
+		// Sticky across later null-squawk snapshots (typical of OpenSky)
+		// and across on-ground reports — 7500/7600/7700 stay visible.
 		event.Properties["visual.emergency"] = alarm
 	}
 	// Generic kinematics: renderers orient the glyph along the compass
@@ -192,4 +213,36 @@ func (d *Domain) normalizeInterference(record plugins.RawRecord) ([]events.Envel
 	measured := true
 	event.Quality.Measured = &measured
 	return []events.Envelope{event}, nil
+}
+
+func (d *Domain) rememberEmergency(hex, squawk string, observed time.Time) (string, bool) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.emergencies == nil {
+		d.emergencies = make(map[string]rememberedEmergency)
+	}
+	if alarm, ok := emergencySquawks[squawk]; ok {
+		if len(d.emergencies) >= maxRemembered {
+			for existing, mem := range d.emergencies {
+				if mem.until.Before(observed) {
+					delete(d.emergencies, existing)
+				}
+			}
+			if len(d.emergencies) >= maxRemembered {
+				for existing := range d.emergencies {
+					delete(d.emergencies, existing)
+					break
+				}
+			}
+		}
+		d.emergencies[hex] = rememberedEmergency{alarm: alarm, until: observed.Add(emergencyMemory)}
+		return alarm, true
+	}
+	if mem, ok := d.emergencies[hex]; ok {
+		if !observed.After(mem.until) {
+			return mem.alarm, true
+		}
+		delete(d.emergencies, hex)
+	}
+	return "", false
 }

@@ -86,8 +86,8 @@ The component list is in [COMPONENTS.md](COMPONENTS.md) — not repeated here.
   eviction), then exercised against the real feed with an operator key: two
   European bounding boxes produced ~2,000 raw messages per 45 s with 0
   invalid and 0 dropped, and vessels render with their own pictogram. It
-  still ships **disabled by default** because it needs a credential the
-  operator must obtain; see
+  now ships **enabled** with an empty key and idles until `local.json`
+  overlays one; see
   [DATA-SOURCES.md](DATA-SOURCES.md#enabling-ais-ships-aisstreamio).
   Sustained multi-hour reconnect behaviour remains unexercised.
 - **OpenSky OAuth2** is implemented (`oauth` when `clientId`/`clientSecret` or

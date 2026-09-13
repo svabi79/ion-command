@@ -26,6 +26,7 @@ import (
 	"github.com/ion-command/ion-command/collector/internal/plugins/domains/ionosphere"
 	"github.com/ion-command/ion-command/collector/internal/plugins/domains/maritime"
 	"github.com/ion-command/ion-command/collector/internal/plugins/domains/orbital"
+	"github.com/ion-command/ion-command/collector/internal/plugins/domains/solar"
 	"github.com/ion-command/ion-command/collector/internal/plugins/domains/space"
 	"github.com/ion-command/ion-command/collector/internal/plugins/domains/spaceweather"
 	"github.com/ion-command/ion-command/collector/internal/plugins/domains/weather"
@@ -34,6 +35,7 @@ import (
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/ais"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/aprsis"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/blitzortung"
+	"github.com/ion-command/ion-command/collector/internal/plugins/sources/brandmeister"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/cables"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/celestrak"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/dxcluster"
@@ -41,6 +43,7 @@ import (
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/firms"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/gdacs"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/gpsjam"
+	"github.com/ion-command/ion-command/collector/internal/plugins/sources/grayline"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/hapi"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/kc2g"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/launchlibrary"
@@ -83,7 +86,7 @@ func run(configPath, listenAddress string, logger *slog.Logger) error {
 		cfg.Server.ListenAddress = listenAddress
 	}
 	registry := plugins.NewRegistry()
-	for _, domain := range []plugins.Domain{hamradio.New(), weather.New(), spaceweather.New(), ionosphere.New(), geophysics.New(), orbital.New(), aviation.New(), wildfire.New(), maritime.New(), aprs.New(), space.New(), geography.New(), humanitarian.New()} {
+	for _, domain := range []plugins.Domain{hamradio.New(), weather.New(), spaceweather.New(), ionosphere.New(), geophysics.New(), orbital.New(), aviation.New(), wildfire.New(), maritime.New(), aprs.New(), space.New(), geography.New(), humanitarian.New(), solar.New()} {
 		if err := registry.RegisterDomain(domain); err != nil {
 			return err
 		}
@@ -154,6 +157,10 @@ func run(configPath, listenAddress string, logger *slog.Logger) error {
 			source, err = pads.New(sourceConfig, logger)
 		case sourceConfig.Type == "humanitarian.hapi":
 			source, err = hapi.New(sourceConfig, logger)
+		case sourceConfig.Type == "hamradio.brandmeister":
+			source, err = brandmeister.New(sourceConfig, logger)
+		case sourceConfig.Type == "solar.grayline":
+			source, err = grayline.New(sourceConfig, logger)
 		default:
 			err = fmt.Errorf("unknown source type %q", sourceConfig.Type)
 		}

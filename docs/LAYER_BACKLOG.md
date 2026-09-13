@@ -39,7 +39,7 @@ one. All four fit the existing renderer.
 | --- | --- | --- | --- |
 | **Emergency squawks** (7500/7600/7700) | The live ADS-B stream already carries them | none | `shipped` — `emergencySquawks` in the aviation domain tags 7500/7600/7700 with a red tint, double marker scale and a sticky `visual.emergency` flag; the point layer honours all three |
 | **Satellite passes over the own station** | SGP4 already runs locally in the collector (`orbital.celestrak`) | none | `shipped` — look angles on every position plus `orbital.pass` predictions every 10 min; SATELLITES cockpit panel |
-| **Brandmeister DMR last-heard** — who is speaking on which talkgroup | Brandmeister API | Shares the `hamradio` domain with wave 1 work | `ready` after wave 1 |
+| **Brandmeister DMR last-heard** — who is speaking on which talkgroup | Brandmeister API | Shares the `hamradio` domain with wave 1 work | `shipped` — `hamradio.brandmeister` → `radio.activity` Points |
 | **Repeater directory** | RepeaterBook or a national register | Licence per source | `needs decision` |
 
 ## Wave 3 — needs new geometry support
@@ -49,8 +49,8 @@ remaining `Field` geometry work. `Area` is now rendered.
 
 | Layer | Feed | Geometry needed |
 | --- | --- | --- |
-| **Satellite footprints** — who can hear which satellite now | Derived from SGP4 | `Area` — renderer ready, feed not shipped |
-| **Grayline as a real surface** rather than an implied line | Derived from solar geometry | `Area` — renderer ready, feed not shipped |
+| **Satellite footprints** — who can hear which satellite now | Derived from SGP4 | `Area` — **shipped** as `orbital.footprint` (visibility circle from altitude) |
+| **Grayline as a real surface** rather than an implied line | Derived from solar geometry | `Area` — **shipped** as `solar.grayline` (terminator → nautical twilight) |
 | **Precipitation radar** | RainViewer or national services | `Field` / raster — no clean hobby-globe API/terms found; left deferred |
 | **Ionospheric maps** (foF2, MUF, TEC) | Already fetched from KC2G as soundings | `Field` / raster |
 | **Tropical storm tracks and cones** | NOAA NHC | `Track` + `Area` — **centres and 5-day cones shipped** as `weather.nhc` / `weather.storm` + `weather.storm.cone` |
@@ -79,6 +79,7 @@ cleaner licence or API than we have today):
 | ACLED conflict events | Keyed + terms; only acceptable as `local.json` fail-closed, and the globe already has GDACS |
 | RainViewer radar | Needs `Field` / raster geometry; terms not a clean hobby overlay |
 | Nuclear facilities / undersea pipelines | No properly licensed, attributable, removable global point bundle found. GEM oil/gas trackers are CC BY 4.0 but download is registration-gated and operator-mediated — not a runtime fetch |
+| NOTAMs | No clean, attributable, hobby-usable global JSON/API (FAA developer portal is keyed and US-centric; ICAO is paid; no scraping) |
 | JMA / JTWC western-Pacific centres | No stable documented JSON comparable to NHC `CurrentStorms.json` |
 | WMO SWIC CAP list | `wmo_all.json` has no coordinates without a second lookup |
 | News / Telegram / webcams / markets | Out of product scope |

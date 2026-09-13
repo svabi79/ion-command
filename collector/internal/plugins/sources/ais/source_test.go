@@ -15,11 +15,15 @@ func validConfig() config.Source {
 	}
 }
 
-func TestNewRequiresApiKey(t *testing.T) {
+func TestNewAllowsEmptyApiKey(t *testing.T) {
 	cfg := validConfig()
 	cfg.ApiKey = ""
-	if _, err := New(cfg, slog.Default()); err == nil {
-		t.Fatal("missing apiKey must be rejected")
+	source, err := New(cfg, slog.Default())
+	if err != nil {
+		t.Fatalf("empty apiKey must not fail collector startup: %v", err)
+	}
+	if source.apiKey != "" {
+		t.Fatal("expected empty apiKey to stay empty")
 	}
 }
 
