@@ -28,3 +28,36 @@ func TestDisplacementNormalizes(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestDisasterNormalizes(t *testing.T) {
+	payload, _ := json.Marshal(map[string]any{
+		"kind": "disaster", "disasterId": "50599", "title": "Afghanistan: Earthquake - Sep 2025",
+		"status": "current", "glide": "EQ-2025-000123-AFG", "category": "Earthquake",
+		"country": "Afghanistan", "latitude": 33.94, "longitude": 67.71,
+		"attribution": "ReliefWeb / OCHA",
+	})
+	observed := time.Date(2026, 9, 14, 12, 0, 0, 0, time.UTC)
+	messages, err := New().Normalize(context.Background(), plugins.RawRecord{
+		SourcePluginID: "reliefweb", SourceInstanceID: "r", OriginalID: "reliefweb-50599",
+		Domain: "humanitarian", ObservedUTC: observed, Payload: payload,
+	})
+	if err != nil || len(messages) != 1 {
+		t.Fatalf("%v %#v", err, messages)
+	}
+	event := messages[0]
+	if event.SemanticType != "humanitarian.disaster" || event.EntityID != "humanitarian:disaster:50599" {
+		t.Fatalf("%#v", event)
+	}
+	if event.Time.ValidUntilUTC == nil || event.Time.ValidUntilUTC.Sub(observed) != 24*time.Hour {
+		t.Fatalf("validity %v", event.Time.ValidUntilUTC)
+	}
+	if event.Properties["display.title"] != "Afghanistan: Earthquake - Sep 2025" {
+		t.Fatalf("title %v", event.Properties["display.title"])
+	}
+	if event.Properties["visual.markerScale"].(float64) != 1.3 {
+		t.Fatalf("scale %v", event.Properties["visual.markerScale"])
+	}
+	if err := event.Validate(); err != nil {
+		t.Fatal(err)
+	}
+}

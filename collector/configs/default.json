@@ -35,6 +35,8 @@
       "geophysics.event",
       "space.pad",
       "humanitarian.displacement",
+      "humanitarian.disaster",
+      "conflict.event",
       "orbital.footprint",
       "solar.grayline",
       "radio.activity",
@@ -239,6 +241,19 @@
       "type": "humanitarian.hapi",
       "enabled": false,
       "pollSeconds": 86400
+    },
+    {
+      "id": "reliefweb-disasters",
+      "type": "humanitarian.reliefweb",
+      "enabled": false,
+      "pollSeconds": 900
+    },
+    {
+      "id": "acled-events",
+      "type": "conflict.acled",
+      "enabled": false,
+      "pollSeconds": 900,
+      "lookBackHours": 168
     }
   ]
 }

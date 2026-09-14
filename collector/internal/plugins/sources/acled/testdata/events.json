@@ -1,0 +1,33 @@
+{
+  "status": 200,
+  "success": true,
+  "count": 2,
+  "data": [
+    {
+      "event_id_cnty": "IRQ1234",
+      "event_date": "2026-09-12",
+      "event_type": "Battles",
+      "sub_event_type": "Armed clash",
+      "disorder_type": "Political violence",
+      "country": "Iraq",
+      "admin1": "Baghdad",
+      "location": "Baghdad",
+      "latitude": "33.3152",
+      "longitude": "44.3661",
+      "fatalities": "3"
+    },
+    {
+      "event_id_cnty": "SYR99",
+      "event_date": "2026-09-11",
+      "event_type": "Explosions/Remote violence",
+      "sub_event_type": "Air/drone strike",
+      "disorder_type": "Political violence",
+      "country": "Syria",
+      "admin1": "Aleppo",
+      "location": "Aleppo",
+      "latitude": 36.2021,
+      "longitude": 37.1343,
+      "fatalities": 0
+    }
+  ]
+}

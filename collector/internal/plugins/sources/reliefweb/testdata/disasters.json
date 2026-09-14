@@ -1,0 +1,36 @@
+{
+  "time": 12,
+  "count": 2,
+  "totalCount": 2,
+  "data": [
+    {
+      "id": "50599",
+      "fields": {
+        "id": 50599,
+        "name": "Afghanistan: Earthquake - Sep 2025",
+        "status": "current",
+        "glide": "EQ-2025-000123-AFG",
+        "primary_country": {
+          "name": "Afghanistan",
+          "iso3": "AFG",
+          "location": { "lat": 33.94, "lon": 67.71 }
+        },
+        "type": [
+          { "name": "Earthquake", "code": "EQ", "primary": true }
+        ],
+        "date": { "event": "2025-09-01T00:00:00+00:00" }
+      }
+    },
+    {
+      "id": "50600",
+      "fields": {
+        "id": 50600,
+        "name": "Unlocated flood alert",
+        "status": "alert",
+        "glide": "FL-2025-000001-XXX",
+        "primary_country": { "name": "Unknown" },
+        "type": [{ "name": "Flood", "code": "FL" }]
+      }
+    }
+  ]
+}
