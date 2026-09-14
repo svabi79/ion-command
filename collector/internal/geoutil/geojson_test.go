@@ -22,7 +22,7 @@ func TestPointAndPolygonAndDecimate(t *testing.T) {
 	if len(polys) != 1 || len(polys[0][0]) != 5 {
 		t.Fatalf("poly %#v", polys)
 	}
-	reduced := DecimateLine(polys[0][0], 1000, 4)
+	reduced := DecimateLine(polys[0][0], 50, 8)
 	if len(reduced) < 4 {
 		t.Fatalf("decimate %v", reduced)
 	}
@@ -36,5 +36,12 @@ func TestClosedLineBecomesPolygon(t *testing.T) {
 	polys := Polygons(Geometry{Type: "LineString", Coordinates: coords})
 	if len(polys) != 1 || len(polys[0][0]) < 4 {
 		t.Fatalf("%#v", polys)
+	}
+}
+
+func TestOpenLineStringIsNotAPolygon(t *testing.T) {
+	coords, _ := json.Marshal([][]float64{{-90, 40}, {-88, 41}, {-86, 40}})
+	if polys := Polygons(Geometry{Type: "LineString", Coordinates: coords}); len(polys) != 0 {
+		t.Fatalf("open contour became polygon %#v", polys)
 	}
 }

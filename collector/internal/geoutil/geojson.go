@@ -127,18 +127,16 @@ func Polygons(geom Geometry) [][][][]float64 {
 		}
 	case "LineString":
 		var line [][]float64
-		if json.Unmarshal(geom.Coordinates, &line) == nil {
-			if ring := closedRing(line); len(ring) >= 4 {
-				return [][][][]float64{{ring}}
-			}
+		if json.Unmarshal(geom.Coordinates, &line) == nil && alreadyClosed(line) {
+			return [][][][]float64{{line}}
 		}
 	case "MultiLineString":
 		var lines [][][]float64
 		if json.Unmarshal(geom.Coordinates, &lines) == nil {
 			out := make([][][][]float64, 0)
 			for _, line := range lines {
-				if ring := closedRing(line); len(ring) >= 4 {
-					out = append(out, [][][]float64{ring})
+				if alreadyClosed(line) {
+					out = append(out, [][][]float64{line})
 				}
 			}
 			return out
@@ -186,6 +184,14 @@ func cleanPolygon(rings [][][]float64) [][][]float64 {
 		}
 	}
 	return out
+}
+
+func alreadyClosed(line [][]float64) bool {
+	if !validLine(line) || len(line) < 4 {
+		return false
+	}
+	first, last := line[0], line[len(line)-1]
+	return first[0] == last[0] && first[1] == last[1]
 }
 
 func closedRing(line [][]float64) [][]float64 {
