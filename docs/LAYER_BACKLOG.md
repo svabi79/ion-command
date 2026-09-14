@@ -28,6 +28,8 @@ Priorities for the platform as a whole are in
 | **AIS ships** — global maritime traffic | `aisstream.io` WebSocket | Point + Track | Free API key required | `shipped` — live-verified 2026-08-28 against European waters; disabled by default (needs an operator key) |
 | **Wildfires** — active fire detections | NASA FIRMS | Point | Free MAP_KEY may be required | `shipped` — registered as `wildfire.firms`, key-free tier |
 | **DX cluster + WSPR** — announced DX and weak-signal propagation reports | DX cluster telnet, `wspr.live` | GreatCircle, Point | Callsign for the cluster login | `shipped` — `hamradio.dxcluster` and `hamradio.wspr` |
+| **ReliefWeb disasters** — current/alert humanitarian disasters | ReliefWeb v2 `/disasters` | Point | Pre-approved `appname` since Nov 2025 | `shipped` — `humanitarian.reliefweb` → `humanitarian.disaster`; disabled until `local.json` overlays the appname |
+| **ACLED conflict events** — recent political violence / protest points | ACLED `/api/acled/read` | Point | myACLED OAuth or Bearer token | `shipped` — `conflict.acled` → `conflict.event`; `local.json` fail-closed only, never live-enabled with secrets |
 
 Rationale: aircraft and ships in motion, balloons climbing and drifting, and
 fires appearing and dying make the globe a living picture rather than a static
@@ -75,8 +77,6 @@ cleaner licence or API than we have today):
 
 | Candidate | Why deferred |
 | --- | --- |
-| ReliefWeb disasters | API requires a pre-approved `appname` since November 2025; overlaps GDACS/EONET |
-| ACLED conflict events | Keyed + terms; only acceptable as `local.json` fail-closed, and the globe already has GDACS |
 | RainViewer radar | Needs `Field` / raster geometry; terms not a clean hobby overlay |
 | Nuclear facilities / undersea pipelines | No properly licensed, attributable, removable global point bundle found. GEM oil/gas trackers are CC BY 4.0 but download is registration-gated and operator-mediated — not a runtime fetch |
 | NOTAMs | No clean, attributable, hobby-usable global JSON/API (FAA developer portal is keyed and US-centric; ICAO is paid; no scraping) |

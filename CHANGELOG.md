@@ -12,6 +12,19 @@ superseded configurations, is in
 
 ### Added
 
+- **ReliefWeb disasters and ACLED conflict events.** Two operator-keyed
+  poll sources, both registered **disabled** in tracked `live.json`.
+  `humanitarian.reliefweb` POSTs `api.reliefweb.int/v2/disasters` with a
+  pre-approved `appname` (`apiKey` overlay) and emits
+  `humanitarian.disaster` Points at ReliefWeb's published country
+  location. `conflict.acled` GETs `/api/acled/read` with a myACLED OAuth
+  Bearer (login/password overlay, or a 24-hour token in `apiKey`) and
+  emits `conflict.event` Points for a seven-day window. Enabled without
+  credentials is fail-closed; overlay `"enabled": true` to turn them on
+  without editing tracked configs. Disk cache, 429 `Retry-After`, no
+  invented severity. ACLED cache is a private operator copy — not a
+  bundled dataset. CodeFred[Agent].
+
 - **Per-satellite footprint pin.** `orbital.footprint` Areas still ride the
   30 s Celestrak cadence but carry `visual.defaultHidden` / `visual.pinKey`.
   They stay off the globe until the operator hovers or selects that sat and

@@ -1,11 +1,12 @@
 // Package humanitarian normalizes country-level displacement aggregates
-// into canonical point annotations.
+// and ReliefWeb disasters into canonical point annotations.
 package humanitarian
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/ion-command/ion-command/collector/internal/events"
@@ -19,6 +20,16 @@ func (d *Domain) ID() string     { return "domain.humanitarian" }
 func (d *Domain) Domain() string { return "humanitarian" }
 
 func (d *Domain) Normalize(_ context.Context, record plugins.RawRecord) ([]events.Envelope, error) {
+	var kind struct {
+		Kind string `json:"kind"`
+	}
+	if json.Unmarshal(record.Payload, &kind) == nil && kind.Kind == "disaster" {
+		return d.normalizeDisaster(record)
+	}
+	return d.normalizeDisplacement(record)
+}
+
+func (d *Domain) normalizeDisplacement(record plugins.RawRecord) ([]events.Envelope, error) {
 	var raw struct {
 		Country     string  `json:"country"`
 		Name        string  `json:"name"`
@@ -52,6 +63,60 @@ func (d *Domain) Normalize(_ context.Context, record plugins.RawRecord) ([]event
 		"display.title":      title,
 		"display.primary":    primary,
 		"display.secondary":  raw.Attribution,
+	}
+	measured := true
+	event.Quality.Measured = &measured
+	return []events.Envelope{event}, nil
+}
+
+func (d *Domain) normalizeDisaster(record plugins.RawRecord) ([]events.Envelope, error) {
+	var raw struct {
+		DisasterID  string  `json:"disasterId"`
+		Title       string  `json:"title"`
+		Status      string  `json:"status"`
+		Glide       string  `json:"glide"`
+		Category    string  `json:"category"`
+		Country     string  `json:"country"`
+		Latitude    float64 `json:"latitude"`
+		Longitude   float64 `json:"longitude"`
+		Attribution string  `json:"attribution"`
+	}
+	if err := json.Unmarshal(record.Payload, &raw); err != nil || raw.DisasterID == "" {
+		return nil, fmt.Errorf("decode disaster record")
+	}
+	event := events.NewEnvelope(record.OriginalID, "humanitarian", "humanitarian.disaster", events.MessageObservation,
+		events.SourceRef{PluginID: record.SourcePluginID, InstanceID: record.SourceInstanceID, OriginalID: record.OriginalID},
+		record.ObservedUTC)
+	event.EntityID = "humanitarian:disaster:" + raw.DisasterID
+	event.Geometry = events.Point(raw.Longitude, raw.Latitude, 0)
+	validUntil := record.ObservedUTC.Add(24 * time.Hour)
+	event.Time.ValidUntilUTC = &validUntil
+	title := strings.TrimSpace(raw.Title)
+	if title == "" {
+		title = raw.DisasterID
+	}
+	primary := strings.TrimSpace(raw.Status)
+	if raw.Category != "" {
+		if primary != "" {
+			primary = raw.Category + "  //  " + primary
+		} else {
+			primary = raw.Category
+		}
+	}
+	secondary := raw.Attribution
+	if raw.Glide != "" {
+		if secondary != "" {
+			secondary = raw.Glide + "  //  " + secondary
+		} else {
+			secondary = raw.Glide
+		}
+	}
+	event.Properties = map[string]any{
+		"visual.icon":        "earthquake",
+		"visual.markerScale": 1.3,
+		"display.title":      title,
+		"display.primary":    primary,
+		"display.secondary":  secondary,
 	}
 	measured := true
 	event.Quality.Measured = &measured

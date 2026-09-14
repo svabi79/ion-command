@@ -40,6 +40,8 @@ messages itself — that is the domain's job.
 | `weather.nhc` | NOAA NHC active tropical-cyclone centres and 5-day forecast cones | HTTP poll | **on** | no | public domain; Atlantic and eastern Pacific only |
 | `space.pads` | Launch Library 2 Earth spaceports | HTTP poll | **on** | optional (`apiKey` as `Authorization: Token`) | daily floor; shares the LL2 15/hour budget |
 | `humanitarian.hapi` | UNHCR refugee totals via HDX HAPI (host and origin countries) | HTTP poll | **off** (needs an app identifier) | **yes** (identifier in `local.json`) | fail-closed without identifier; CC BY-IGO |
+| `humanitarian.reliefweb` | OCHA ReliefWeb current/alert disasters | HTTP poll | **off** (needs a pre-approved appname) | **yes** (appname as `apiKey` in `local.json`) | fail-closed without appname; overlaps GDACS/EONET |
+| `conflict.acled` | ACLED recent conflict events | HTTP poll | **off** (needs myACLED credentials) | **yes** (OAuth login/password or Bearer `apiKey` in `local.json`) | fail-closed without credentials; operator-keyed, not a bundled dataset |
 | `hamradio.rbn` | Reverse Beacon Network | telnet | **on** (placeholder login `HB9HSJ`) | **yes** (your callsign in `local.json`) | no published licence |
 | `hamradio.dxcluster` | DX cluster spots (DXSpider / AR-Cluster / CC Cluster) | telnet | **on** (placeholder login `HB9HSJ`) | **yes** (your callsign in `local.json`) | no published licence; no single canonical node - address is configured |
 | `hamradio.wspr` | WSPR reception reports via wspr.live | HTTP poll | **on** | no | non-commercial use only; 20 req/min |
@@ -70,7 +72,8 @@ envelope. Domains own the vocabulary; nothing above them does.
 | `solar` | `solar.grayline` | `solar.grayline` |
 | `space` | `space.launch`, `space.pad` | `space.launchlibrary`, `space.pads` |
 | `geography` | `geography.region`, `geography.border`, `geography.city`, `geography.country`, `geography.landmark`, `geography.river`, `geography.cable`, `geography.landing` | `geography.naturalearth`, `geography.cables` |
-| `humanitarian` | `humanitarian.displacement` | `humanitarian.hapi` |
+| `humanitarian` | `humanitarian.displacement`, `humanitarian.disaster` | `humanitarian.hapi`, `humanitarian.reliefweb` |
+| `conflict` | `conflict.event` | `conflict.acled` |
 | `wildfire` | `wildfire.detection` | `wildfire.firms` |
 | `maritime` | `maritime.vessel`, `maritime.chokepoint`, `maritime.disruption` | `ais.aisstream`, `maritime.portwatch` |
 

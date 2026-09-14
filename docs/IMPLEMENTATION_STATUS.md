@@ -102,8 +102,9 @@ The component list is in [COMPONENTS.md](COMPONENTS.md) — not repeated here.
   Earth spaceports, Open-Meteo, Natural Earth 110m cartography (borders,
   cities, rivers, landmarks), TeleGeography cables, NASA
   EONET, GDACS, gpsjam.org, OpenAQ, IMF PortWatch, NOAA NHC storm centres,
-  HDX HAPI displacement) are implemented as Go source plugins against the
-  upstream APIs. OpenAQ and HAPI ship disabled (need an operator
+  HDX HAPI displacement, ReliefWeb disasters, ACLED conflict events) are
+  implemented as Go source plugins against the
+  upstream APIs. OpenAQ, HAPI, ReliefWeb and ACLED ship disabled (need an operator
   identifier). gpsjam hex centres are an approximate independent H3 decode,
   honest at globe scale, not a surveyed hex. NOAA NHC now also fetches the
   official 5-day forecast-cone KMZ linked from `CurrentStorms.json` and

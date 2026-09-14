@@ -29,6 +29,15 @@
     {
       "id": "hapi-displacement",
       "apiKey": "YOUR_HDX_HAPI_APP_IDENTIFIER"
+    },
+    {
+      "id": "reliefweb-disasters",
+      "apiKey": "YOUR_APPROVED_RELIEFWEB_APPNAME"
+    },
+    {
+      "id": "acled-events",
+      "login": "YOUR_MYACLED_EMAIL",
+      "password": "YOUR_MYACLED_PASSWORD"
     }
   ]
 }
