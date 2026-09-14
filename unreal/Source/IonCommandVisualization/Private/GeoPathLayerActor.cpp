@@ -249,7 +249,9 @@ bool AGeoPathLayerActor::Supports(const FGeoMessageEnvelope& Message) const
     {
         return false;
     }
-    const bool bCartographyType = Message.SemanticType == TEXT("geography.border") || Message.SemanticType == TEXT("geography.river");
+    const bool bCartographyType = Message.SemanticType == TEXT("geography.border")
+        || Message.SemanticType == TEXT("geography.river")
+        || Message.SemanticType == TEXT("geography.eez");
     return PathRole == EGeoPathLayerRole::Cartography ? bCartographyType : !bCartographyType;
 }
 
@@ -617,7 +619,7 @@ FGeoLayerManifest AGeoPathLayerActor::CreateLayerManifest() const
     Manifest.LayerId = GetOverlayLayerId();
     Manifest.DisplayName = PathRole == EGeoPathLayerRole::Cartography ? TEXT("Country Borders") : TEXT("Geospatial Paths");
     Manifest.AcceptedSemanticTypes = PathRole == EGeoPathLayerRole::Cartography
-        ? TArray<FString>{TEXT("geography.border"), TEXT("geography.river")}
+        ? TArray<FString>{TEXT("geography.border"), TEXT("geography.river"), TEXT("geography.eez")}
         : TArray<FString>{TEXT("geography.cable")};
     Manifest.GeometryTypes = {EGeoGeometryType::LineString, EGeoGeometryType::MultiLineString};
     Manifest.bSupportsAggregation = false;

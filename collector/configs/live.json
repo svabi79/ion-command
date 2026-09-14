@@ -39,7 +39,22 @@
       "solar.grayline",
       "radio.activity",
       "aprs.station",
-      "aprs.object"
+      "aprs.object",
+      "weather.alert",
+      "weather.outlook",
+      "aviation.sigmet",
+      "aviation.airmet",
+      "aviation.airspace",
+      "aviation.airport",
+      "geophysics.volcano",
+      "geophysics.earthquake",
+      "geography.eez",
+      "geography.plant",
+      "geography.outage",
+      "humanitarian.site",
+      "orbital.groundstation",
+      "maritime.fishing",
+      "conflict.event"
     ]
   },
   "recording": {
@@ -239,6 +254,102 @@
       "type": "humanitarian.hapi",
       "enabled": false,
       "pollSeconds": 86400
+    },
+    {
+      "id": "nws-alerts",
+      "type": "weather.nws",
+      "enabled": true,
+      "pollSeconds": 300
+    },
+    {
+      "id": "aviationweather-hazards",
+      "type": "aviation.aviationweather",
+      "enabled": true,
+      "pollSeconds": 300
+    },
+    {
+      "id": "spc-outlooks",
+      "type": "weather.spc",
+      "enabled": true,
+      "pollSeconds": 900
+    },
+    {
+      "id": "usgs-volcanoes",
+      "type": "geophysics.usgsvolcano",
+      "enabled": true,
+      "pollSeconds": 900
+    },
+    {
+      "id": "gvp-holocene",
+      "type": "geophysics.gvp",
+      "enabled": true,
+      "pollSeconds": 86400
+    },
+    {
+      "id": "emsc-seismic",
+      "type": "earthquake.emsc",
+      "enabled": true,
+      "pollSeconds": 180
+    },
+    {
+      "id": "ourairports-airports",
+      "type": "aviation.ourairports",
+      "enabled": true,
+      "pollSeconds": 86400
+    },
+    {
+      "id": "marineregions-eez",
+      "type": "geography.marineregions",
+      "enabled": true,
+      "pollSeconds": 604800
+    },
+    {
+      "id": "wri-powerplants",
+      "type": "geography.powerplants",
+      "enabled": true,
+      "pollSeconds": 604800
+    },
+    {
+      "id": "satnogs-stations",
+      "type": "orbital.satnogs",
+      "enabled": true,
+      "pollSeconds": 21600
+    },
+    {
+      "id": "ioda-outages",
+      "type": "geography.ioda",
+      "enabled": true,
+      "pollSeconds": 900
+    },
+    {
+      "id": "unhcr-poc",
+      "type": "humanitarian.unhcr",
+      "enabled": true,
+      "pollSeconds": 86400
+    },
+    {
+      "id": "openaip-airspace",
+      "type": "aviation.openaip",
+      "enabled": false,
+      "pollSeconds": 86400
+    },
+    {
+      "id": "ucdp-ged",
+      "type": "conflict.ucdp",
+      "enabled": false,
+      "pollSeconds": 21600
+    },
+    {
+      "id": "cloudflare-radar",
+      "type": "geography.cloudflare",
+      "enabled": false,
+      "pollSeconds": 900
+    },
+    {
+      "id": "gfw-fishing",
+      "type": "maritime.gfw",
+      "enabled": false,
+      "pollSeconds": 21600
     }
   ]
 }

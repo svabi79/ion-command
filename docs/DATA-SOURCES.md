@@ -41,6 +41,22 @@ non-commercial only.
 | **Brandmeister** | DMR last-heard activity from the public Brandmeister Socket.IO feed (`api.brandmeister.network`, path `/lh/socket.io`). No credentials. Talkgroup completions are placed at AD1C country-file centroids (country-level accuracy). No formal data licence published; hobby-scale, one connection, emit-throttled. Contact Brandmeister before any commercial or bulk-redistribution use. | [brandmeister.network](https://brandmeister.network) · [last-heard API](https://wiki.brandmeister.network/index.php/Code_Examples/LastHeard/Python) |
 | **The Space Devs / Launch Library 2 (locations)** | Earth spaceport coordinates from the same Launch Library 2 catalogue as upcoming launches. Anonymous access is limited to 15 calls/hour; this source polls daily. | [ll.thespacedevs.com](https://ll.thespacedevs.com) |
 | **UNHCR / HDX HAPI** | Current-year refugee totals (population group REF, all ages and genders) from the OCHA Humanitarian API. Host and origin countries with at least 100,000 people are placed at public-domain country centroids. Requires a free app identifier (application name + email, not a secret). Licensed **CC BY-IGO**; credit UNHCR and HDX HAPI. Disabled until the operator supplies an identifier in `local.json`. | [hapi.humdata.org](https://hapi.humdata.org) · [HAPI docs](https://docs.humdata.org/build/hdx-apis/hapi/how-to-query-hapi) |
+| **NOAA / NWS** | Active weather alerts from `api.weather.gov` (public domain, US Government work). Identifying User-Agent required. Most alerts are zone/county references with `geometry: null` and are skipped; only native GeoJSON Areas are drawn. NOAA does not endorse this project. Not a warning system for safety decisions. | [weather.gov services](https://www.weather.gov/documentation/services-web-api) |
+| **AviationWeather Center** | International SIGMET polygons and G-AIRMET GeoJSON from aviationweather.gov. Public US Government work. Closed rings become Areas; **open G-AIRMET contour LineStrings are dropped** (no contour renderer; they would otherwise pollute CABLES). | [aviationweather.gov/data/api](https://aviationweather.gov/data/api/) |
+| **NOAA / SPC** | Convective categorical outlook GeoJSON (day 1–3) from the Storm Prediction Center. Public domain. Coarsened MultiPolygons. | [spc.noaa.gov/gis](https://www.spc.noaa.gov/gis/) |
+| **U.S. Geological Survey (volcanoes)** | Volcano status points from the USGS Volcano Hazards Program GeoJSON. Public domain. Alert level / color code ride the existing volcano feed. The HANS/VONA `getRecent` endpoint returned 404 when probed and is not fetched. | [volcanoes.usgs.gov](https://volcanoes.usgs.gov/vsc/api/volcanoApi/geojson) |
+| **Smithsonian GVP** | Holocene volcano catalogue via the GVP-VOTW WFS. Attribution: Smithsonian Institution Global Volcanism Program. The WFS host can time out from some networks; the collector keeps a disk cache and retries daily. | [volcano.si.edu](https://volcano.si.edu/database/webservices.cfm) |
+| **EMSC / CSEM** | Seismic events from the Euro-Mediterranean Seismological Centre FDSN JSON feed. Second quake feed alongside USGS; HTTP poll, not the websocket. | [seismicportal.eu](https://www.seismicportal.eu/webservices.html) |
+| **OurAirports** | Airport coordinates from the public OurAirports CSV. The publisher places this dump in the **public domain**. ION COMMAND keeps a local cache and only draws large airports plus medium airports with scheduled service (cap 1200). | [ourairports.com/data](https://ourairports.com/data/) |
+| **Marine Regions / VLIZ** | Exclusive Economic Zone 200 NM boundary lines from the Marine Regions WFS. Licensed **CC BY 4.0**. Full-resolution polygons are not fetched; lines are paged, coarsened (~40 km / 48 vertices) and capped at 220 so the globe stays interactive. Credit Flanders Marine Institute (VLIZ). | [marineregions.org](https://www.marineregions.org/) |
+| **WRI Global Power Plant Database** | Power-plant points from the World Resources Institute GPPD CSV. Licensed **CC BY 4.0**. ION COMMAND keeps plants at or above 500 MW (cap 600) and caches the CSV on disk. | [github.com/wri/global-power-plant-database](https://github.com/wri/global-power-plant-database) |
+| **SatNOGS / Libre Space** | Ground-station locations from the SatNOGS Network API. Hobby-scale poll of **Online** stations only (cap 400). Attribute SatNOGS / Libre Space Foundation. | [network.satnogs.org](https://network.satnogs.org/api/stations/) |
+| **IODA (Georgia Tech)** | Country-level internet-outage alerts from the Internet Outage Detection and Analysis API. Copyright **Georgia Institute of Technology. All Rights Reserved.** Hobby display only; **do not republish the on-disk cache**. ASN alerts are skipped (no geography). Country codes are joined to public-domain centroids. | [ioda.inetintel.cc.gatech.edu](https://api.ioda.inetintel.cc.gatech.edu/v2/) |
+| **UNHCR GIS** | Persons-of-concern site points from the UNHCR ArcGIS FeatureServer GeoJSON. Attribute **UNHCR**. Active/open sites only; cap 400. Locations, not invented population counts. | [gis.unhcr.org](https://gis.unhcr.org/) |
+| **OpenAIP** | Airspace polygons from OpenAIP. Licensed **CC BY-NC**. Requires an API key (`x-openaip-api-key`). Fail-closed and disabled in tracked `live.json`. Geometry is coarsened (cap 40 FIR/UIR/TMA/CTR-style areas). Airports/obstacles are not fetched. | [docs.openaip.net](https://docs.openaip.net/) |
+| **UCDP** | Georeferenced organized-violence events from the Uppsala Conflict Data Program GED API (version 26.1). Token required (`x-ucdp-access-token`). Fail-closed and disabled until the operator supplies one. Recent page only (cap 80). | [ucdp.uu.se/apidocs](https://ucdp.uu.se/apidocs/) |
+| **Cloudflare Radar** | Internet-outage annotations from Cloudflare Radar. Bearer token required. Fail-closed. ISO-2 codes are mapped to country centroids (not Natural Earth polygons). | [developers.cloudflare.com/radar](https://developers.cloudflare.com/radar/investigate/outages/) |
+| **Global Fishing Watch** | Fishing-event points from the GFW Events API. Licensed **CC BY-NC**. Bearer token required. Fail-closed. **Points / coarse cells only — the 4Wings SAR/fishing-presence raster is not fetched** (no Field/Raster geometry). | [api-doc.globalfishingwatch.org](https://api-doc.globalfishingwatch.org/) |
 | **AIS Stream (aisstream.io)** | Vessel AIS data from aisstream.io, free with a self-service API key. No commercial-use restriction or redistribution licence is published as of this writing; treated with the same hobby-scale, attributed posture as the other unlicensed feeds below until the operator confirms otherwise. Direct browser connections to the stream are against its terms — ION COMMAND already only connects from the collector process, never from client JavaScript, so this is satisfied by the existing architecture. See [below](#enabling-ais-ships-aisstreamio) for the full picture. | [aisstream.io](https://aisstream.io) · [docs](https://aisstream.io/documentation) |
 | **EUMETSAT** | Cloud imagery ©EUMETSAT 2026. Governed by the EUMETSAT Data Policy, not Creative Commons. | [Terms of use](https://www.eumetsat.int/about-us/terms-use) |
 | **AWS Terrain Tiles** | Elevation for the close-orbit relief, from the AWS Open Data terrain tiles (the Mapzen "terrarium" encoding), fetched at runtime and cached locally. No account or key. The underlying data is a public-domain composite — chiefly SRTM (NASA/USGS), the USGS 3DEP and NED, Canada's CDEM, and the EU's EU-DEM — assembled by Mapzen and hosted by the AWS Open Data programme. Individual source licences are permissive or public domain; credit "elevation data from the AWS Terrain Tiles, based on SRTM and national elevation datasets" where relief is shown to third parties. `-IonNoTileImagery` disables the fetch. | [registry.opendata.aws/terrain-tiles](https://registry.opendata.aws/terrain-tiles/) |
@@ -89,6 +105,40 @@ What each source actually does, in the order it appears in `live.json`:
 | `hamradio.wspr` | `db1.wspr.live` HTTP/ClickHouse `?query=` interface | 300 s (floor 120 s) | `hamradio` spots | yes |
 | `hamradio.brandmeister` | `wss://api.brandmeister.network/lh/socket.io` (Engine.IO / Socket.IO last-heard) | streaming, emit-throttled | `hamradio` → `radio.activity` | yes |
 | `solar.grayline` | derived solar terminator / nautical-twilight band | 120 s | `solar.grayline` | yes |
+| `weather.nws` | api.weather.gov `/alerts/active` GeoJSON | 300 s (floor 120 s) | `weather.alert` (Area; native polygons only, cap 40) | yes |
+| `aviation.aviationweather` | aviationweather.gov SIGMET + G-AIRMET GeoJSON | 300 s (floor 120 s) | `aviation.sigmet`, `aviation.airmet` (closed rings only) | yes |
+| `weather.spc` | SPC day 1–3 categorical outlook GeoJSON | 900 s (floor 300 s) | `weather.outlook` (Area, cap 12) | yes |
+| `geophysics.usgsvolcano` | volcanoes.usgs.gov volcano GeoJSON | 900 s (floor 300 s) | `geophysics.volcano` | yes |
+| `geophysics.gvp` | Smithsonian GVP-VOTW WFS GeoJSON | 86400 s (floor 6 h) | `geophysics.volcano` (catalogue) | yes (WFS may time out; cache) |
+| `earthquake.emsc` | seismicportal.eu FDSN JSON | 180 s (floor 60 s) | `geophysics.earthquake` | yes |
+| `aviation.ourairports` | OurAirports `airports.csv` | 86400 s (floor 6 h) | `aviation.airport` (cap 1200) | yes |
+| `geography.marineregions` | Marine Regions WFS `eez_boundaries` 200 NM | 604800 s (floor 24 h) | `geography.eez` (LineString, coarsened, cap 220) | yes |
+| `geography.powerplants` | WRI GPPD CSV | 604800 s (floor 24 h) | `geography.plant` (≥500 MW, cap 600) | yes |
+| `orbital.satnogs` | network.satnogs.org `/api/stations/` | 21600 s (floor 1 h) | `orbital.groundstation` (Online, cap 400) | yes |
+| `geography.ioda` | IODA `/v2/outages/alerts` country entities | 900 s (floor 300 s) | `geography.outage` (ISO centroid) | yes |
+| `humanitarian.unhcr` | UNHCR PoC FeatureServer GeoJSON | 86400 s (floor 6 h) | `humanitarian.site` (active/open, cap 400) | yes |
+| `aviation.openaip` | api.core.openaip.net airspaces | 86400 s (floor 6 h) | `aviation.airspace` (coarsened, cap 40) | **no** (API key) |
+| `conflict.ucdp` | ucdpapi GED 26.1 | 21600 s (floor 1 h) | `conflict.event` (cap 80) | **no** (token) |
+| `geography.cloudflare` | Cloudflare Radar outage annotations | 900 s (floor 300 s) | `geography.outage` (ISO centroid, cap 40) | **no** (bearer) |
+| `maritime.gfw` | GFW `/v3/events` fishing events | 21600 s (floor 1 h) | `maritime.fishing` (Points, cap 200) | **no** (bearer; CC BY-NC) |
+
+## OSINT scout caps
+
+These layers are globe-scale, not GIS-desktop resolution:
+
+- **NWS:** only features with native polygons; Test Message / KEEPALIVE skipped; 40 areas, 32 vertices, ~15 km decimation.
+- **SIGMET / G-AIRMET:** 50 SIGMET areas + 20 closed G-AIRMET rings. Open contour LineStrings are not emitted.
+- **SPC:** day 1–3 categorical outlooks, 12 areas, 40 vertices.
+- **EEZ:** 200 NM lines only (not filled Areas — the area layer would choke). 8 WFS pages × 40 features, 40 km / 48 vertices, cap 220. Overlay **BORDERS** / `B`, not CABLES.
+- **Airspaces (OpenAIP):** 40 coarsened polygons when a key is present.
+- **Airports:** large + scheduled medium, cap 1200.
+- **Power plants:** ≥500 MW, cap 600.
+- **SatNOGS:** Online stations, cap 400.
+- **UNHCR PoC:** active/open, cap 400.
+- **GFW:** fishing-event Points only. SAR presence is a 4Wings raster and is not built.
+- **HANS/VONA:** skipped (API 404). USGS volcano GeoJSON already carries alert fields.
+
+IODA's cache must stay local. Georgia Tech forbids republication.
 
 ## A word about Blitzortung
 

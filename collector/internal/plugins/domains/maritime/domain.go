@@ -134,6 +134,9 @@ func (d *Domain) Normalize(_ context.Context, record plugins.RawRecord) ([]event
 	if kind.Kind == "disruption" {
 		return d.normalizeDisruption(record)
 	}
+	if kind.Kind == "fishing" {
+		return d.normalizeFishing(record)
+	}
 	if kind.MMSI <= 0 {
 		return nil, fmt.Errorf("ais record requires a positive mmsi")
 	}
@@ -501,4 +504,44 @@ func etaText(month, day, hour, minute int) string {
 		return date
 	}
 	return fmt.Sprintf("%s %02d:%02dZ", date, hour, minute)
+}
+
+func (d *Domain) normalizeFishing(record plugins.RawRecord) ([]events.Envelope, error) {
+	var raw struct {
+		CellID      string  `json:"cellId"`
+		Kind        string  `json:"presenceKind"`
+		Hours       float64 `json:"hours"`
+		Latitude    float64 `json:"latitude"`
+		Longitude   float64 `json:"longitude"`
+		Attribution string  `json:"attribution"`
+	}
+	if err := json.Unmarshal(record.Payload, &raw); err != nil || raw.CellID == "" {
+		return nil, fmt.Errorf("decode maritime fishing cell")
+	}
+	event := events.NewEnvelope(record.OriginalID, "maritime", "maritime.fishing", events.MessageObservation,
+		events.SourceRef{PluginID: record.SourcePluginID, InstanceID: record.SourceInstanceID, OriginalID: record.OriginalID},
+		record.ObservedUTC)
+	event.EntityID = "maritime:fishing:" + raw.CellID
+	event.Geometry = events.Point(raw.Longitude, raw.Latitude, 0)
+	validUntil := record.ObservedUTC.Add(48 * time.Hour)
+	event.Time.ValidUntilUTC = &validUntil
+	title := "Fishing presence"
+	if strings.Contains(strings.ToLower(raw.Kind), "sar") {
+		title = "SAR presence"
+	}
+	primary := raw.Kind
+	if raw.Hours > 0 {
+		primary = fmt.Sprintf("%.1f vessel-hours", raw.Hours)
+	}
+	event.Properties = map[string]any{
+		"visual.icon":        "vessel",
+		"visual.markerScale": 0.7,
+		"visual.tint":        "0.28,0.55,0.48",
+		"display.title":      title,
+		"display.primary":    primary,
+		"display.secondary":  raw.Attribution,
+	}
+	measured := true
+	event.Quality.Measured = &measured
+	return []events.Envelope{event}, nil
 }

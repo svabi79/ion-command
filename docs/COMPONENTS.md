@@ -47,6 +47,22 @@ messages itself — that is the domain's job.
 | `ais.aisstream` | aisstream.io global AIS vessel stream | WebSocket | **on** (idles without a key) | **yes** (free API key in `local.json`) | no explicit commercial/redistribution restriction found; hobby-scale posture applied anyway |
 | `aprs.is` | APRS-IS packet stream | TCP | **on** (placeholder login `HB9HSJ`) | **yes** (callsign in `local.json`; passcode fixed at read-only `-1`) | no published data licence; be a good citizen (see below) |
 | `solar.grayline` | Derived solar terminator / nautical-twilight band | in-process | **on** | no | no upstream fetch |
+| `weather.nws` | NWS active alerts with native GeoJSON polygons | HTTP poll | **on** | no | public domain; zone/county alerts without geometry are skipped; cap 40 |
+| `aviation.aviationweather` | AviationWeather SIGMET + G-AIRMET | HTTP poll | **on** | no | public; open G-AIRMET contours dropped (no contour renderer) |
+| `weather.spc` | SPC convective categorical outlooks (day 1–3) | HTTP poll | **on** | no | public domain; coarsened MultiPolygons |
+| `geophysics.usgsvolcano` | USGS volcano status points | HTTP poll | **on** | no | public domain; HANS/VONA endpoint 404, not fetched |
+| `geophysics.gvp` | Smithsonian GVP Holocene volcano catalogue (WFS→GeoJSON) | HTTP poll | **on** | no | attribution required; WFS can timeout — disk cache is used |
+| `earthquake.emsc` | EMSC FDSN seismic events | HTTP poll | **on** | no | second quake feed alongside USGS; HTTP poll, not websocket |
+| `aviation.ourairports` | OurAirports CSV (large + scheduled medium) | HTTP poll | **on** | no | public domain CSV; cached; cap 1200 |
+| `geography.marineregions` | Marine Regions 200 NM EEZ boundary lines | HTTP poll | **on** | no | CC BY 4.0; coarsened LineStrings, cap 220 |
+| `geography.powerplants` | WRI Global Power Plant Database | HTTP poll | **on** | no | CC BY 4.0; ≥500 MW, cap 600 |
+| `orbital.satnogs` | SatNOGS ground stations (Online) | HTTP poll | **on** | no | Online stations only; cap 400 |
+| `geography.ioda` | IODA country internet-outage alerts | HTTP poll | **on** | no | Georgia Tech copyright; hobby display; do not republish cache |
+| `humanitarian.unhcr` | UNHCR persons-of-concern site points | HTTP poll | **on** | no | attribute UNHCR; active/open sites; cap 400 |
+| `aviation.openaip` | OpenAIP airspace polygons | HTTP poll | **off** (needs API key) | **yes** (`apiKey` in `local.json`) | CC BY-NC; fail-closed; coarsened, cap 40 |
+| `conflict.ucdp` | UCDP GED conflict events | HTTP poll | **off** (needs token) | **yes** (`apiKey` in `local.json`) | fail-closed; recent page; cap 80 |
+| `geography.cloudflare` | Cloudflare Radar outage annotations | HTTP poll | **off** (needs bearer) | **yes** (`apiKey` in `local.json`) | fail-closed; ISO→centroid; cap 40 |
+| `maritime.gfw` | Global Fishing Watch fishing events | HTTP poll | **off** (needs bearer) | **yes** (`apiKey` in `local.json`) | CC BY-NC; fail-closed; Points only, no 4Wings raster |
 | `mock.*` | deterministic synthetic traffic | in-process | off | no | development and tests only |
 
 Terms and attribution in full: [DATA-SOURCES.md](DATA-SOURCES.md).
@@ -61,18 +77,19 @@ envelope. Domains own the vocabulary; nothing above them does.
 | --- | --- | --- |
 | `hamradio` | `radio.reception`, `radio.station`, `radio.activity` | `pskreporter.mqtt`, `hamradio.rbn`, `wsjtx.udp`, `hamradio.dxcluster`, `hamradio.wspr`, `hamradio.brandmeister` |
 | `aprs` | `aprs.station`, `aprs.object` | `aprs.is` |
-| `aviation` | `aviation.aircraft`, `aviation.interference` | `aviation.adsb`, `aviation.opensky`, `aviation.gpsjam` |
-| `weather` | `weather.lightning`, `weather.observation`, `weather.airquality`, `weather.storm`, `weather.storm.cone` | `lightning.blitzortung`, `weather.openmeteo`, `weather.openaq`, `weather.nhc` |
+| `aviation` | `aviation.aircraft`, `aviation.interference`, `aviation.sigmet`, `aviation.airmet`, `aviation.airspace`, `aviation.airport` | `aviation.adsb`, `aviation.opensky`, `aviation.gpsjam`, `aviation.aviationweather`, `aviation.ourairports`, `aviation.openaip` |
+| `weather` | `weather.lightning`, `weather.observation`, `weather.airquality`, `weather.storm`, `weather.storm.cone`, `weather.alert`, `weather.outlook` | `lightning.blitzortung`, `weather.openmeteo`, `weather.openaq`, `weather.nhc`, `weather.nws`, `weather.spc` |
 | `spaceweather` | `spaceweather.state` | `spaceweather.swpc` |
 | `ionosphere` | `ionosphere.sounding` | `ionosonde.kc2g` |
-| `geophysics` | `geophysics.earthquake`, `geophysics.event` | `earthquake.usgs`, `geophysics.eonet`, `geophysics.gdacs` |
-| `orbital` | `orbital.position`, `orbital.pass`, `orbital.footprint` | `orbital.celestrak` |
+| `geophysics` | `geophysics.earthquake`, `geophysics.event`, `geophysics.volcano` | `earthquake.usgs`, `earthquake.emsc`, `geophysics.eonet`, `geophysics.gdacs`, `geophysics.usgsvolcano`, `geophysics.gvp` |
+| `orbital` | `orbital.position`, `orbital.pass`, `orbital.footprint`, `orbital.groundstation` | `orbital.celestrak`, `orbital.satnogs` |
 | `solar` | `solar.grayline` | `solar.grayline` |
 | `space` | `space.launch`, `space.pad` | `space.launchlibrary`, `space.pads` |
-| `geography` | `geography.region`, `geography.border`, `geography.city`, `geography.country`, `geography.landmark`, `geography.river`, `geography.cable`, `geography.landing` | `geography.naturalearth`, `geography.cables` |
-| `humanitarian` | `humanitarian.displacement` | `humanitarian.hapi` |
+| `geography` | `geography.region`, `geography.border`, `geography.city`, `geography.country`, `geography.landmark`, `geography.river`, `geography.cable`, `geography.landing`, `geography.eez`, `geography.plant`, `geography.outage` | `geography.naturalearth`, `geography.cables`, `geography.marineregions`, `geography.powerplants`, `geography.ioda`, `geography.cloudflare` |
+| `humanitarian` | `humanitarian.displacement`, `humanitarian.site` | `humanitarian.hapi`, `humanitarian.unhcr` |
 | `wildfire` | `wildfire.detection` | `wildfire.firms` |
-| `maritime` | `maritime.vessel`, `maritime.chokepoint`, `maritime.disruption` | `ais.aisstream`, `maritime.portwatch` |
+| `maritime` | `maritime.vessel`, `maritime.chokepoint`, `maritime.disruption`, `maritime.fishing` | `ais.aisstream`, `maritime.portwatch`, `maritime.gfw` |
+| `conflict` | `conflict.event` | `conflict.ucdp` |
 
 ## Context plugins
 

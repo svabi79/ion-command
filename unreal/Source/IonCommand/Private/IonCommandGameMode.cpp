@@ -70,7 +70,7 @@ void AIonCommandGameMode::BeginPlay()
         {
             Cartography->PathRole = EGeoPathLayerRole::Cartography;
             Cartography->PathThickness = 0.008;
-            Cartography->MaxVisiblePaths = 400;
+            Cartography->MaxVisiblePaths = 800;
             UGameplayStatics::FinishSpawningActor(Cartography, Identity);
         }
     }

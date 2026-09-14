@@ -56,6 +56,13 @@ remaining `Field` geometry work. `Area` is now rendered.
 | **Tropical storm tracks and cones** | NOAA NHC | `Track` + `Area` — **centres and 5-day cones shipped** as `weather.nhc` / `weather.storm` + `weather.storm.cone` |
 | **Submarine cables** — context for global connectivity | TeleGeography | `LineString` / `MultiLineString` — **shipped** as real routes + landing points (`geography.cables`); color = planned vs in-service length band |
 | **Country borders and place labels** | Natural Earth 110m (bundled) | `LineString` borders + river centerlines + Point labels — **shipped** as `geography.naturalearth` (`geography.border` / `.city` / `.country` / `.river` / `.landmark`); overlay **BORDERS** / `B` |
+| **NWS / SIGMET / SPC weather areas** | api.weather.gov, AviationWeather, SPC GIS | `Area` — **shipped** (`weather.nws`, `aviation.aviationweather`, `weather.spc`); open G-AIRMET contours dropped |
+| **Volcano catalogue + status** | USGS volcano GeoJSON, Smithsonian GVP WFS | `Point` — **shipped** (`geophysics.usgsvolcano`, `geophysics.gvp`); HANS/VONA 404 skipped |
+| **EMSC seismic** | EMSC FDSN JSON | `Point` — **shipped** as `earthquake.emsc` → `geophysics.earthquake` |
+| **Airports / SatNOGS / power plants / UNHCR PoC** | OurAirports CSV, SatNOGS API, WRI GPPD, UNHCR FeatureServer | `Point` — **shipped**; caps in DATA-SOURCES |
+| **Marine Regions EEZ** | VLIZ WFS 200 NM lines | `LineString` — **shipped** coarsened as `geography.eez` on **BORDERS** / `B` |
+| **IODA outages** | IODA country alerts | `Point` at ISO centroids — **shipped**; Georgia Tech copyright, hobby display |
+| **OpenAIP / UCDP / Cloudflare Radar / GFW** | keyed APIs | Fail-closed, off in `live.json` — **shipped** plugins |
 
 ## Wave 4 — the operator's own receiver
 
@@ -75,8 +82,12 @@ cleaner licence or API than we have today):
 
 | Candidate | Why deferred |
 | --- | --- |
-| ReliefWeb disasters | API requires a pre-approved `appname` since November 2025; overlaps GDACS/EONET |
-| ACLED conflict events | Keyed + terms; only acceptable as `local.json` fail-closed, and the globe already has GDACS |
+| ReliefWeb disasters | Left to a parallel implementation run; do not duplicate here. API historically required a pre-approved `appname`. |
+| ACLED conflict events | Left to a parallel implementation run; do not duplicate here. Keyed + terms. |
+| USGS HANS / VONA | `getRecent` returned 404 when probed; USGS volcano GeoJSON already carries alert level / color. |
+| AviationWeather open G-AIRMET contours | LineString contours (FZLVL etc.) have no Area fill and would draw on CABLES; closed rings are kept. |
+| Global Fishing Watch SAR / 4Wings presence | Raster / Field geometry; fishing-event Points are shipped instead (fail-closed). |
+| OpenAIP airports / obstacles | Not fetched — airspace Areas only, coarsened, cap 40. |
 | RainViewer radar | Needs `Field` / raster geometry; terms not a clean hobby overlay |
 | Nuclear facilities / undersea pipelines | No properly licensed, attributable, removable global point bundle found. GEM oil/gas trackers are CC BY 4.0 but download is registration-gated and operator-mediated — not a runtime fetch |
 | NOTAMs | No clean, attributable, hobby-usable global JSON/API (FAA developer portal is keyed and US-centric; ICAO is paid; no scraping) |

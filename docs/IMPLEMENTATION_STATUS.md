@@ -12,8 +12,8 @@ The component list is in [COMPONENTS.md](COMPONENTS.md) — not repeated here.
 
 **Collector**
 
-- Compile-time source/domain/context registries; 11 source types, 8 domains,
-  1 context (see [COMPONENTS.md](COMPONENTS.md))
+- Compile-time source/domain/context registries (see
+  [COMPONENTS.md](COMPONENTS.md))
 - Bounded queue with parallel domain workers and drop/evict metrics
 - Canonical envelope with Point, GreatCircle, LineString/MultiLineString and
   Polygon (Area) geometry, validity windows and generic `display.*` /

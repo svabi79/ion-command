@@ -19,6 +19,7 @@ import (
 	"github.com/ion-command/ion-command/collector/internal/plugins/contexts/hfpropagation"
 	"github.com/ion-command/ion-command/collector/internal/plugins/domains/aprs"
 	"github.com/ion-command/ion-command/collector/internal/plugins/domains/aviation"
+	"github.com/ion-command/ion-command/collector/internal/plugins/domains/conflict"
 	"github.com/ion-command/ion-command/collector/internal/plugins/domains/geography"
 	"github.com/ion-command/ion-command/collector/internal/plugins/domains/geophysics"
 	"github.com/ion-command/ion-command/collector/internal/plugins/domains/hamradio"
@@ -34,31 +35,47 @@ import (
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/adsb"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/ais"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/aprsis"
+	"github.com/ion-command/ion-command/collector/internal/plugins/sources/aviationweather"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/blitzortung"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/brandmeister"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/cables"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/celestrak"
+	"github.com/ion-command/ion-command/collector/internal/plugins/sources/cloudflare"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/dxcluster"
+	"github.com/ion-command/ion-command/collector/internal/plugins/sources/emsc"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/eonet"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/firms"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/gdacs"
+	"github.com/ion-command/ion-command/collector/internal/plugins/sources/gfw"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/gpsjam"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/grayline"
+	"github.com/ion-command/ion-command/collector/internal/plugins/sources/gvp"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/hapi"
+	"github.com/ion-command/ion-command/collector/internal/plugins/sources/ioda"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/kc2g"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/launchlibrary"
+	"github.com/ion-command/ion-command/collector/internal/plugins/sources/marineregions"
 	mocksource "github.com/ion-command/ion-command/collector/internal/plugins/sources/mock"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/naturalearth"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/nhc"
+	"github.com/ion-command/ion-command/collector/internal/plugins/sources/nws"
+	"github.com/ion-command/ion-command/collector/internal/plugins/sources/openaip"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/openaq"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/openmeteo"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/opensky"
+	"github.com/ion-command/ion-command/collector/internal/plugins/sources/ourairports"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/pads"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/portwatch"
+	"github.com/ion-command/ion-command/collector/internal/plugins/sources/powerplants"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/pskreporter"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/rbn"
+	"github.com/ion-command/ion-command/collector/internal/plugins/sources/satnogs"
+	"github.com/ion-command/ion-command/collector/internal/plugins/sources/spc"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/swpc"
+	"github.com/ion-command/ion-command/collector/internal/plugins/sources/ucdp"
+	"github.com/ion-command/ion-command/collector/internal/plugins/sources/unhcr"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/usgs"
+	"github.com/ion-command/ion-command/collector/internal/plugins/sources/usgsvolcano"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/wsjtx"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/wspr"
 	"github.com/ion-command/ion-command/collector/internal/recording"
@@ -86,7 +103,7 @@ func run(configPath, listenAddress string, logger *slog.Logger) error {
 		cfg.Server.ListenAddress = listenAddress
 	}
 	registry := plugins.NewRegistry()
-	for _, domain := range []plugins.Domain{hamradio.New(), weather.New(), spaceweather.New(), ionosphere.New(), geophysics.New(), orbital.New(), aviation.New(), wildfire.New(), maritime.New(), aprs.New(), space.New(), geography.New(), humanitarian.New(), solar.New()} {
+	for _, domain := range []plugins.Domain{hamradio.New(), weather.New(), spaceweather.New(), ionosphere.New(), geophysics.New(), orbital.New(), aviation.New(), wildfire.New(), maritime.New(), aprs.New(), space.New(), geography.New(), humanitarian.New(), solar.New(), conflict.New()} {
 		if err := registry.RegisterDomain(domain); err != nil {
 			return err
 		}
@@ -161,6 +178,38 @@ func run(configPath, listenAddress string, logger *slog.Logger) error {
 			source, err = brandmeister.New(sourceConfig, logger)
 		case sourceConfig.Type == "solar.grayline":
 			source, err = grayline.New(sourceConfig, logger)
+		case sourceConfig.Type == "weather.nws":
+			source, err = nws.New(sourceConfig, logger)
+		case sourceConfig.Type == "aviation.aviationweather":
+			source, err = aviationweather.New(sourceConfig, logger)
+		case sourceConfig.Type == "weather.spc":
+			source, err = spc.New(sourceConfig, logger)
+		case sourceConfig.Type == "geophysics.usgsvolcano":
+			source, err = usgsvolcano.New(sourceConfig, logger)
+		case sourceConfig.Type == "geophysics.gvp":
+			source, err = gvp.New(sourceConfig, logger)
+		case sourceConfig.Type == "earthquake.emsc":
+			source, err = emsc.New(sourceConfig, logger)
+		case sourceConfig.Type == "aviation.ourairports":
+			source, err = ourairports.New(sourceConfig, logger)
+		case sourceConfig.Type == "geography.marineregions":
+			source, err = marineregions.New(sourceConfig, logger)
+		case sourceConfig.Type == "geography.powerplants":
+			source, err = powerplants.New(sourceConfig, logger)
+		case sourceConfig.Type == "orbital.satnogs":
+			source, err = satnogs.New(sourceConfig, logger)
+		case sourceConfig.Type == "geography.ioda":
+			source, err = ioda.New(sourceConfig, logger)
+		case sourceConfig.Type == "humanitarian.unhcr":
+			source, err = unhcr.New(sourceConfig, logger)
+		case sourceConfig.Type == "aviation.openaip":
+			source, err = openaip.New(sourceConfig, logger)
+		case sourceConfig.Type == "conflict.ucdp":
+			source, err = ucdp.New(sourceConfig, logger)
+		case sourceConfig.Type == "geography.cloudflare":
+			source, err = cloudflare.New(sourceConfig, logger)
+		case sourceConfig.Type == "maritime.gfw":
+			source, err = gfw.New(sourceConfig, logger)
 		default:
 			err = fmt.Errorf("unknown source type %q", sourceConfig.Type)
 		}

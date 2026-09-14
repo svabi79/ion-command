@@ -92,6 +92,7 @@ namespace
             {TEXT("humanitarian"), TEXT("station")},
             {TEXT("maritime"), TEXT("vessel")},
             {TEXT("wildfire"), TEXT("wildfire")},
+            {TEXT("conflict"), TEXT("earthquake")},
         };
         return Fallback;
     }

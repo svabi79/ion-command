@@ -44,6 +44,12 @@ func (d *Domain) Normalize(_ context.Context, record plugins.RawRecord) ([]event
 		return d.country(record)
 	case "peak", "landmark":
 		return d.landmark(record)
+	case "eez":
+		return d.eez(record)
+	case "plant":
+		return d.plant(record)
+	case "outage":
+		return d.outage(record)
 	default:
 		return nil, fmt.Errorf("geography record has unknown kind %q", kind.Kind)
 	}
@@ -254,13 +260,13 @@ func (d *Domain) country(record plugins.RawRecord) ([]events.Envelope, error) {
 
 func (d *Domain) landmark(record plugins.RawRecord) ([]events.Envelope, error) {
 	var raw struct {
-		PlaceID    string  `json:"placeId"`
-		Name       string  `json:"name"`
-		Kind       string  `json:"kind"`
-		Latitude   float64 `json:"latitude"`
-		Longitude  float64 `json:"longitude"`
-		Elevation  int     `json:"elevation"`
-		LOD        int     `json:"lod"`
+		PlaceID   string  `json:"placeId"`
+		Name      string  `json:"name"`
+		Kind      string  `json:"kind"`
+		Latitude  float64 `json:"latitude"`
+		Longitude float64 `json:"longitude"`
+		Elevation int     `json:"elevation"`
+		LOD       int     `json:"lod"`
 	}
 	if err := json.Unmarshal(record.Payload, &raw); err != nil || raw.Name == "" {
 		return nil, fmt.Errorf("geography landmark requires a name")
@@ -429,4 +435,143 @@ func (d *Domain) landing(record plugins.RawRecord) ([]events.Envelope, error) {
 		"display.primary":    "cable landing",
 	}
 	return []events.Envelope{event}, nil
+}
+
+func (d *Domain) eez(record plugins.RawRecord) ([]events.Envelope, error) {
+	var raw struct {
+		EEZID    string        `json:"eezId"`
+		Name     string        `json:"name"`
+		Segments [][][]float64 `json:"segments"`
+	}
+	if err := json.Unmarshal(record.Payload, &raw); err != nil || raw.EEZID == "" || len(raw.Segments) == 0 {
+		return nil, fmt.Errorf("geography eez requires id and line")
+	}
+	event := events.NewEnvelope(record.OriginalID, "geography", "geography.eez", events.MessageRelationship,
+		events.SourceRef{PluginID: record.SourcePluginID, InstanceID: record.SourceInstanceID, OriginalID: record.OriginalID},
+		record.ObservedUTC)
+	event.EntityID = "geography:eez:" + raw.EEZID
+	if len(raw.Segments) == 1 {
+		event.Geometry = events.LineString(raw.Segments[0])
+	} else {
+		event.Geometry = events.MultiLineString(raw.Segments)
+	}
+	validUntil := cartographicUntil(record.ObservedUTC)
+	event.Time.ValidUntilUTC = &validUntil
+	title := raw.Name
+	if title == "" {
+		title = "Exclusive economic zone"
+	}
+	event.Properties = map[string]any{
+		"visual.color":       "0.28,0.42,0.50",
+		"visual.legendIndex": 2,
+		"display.title":      title,
+		"display.primary":    "EEZ boundary",
+	}
+	return []events.Envelope{event}, nil
+}
+
+func (d *Domain) plant(record plugins.RawRecord) ([]events.Envelope, error) {
+	var raw struct {
+		PlantID     string  `json:"plantId"`
+		Name        string  `json:"name"`
+		Fuel        string  `json:"fuel"`
+		CapacityMW  float64 `json:"capacityMw"`
+		Country     string  `json:"country"`
+		Latitude    float64 `json:"latitude"`
+		Longitude   float64 `json:"longitude"`
+		Attribution string  `json:"attribution"`
+	}
+	if err := json.Unmarshal(record.Payload, &raw); err != nil || raw.PlantID == "" {
+		return nil, fmt.Errorf("geography plant requires id")
+	}
+	event := events.NewEnvelope(record.OriginalID, "geography", "geography.plant", events.MessageAnnotation,
+		events.SourceRef{PluginID: record.SourcePluginID, InstanceID: record.SourceInstanceID, OriginalID: record.OriginalID},
+		record.ObservedUTC)
+	event.EntityID = "geography:plant:" + raw.PlantID
+	event.Geometry = events.Point(raw.Longitude, raw.Latitude, 0)
+	validUntil := cartographicUntil(record.ObservedUTC)
+	event.Time.ValidUntilUTC = &validUntil
+	title := raw.Name
+	if title == "" {
+		title = raw.PlantID
+	}
+	primary := raw.Fuel
+	if raw.CapacityMW > 0 {
+		if primary != "" {
+			primary = fmt.Sprintf("%s  //  %.0f MW", primary, raw.CapacityMW)
+		} else {
+			primary = fmt.Sprintf("%.0f MW", raw.CapacityMW)
+		}
+	}
+	scale := 0.55
+	if raw.CapacityMW >= 2000 {
+		scale = 1.15
+	} else if raw.CapacityMW >= 1000 {
+		scale = 0.9
+	} else if raw.CapacityMW >= 500 {
+		scale = 0.7
+	}
+	event.Properties = map[string]any{
+		"visual.icon":        "station",
+		"visual.markerScale": scale,
+		"display.title":      title,
+		"display.primary":    primary,
+		"display.secondary":  firstNonEmpty(raw.Country, raw.Attribution),
+	}
+	return []events.Envelope{event}, nil
+}
+
+func (d *Domain) outage(record plugins.RawRecord) ([]events.Envelope, error) {
+	var raw struct {
+		OutageID    string  `json:"outageId"`
+		Name        string  `json:"name"`
+		Level       string  `json:"level"`
+		Country     string  `json:"country"`
+		Latitude    float64 `json:"latitude"`
+		Longitude   float64 `json:"longitude"`
+		Attribution string  `json:"attribution"`
+	}
+	if err := json.Unmarshal(record.Payload, &raw); err != nil || raw.OutageID == "" {
+		return nil, fmt.Errorf("geography outage requires id")
+	}
+	event := events.NewEnvelope(record.OriginalID, "geography", "geography.outage", events.MessageObservation,
+		events.SourceRef{PluginID: record.SourcePluginID, InstanceID: record.SourceInstanceID, OriginalID: record.OriginalID},
+		record.ObservedUTC)
+	event.EntityID = "geography:outage:" + raw.OutageID
+	event.Geometry = events.Point(raw.Longitude, raw.Latitude, 0)
+	validUntil := record.ObservedUTC.Add(12 * time.Hour)
+	event.Time.ValidUntilUTC = &validUntil
+	title := raw.Name
+	if title == "" {
+		title = raw.Country
+	}
+	if title == "" {
+		title = "Network outage"
+	}
+	tint := "0.78,0.58,0.22"
+	scale := 1.1
+	if strings.EqualFold(raw.Level, "critical") || strings.EqualFold(raw.Level, "major") {
+		tint = "0.82,0.28,0.16"
+		scale = 1.5
+	}
+	event.Properties = map[string]any{
+		"visual.icon":        "signal",
+		"visual.markerScale": scale,
+		"visual.tint":        tint,
+		"display.title":      title,
+		"display.primary":    firstNonEmpty(raw.Level, "outage"),
+		"display.secondary":  raw.Attribution,
+	}
+	measured := true
+	event.Quality.Measured = &measured
+	return []events.Envelope{event}, nil
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
 }

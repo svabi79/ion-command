@@ -1,0 +1,5 @@
+{"type":"FeatureCollection","features":[
+  {"id":"urn:oid:nws-test-1","properties":{"id":"urn:oid:nws-test-1","event":"Tornado Warning","severity":"Severe","headline":"Tornado Warning","areaDesc":"Test County","status":"Actual","expires":"2026-09-14T20:00:00Z"},
+   "geometry":{"type":"Polygon","coordinates":[[[-97.5,35.2],[-97.2,35.2],[-97.2,35.5],[-97.5,35.5],[-97.5,35.2]]]}},
+  {"id":"urn:oid:2.49.0.1.840.0-KEEPALIVE-1","properties":{"id":"urn:oid:2.49.0.1.840.0-KEEPALIVE-1","event":"Test Message","status":"Actual"},"geometry":null}
+]}
