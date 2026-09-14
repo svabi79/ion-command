@@ -72,8 +72,15 @@ func (d *Domain) Normalize(_ context.Context, record plugins.RawRecord) ([]event
 	var kind struct {
 		Kind string `json:"kind"`
 	}
-	if json.Unmarshal(record.Payload, &kind) == nil && kind.Kind == "interference" {
-		return d.normalizeInterference(record)
+	if json.Unmarshal(record.Payload, &kind) == nil {
+		switch kind.Kind {
+		case "interference":
+			return d.normalizeInterference(record)
+		case "sigmet", "airmet", "airspace":
+			return d.normalizeAirspace(record)
+		case "airport":
+			return d.normalizeAirport(record)
+		}
 	}
 	var raw rawAircraft
 	if err := json.Unmarshal(record.Payload, &raw); err != nil {
@@ -213,6 +220,144 @@ func (d *Domain) normalizeInterference(record plugins.RawRecord) ([]events.Envel
 	measured := true
 	event.Quality.Measured = &measured
 	return []events.Envelope{event}, nil
+}
+
+func (d *Domain) normalizeAirspace(record plugins.RawRecord) ([]events.Envelope, error) {
+	var raw struct {
+		Kind        string          `json:"kind"`
+		SpaceID     string          `json:"spaceId"`
+		Title       string          `json:"title"`
+		Hazard      string          `json:"hazard"`
+		Class       string          `json:"class"`
+		ValidUntil  string          `json:"validUntil"`
+		Rings       [][][]float64   `json:"rings"`
+		Polygons    [][][][]float64 `json:"polygons"`
+		Provider    string          `json:"provider"`
+		Attribution string          `json:"attribution"`
+	}
+	if err := json.Unmarshal(record.Payload, &raw); err != nil || raw.SpaceID == "" {
+		return nil, fmt.Errorf("decode aviation airspace")
+	}
+	geom, ok := aviationArea(raw.Rings, raw.Polygons)
+	if !ok {
+		return nil, fmt.Errorf("aviation airspace requires polygon")
+	}
+	semantic := "aviation.airspace"
+	entityPrefix := "aviation:airspace:"
+	opacity := 0.12
+	color := "0.48,0.52,0.58"
+	if raw.Kind == "sigmet" {
+		semantic = "aviation.sigmet"
+		entityPrefix = "aviation:sigmet:"
+		opacity = 0.18
+		color = "0.70,0.38,0.22"
+	} else if raw.Kind == "airmet" {
+		semantic = "aviation.airmet"
+		entityPrefix = "aviation:airmet:"
+		opacity = 0.14
+		color = "0.68,0.52,0.24"
+	}
+	event := events.NewEnvelope(record.OriginalID, "aviation", semantic, events.MessageArea,
+		events.SourceRef{PluginID: record.SourcePluginID, InstanceID: record.SourceInstanceID, OriginalID: record.OriginalID},
+		record.ObservedUTC)
+	event.EntityID = entityPrefix + raw.SpaceID
+	event.Geometry = geom
+	validUntil := record.ObservedUTC.Add(8 * time.Hour)
+	if until, err := time.Parse(time.RFC3339, raw.ValidUntil); err == nil && until.After(record.ObservedUTC) {
+		validUntil = until.UTC()
+	}
+	event.Time.ValidUntilUTC = &validUntil
+	title := raw.Title
+	if title == "" {
+		title = strings.ToUpper(raw.Kind)
+	}
+	primary := raw.Hazard
+	if raw.Class != "" {
+		if primary != "" {
+			primary = primary + "  //  " + raw.Class
+		} else {
+			primary = raw.Class
+		}
+	}
+	event.Properties = map[string]any{
+		"visual.color":      color,
+		"visual.opacity":    opacity,
+		"display.title":     title,
+		"display.primary":   primary,
+		"display.secondary": firstNonEmpty(raw.Attribution, raw.Provider),
+	}
+	measured := true
+	event.Quality.Measured = &measured
+	return []events.Envelope{event}, nil
+}
+
+func (d *Domain) normalizeAirport(record plugins.RawRecord) ([]events.Envelope, error) {
+	var raw struct {
+		AirportID   string  `json:"airportId"`
+		Name        string  `json:"name"`
+		Ident       string  `json:"ident"`
+		Kind        string  `json:"airportKind"`
+		Iata        string  `json:"iata"`
+		Latitude    float64 `json:"latitude"`
+		Longitude   float64 `json:"longitude"`
+		Attribution string  `json:"attribution"`
+	}
+	if err := json.Unmarshal(record.Payload, &raw); err != nil || raw.AirportID == "" {
+		return nil, fmt.Errorf("decode aviation airport")
+	}
+	event := events.NewEnvelope(record.OriginalID, "aviation", "aviation.airport", events.MessageAnnotation,
+		events.SourceRef{PluginID: record.SourcePluginID, InstanceID: record.SourceInstanceID, OriginalID: record.OriginalID},
+		record.ObservedUTC)
+	event.EntityID = "aviation:airport:" + raw.AirportID
+	event.Geometry = events.Point(raw.Longitude, raw.Latitude, 0)
+	validUntil := record.ObservedUTC.Add(30 * 24 * time.Hour)
+	event.Time.ValidUntilUTC = &validUntil
+	title := raw.Ident
+	if raw.Iata != "" {
+		title = raw.Iata
+	}
+	if title == "" {
+		title = raw.Name
+	}
+	primary := raw.Name
+	if raw.Kind != "" {
+		primary = raw.Kind
+		if raw.Name != "" && raw.Name != title {
+			primary = raw.Kind + "  //  " + raw.Name
+		}
+	}
+	event.Properties = map[string]any{
+		"visual.icon":        "aircraft",
+		"visual.markerScale": 0.55,
+		"display.title":      title,
+		"display.primary":    primary,
+		"display.secondary":  raw.Attribution,
+	}
+	measured := true
+	event.Quality.Measured = &measured
+	return []events.Envelope{event}, nil
+}
+
+func aviationArea(rings [][][]float64, polygons [][][][]float64) (events.Geometry, bool) {
+	if len(polygons) > 1 {
+		return events.MultiPolygon(polygons), true
+	}
+	if len(polygons) == 1 {
+		return events.Polygon(polygons[0]), true
+	}
+	if len(rings) > 0 {
+		return events.Polygon(rings), true
+	}
+	return events.Geometry{}, false
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func (d *Domain) rememberEmergency(hex, squawk string, observed time.Time) (string, bool) {

@@ -12,6 +12,23 @@ superseded configurations, is in
 
 ### Added
 
+- **OSINT scout layers (weather, aviation, volcanoes, EEZ, outages).** Sixteen
+  source plugins on the canonical pipeline — twelve key-free (on in
+  `live.json`) and four fail-closed keyed (`enabled: false` until
+  `local.json` supplies `apiKey`): NWS active-alert Areas, AviationWeather
+  SIGMET + closed G-AIRMET Areas, SPC convective outlooks, USGS volcano
+  status, Smithsonian GVP catalogue, EMSC seismic Points, OurAirports,
+  Marine Regions 200 NM EEZ LineStrings, WRI power plants, SatNOGS Online
+  stations, IODA country outages, UNHCR PoC sites; OpenAIP airspaces,
+  UCDP GED, Cloudflare Radar outages, Global Fishing Watch fishing events.
+  Caps and coarsening are documented in DATA-SOURCES. ReliefWeb and ACLED
+  stay as already merged on master (not duplicated). HANS/VONA skipped
+  (404). G-AIRMET open contours dropped. GFW SAR raster not fetched. Area
+  layer capacity 512; cartography path cap 800 so EEZ rides **BORDERS** /
+  `B`, not CABLES. **Wall must re-package the client** (EEZ cartography
+  filter, area cap, conflict-domain icon fallback). No UE on this VM.
+  CodeFred[Agent].
+
 - **ReliefWeb disasters and ACLED conflict events.** Two operator-keyed
   poll sources, both registered **disabled** in tracked `live.json`.
   `humanitarian.reliefweb` POSTs `api.reliefweb.int/v2/disasters` with a

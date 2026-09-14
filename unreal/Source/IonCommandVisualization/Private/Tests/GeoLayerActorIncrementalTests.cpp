@@ -341,6 +341,8 @@ bool FGeoPathLayerRoleFiltersCartographyTest::RunTest(const FString& Parameters)
     TestFalse(TEXT("cable role rejects a border"), Cables->Supports(MakeLine(TEXT("geography.border"))));
     TestTrue(TEXT("cartography role accepts a border"), Borders->Supports(MakeLine(TEXT("geography.border"))));
     TestTrue(TEXT("cartography role accepts a river"), Borders->Supports(MakeLine(TEXT("geography.river"))));
+    TestTrue(TEXT("cartography role accepts an EEZ"), Borders->Supports(MakeLine(TEXT("geography.eez"))));
+    TestFalse(TEXT("cable role rejects an EEZ"), Cables->Supports(MakeLine(TEXT("geography.eez"))));
     TestFalse(TEXT("cartography role rejects a cable"), Borders->Supports(MakeLine(TEXT("geography.cable"))));
     return true;
 }

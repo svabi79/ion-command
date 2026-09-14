@@ -107,12 +107,15 @@ Press **O**. Every row is clickable and shows its state:
 - **IONOSPHERE SHELLS** — ionosonde shells
 - **TRAILS** — motion trails behind moving markers
 - **AREAS** — filled polygons (NHC forecast cones, solar grayline /
-  nautical-twilight band). Satellite footprints stay off until pinned.
+  nautical-twilight band, NWS alerts, SIGMET / G-AIRMET rings, SPC
+  outlooks, optional OpenAIP airspaces). Satellite footprints stay off
+  until pinned.
 - **&lt;SAT&gt; FOOTPRINT** — one row per pinned satellite; click to unpin
 - **CABLES** — submarine cable routes (TeleGeography). Color: planned amber;
   in-service by length (short teal / regional cyan / ocean blue / trunk magenta)
-- **BORDERS** — Natural Earth admin-0 country lines and zoom-aware place
-  labels (cities, rivers, landmarks, regions)
+- **BORDERS** — Natural Earth admin-0 country lines, coarsened Marine
+  Regions 200 NM EEZ lines, and zoom-aware place labels (cities, rivers,
+  landmarks, regions)
 - **ALT EXAGGERATION 12X** — aircraft altitude exaggerated so flight level is
   visible at globe scale; off renders true scale
 - **&lt;DOMAIN&gt; MARKERS** — one row per marker domain currently present
@@ -134,7 +137,7 @@ Press **O**. Every row is clickable and shows its state:
 | **H** | activity heatmap |
 | **I** | ionosphere shells |
 | **T** | show/hide trails |
-| **Y** | show/hide areas (grayline, NHC cones; not a global sat-footprint dump) |
+| **Y** | show/hide areas (grayline, NHC cones, NWS/SPC/SIGMET; not a global sat-footprint dump) |
 | **P** | pin/unpin the hovered or selected satellite's footprint |
 | **C** | show/hide cable routes |
 | **B** | show/hide country borders and place labels |
@@ -234,6 +237,22 @@ Additional fields by type:
 | `humanitarian.hapi` | `apiKey`, `pollSeconds` | UNHCR refugee host/origin countries. **Requires an HDX HAPI app identifier** in `local.json`; refuse to start if enabled without one. |
 | `humanitarian.reliefweb` | `apiKey`, `pollSeconds` | ReliefWeb current/alert disasters. **Requires a pre-approved appname** as `apiKey` in `local.json`; refuse to start if enabled without one. Floor five minutes. |
 | `conflict.acled` | `login`, `password`, `apiKey`, `pollSeconds`, `lookBackHours` | ACLED recent events. **Requires myACLED `login`+`password` (OAuth) or a Bearer `apiKey`** in `local.json`; refuse to start if enabled without credentials. Floor ten minutes; look-back floor 24 hours (default 168). |
+| `weather.nws` | `pollSeconds`, `broker`, `cacheDirectory` | NWS active alerts with native polygons. Floor two minutes. |
+| `aviation.aviationweather` | `pollSeconds`, `cacheDirectory` | SIGMET + G-AIRMET. Floor two minutes. Open contours dropped. |
+| `weather.spc` | `pollSeconds`, `cacheDirectory` | SPC day 1–3 categorical outlooks. Floor five minutes. |
+| `geophysics.usgsvolcano` | `pollSeconds`, `cacheDirectory` | USGS volcano status points. Floor five minutes. |
+| `geophysics.gvp` | `pollSeconds`, `broker`, `cacheDirectory` | Smithsonian GVP WFS catalogue. Floor six hours. |
+| `earthquake.emsc` | `pollSeconds`, `cacheDirectory` | EMSC FDSN seismic events. Floor one minute. |
+| `aviation.ourairports` | `pollSeconds`, `broker`, `cacheDirectory` | OurAirports CSV. Floor six hours. |
+| `geography.marineregions` | `pollSeconds`, `cacheDirectory` | 200 NM EEZ lines, coarsened. Floor 24 hours. |
+| `geography.powerplants` | `pollSeconds`, `broker`, `cacheDirectory` | WRI GPPD CSV. Floor 24 hours. |
+| `orbital.satnogs` | `pollSeconds`, `cacheDirectory` | SatNOGS Online stations. Floor one hour. |
+| `geography.ioda` | `pollSeconds`, `cacheDirectory` | IODA country outage alerts. Floor five minutes. |
+| `humanitarian.unhcr` | `pollSeconds`, `broker`, `cacheDirectory` | UNHCR PoC sites. Floor six hours. |
+| `aviation.openaip` | `apiKey`, `pollSeconds`, `broker`, `cacheDirectory` | OpenAIP airspaces. **Requires an API key** in `local.json`; refuse to start if enabled without one. CC BY-NC. Floor six hours. |
+| `conflict.ucdp` | `apiKey`, `pollSeconds`, `broker`, `cacheDirectory` | UCDP GED events. **Requires a token** in `local.json`; refuse to start if enabled without one. Floor one hour. |
+| `geography.cloudflare` | `apiKey`, `pollSeconds`, `broker`, `cacheDirectory` | Cloudflare Radar outages. **Requires a bearer token** in `local.json`; refuse to start if enabled without one. Floor five minutes. |
+| `maritime.gfw` | `apiKey`, `pollSeconds`, `broker`, `cacheDirectory` | GFW fishing events. **Requires a bearer token** in `local.json`; refuse to start if enabled without one. CC BY-NC. Floor one hour. |
 | `hamradio.rbn` | `login` | Reverse Beacon Network telnet; **requires a real callsign**. Disabled by default. |
 | `aprs.is` | `login`, `filter`, `broker`, `latitude`/`longitude`/`radiusNm` | APRS-IS packet stream; **requires a real callsign**. Disabled by default. |
 | `wsjtx.udp` | `broker` (listen address) | Local WSJT-X UDP feed. |
@@ -355,6 +374,14 @@ refuses to start if the source is enabled without an appname. Left
 refuses to start if the source is enabled without credentials. Left
 **disabled** in tracked `live.json`. Do not commit tokens. This is not a
 redistributable bundled dataset.
+
+**OpenAIP / UCDP / Cloudflare Radar / Global Fishing Watch (optional).**
+Same overlay pattern as OpenAQ: put the token on the matching source id
+in `local.json` (`openaip-airspace`, `ucdp-ged`, `cloudflare-radar`,
+`gfw-fishing`), then set `"enabled": true` on that source in `live.json`.
+The collector refuses to start if any of these is enabled without a key.
+All four stay **disabled** in tracked `live.json`. OpenAIP and GFW are
+CC BY-NC.
 
 **Turn on recording** (`recording.enabled: true`) to capture a JSONL event log
 for later replay. Mind the volume — the live feeds produce several GB per hour;

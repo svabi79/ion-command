@@ -106,6 +106,9 @@ func (d *Domain) Normalize(_ context.Context, record plugins.RawRecord) ([]event
 		}
 		return d.normalizePass(record, pass)
 	}
+	if err := json.Unmarshal(record.Payload, &kind); err == nil && kind.Kind == "groundstation" {
+		return d.normalizeGroundStation(record)
+	}
 	var raw rawPosition
 	if err := json.Unmarshal(record.Payload, &raw); err != nil {
 		return nil, fmt.Errorf("decode satellite position: %w", err)
@@ -188,4 +191,40 @@ func (d *Domain) normalizeFootprint(record plugins.RawRecord, raw rawPosition) (
 	event.Quality.Measured = &modeled
 	event.Quality.Classification = "modelled"
 	return event, true
+}
+
+func (d *Domain) normalizeGroundStation(record plugins.RawRecord) ([]events.Envelope, error) {
+	var raw struct {
+		StationID   string  `json:"stationId"`
+		Name        string  `json:"name"`
+		Status      string  `json:"status"`
+		Latitude    float64 `json:"latitude"`
+		Longitude   float64 `json:"longitude"`
+		Attribution string  `json:"attribution"`
+	}
+	if err := json.Unmarshal(record.Payload, &raw); err != nil || raw.StationID == "" {
+		return nil, fmt.Errorf("decode orbital ground station")
+	}
+	event := events.NewEnvelope(record.OriginalID, "orbital", "orbital.groundstation", events.MessageAnnotation,
+		events.SourceRef{PluginID: record.SourcePluginID, InstanceID: record.SourceInstanceID, OriginalID: record.OriginalID},
+		record.ObservedUTC)
+	event.EntityID = "orbital:ground:" + raw.StationID
+	event.Geometry = events.Point(raw.Longitude, raw.Latitude, 0)
+	validUntil := record.ObservedUTC.Add(7 * 24 * time.Hour)
+	event.Time.ValidUntilUTC = &validUntil
+	title := raw.Name
+	if title == "" {
+		title = "Ground station"
+	}
+	event.Properties = map[string]any{
+		"visual.icon":        "satellite",
+		"visual.markerScale": 0.7,
+		"visual.tint":        "0.55,0.62,0.70",
+		"display.title":      title,
+		"display.primary":    raw.Status,
+		"display.secondary":  raw.Attribution,
+	}
+	measured := true
+	event.Quality.Measured = &measured
+	return []events.Envelope{event}, nil
 }

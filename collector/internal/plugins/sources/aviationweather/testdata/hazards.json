@@ -1,0 +1,6 @@
+{"type":"FeatureCollection","features":[
+  {"properties":{"icaoId":"KZNY","firName":"NEW YORK FIR","hazard":"TS","validTimeTo":"2026-09-14T22:00:00.000Z"},
+   "geometry":{"type":"Polygon","coordinates":[[[-74.0,40.0],[-72.0,40.0],[-72.0,41.5],[-74.0,41.5],[-74.0,40.0]]]}},
+  {"properties":{"product":"ZULU","hazard":"FZLVL","validTime":1789408800},
+   "geometry":{"type":"LineString","coordinates":[[-90.0,40.0],[-88.0,41.0],[-86.0,40.0]]}}
+]}

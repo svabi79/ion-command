@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/ion-command/ion-command/collector/internal/events"
@@ -38,6 +39,10 @@ func (d *Domain) Normalize(_ context.Context, record plugins.RawRecord) ([]event
 			return d.normalizeStorm(record)
 		case "storm-cone":
 			return d.normalizeStormCone(record)
+		case "alert":
+			return d.normalizeAlert(record)
+		case "outlook":
+			return d.normalizeOutlook(record)
 		}
 	}
 	var raw rawLightning
@@ -229,4 +234,162 @@ func (d *Domain) normalizeStormCone(record plugins.RawRecord) ([]events.Envelope
 	event.Quality.Measured = &measured
 	event.Quality.Classification = "modelled"
 	return []events.Envelope{event}, nil
+}
+
+func (d *Domain) normalizeAlert(record plugins.RawRecord) ([]events.Envelope, error) {
+	var raw struct {
+		AlertID     string          `json:"alertId"`
+		Event       string          `json:"event"`
+		Severity    string          `json:"severity"`
+		Headline    string          `json:"headline"`
+		Area        string          `json:"area"`
+		Expires     string          `json:"expires"`
+		Rings       [][][]float64   `json:"rings"`
+		Polygons    [][][][]float64 `json:"polygons"`
+		Provider    string          `json:"provider"`
+		Attribution string          `json:"attribution"`
+	}
+	if err := json.Unmarshal(record.Payload, &raw); err != nil || raw.AlertID == "" {
+		return nil, fmt.Errorf("decode weather alert")
+	}
+	geom, ok := areaGeometry(raw.Rings, raw.Polygons)
+	if !ok {
+		return nil, fmt.Errorf("weather alert requires polygon")
+	}
+	event := events.NewEnvelope(record.OriginalID, "weather", "weather.alert", events.MessageArea,
+		events.SourceRef{PluginID: record.SourcePluginID, InstanceID: record.SourceInstanceID, OriginalID: record.OriginalID},
+		record.ObservedUTC)
+	event.EntityID = "weather:alert:" + raw.AlertID
+	event.Geometry = geom
+	validUntil := record.ObservedUTC.Add(6 * time.Hour)
+	if expires, err := time.Parse(time.RFC3339, raw.Expires); err == nil && expires.After(record.ObservedUTC) {
+		validUntil = expires.UTC()
+	}
+	event.Time.ValidUntilUTC = &validUntil
+	title := raw.Event
+	if title == "" {
+		title = raw.Headline
+	}
+	if title == "" {
+		title = "Weather alert"
+	}
+	primary := raw.Severity
+	if raw.Area != "" {
+		if primary != "" {
+			primary = primary + "  //  " + raw.Area
+		} else {
+			primary = raw.Area
+		}
+	}
+	color := alertColor(raw.Severity)
+	event.Properties = map[string]any{
+		"visual.color":      color,
+		"visual.opacity":    0.18,
+		"display.title":     title,
+		"display.primary":   primary,
+		"display.secondary": firstNonEmpty(raw.Attribution, raw.Provider),
+	}
+	measured := true
+	event.Quality.Measured = &measured
+	return []events.Envelope{event}, nil
+}
+
+func (d *Domain) normalizeOutlook(record plugins.RawRecord) ([]events.Envelope, error) {
+	var raw struct {
+		OutlookID   string          `json:"outlookId"`
+		Label       string          `json:"label"`
+		Day         string          `json:"day"`
+		Expires     string          `json:"expires"`
+		Rings       [][][]float64   `json:"rings"`
+		Polygons    [][][][]float64 `json:"polygons"`
+		Provider    string          `json:"provider"`
+		Attribution string          `json:"attribution"`
+	}
+	if err := json.Unmarshal(record.Payload, &raw); err != nil || raw.OutlookID == "" {
+		return nil, fmt.Errorf("decode weather outlook")
+	}
+	geom, ok := areaGeometry(raw.Rings, raw.Polygons)
+	if !ok {
+		return nil, fmt.Errorf("weather outlook requires polygon")
+	}
+	event := events.NewEnvelope(record.OriginalID, "weather", "weather.outlook", events.MessageArea,
+		events.SourceRef{PluginID: record.SourcePluginID, InstanceID: record.SourceInstanceID, OriginalID: record.OriginalID},
+		record.ObservedUTC)
+	event.EntityID = "weather:outlook:" + raw.OutlookID
+	event.Geometry = geom
+	validUntil := record.ObservedUTC.Add(24 * time.Hour)
+	if expires, err := time.Parse(time.RFC3339, raw.Expires); err == nil && expires.After(record.ObservedUTC) {
+		validUntil = expires.UTC()
+	}
+	event.Time.ValidUntilUTC = &validUntil
+	title := raw.Label
+	if title == "" {
+		title = "Convective outlook"
+	}
+	event.Properties = map[string]any{
+		"visual.color":      outlookColor(raw.Label),
+		"visual.opacity":    0.16,
+		"display.title":     title,
+		"display.primary":   firstNonEmpty(raw.Day, "outlook"),
+		"display.secondary": firstNonEmpty(raw.Attribution, raw.Provider),
+	}
+	measured := false
+	event.Quality.Measured = &measured
+	event.Quality.Classification = "modelled"
+	return []events.Envelope{event}, nil
+}
+
+func areaGeometry(rings [][][]float64, polygons [][][][]float64) (events.Geometry, bool) {
+	if len(polygons) > 1 {
+		return events.MultiPolygon(polygons), true
+	}
+	if len(polygons) == 1 {
+		return events.Polygon(polygons[0]), true
+	}
+	if len(rings) > 0 {
+		return events.Polygon(rings), true
+	}
+	return events.Geometry{}, false
+}
+
+func alertColor(severity string) string {
+	switch strings.ToLower(strings.TrimSpace(severity)) {
+	case "extreme":
+		return "0.72,0.22,0.16"
+	case "severe":
+		return "0.78,0.38,0.16"
+	case "moderate":
+		return "0.78,0.55,0.22"
+	case "minor":
+		return "0.70,0.62,0.28"
+	default:
+		return "0.72,0.50,0.24"
+	}
+}
+
+func outlookColor(label string) string {
+	lower := strings.ToLower(label)
+	switch {
+	case strings.Contains(lower, "high"):
+		return "0.70,0.22,0.18"
+	case strings.Contains(lower, "moderate") || strings.Contains(lower, "mdt"):
+		return "0.78,0.40,0.16"
+	case strings.Contains(lower, "enhanced") || strings.Contains(lower, "enh"):
+		return "0.78,0.52,0.18"
+	case strings.Contains(lower, "slight") || strings.Contains(lower, "slgt"):
+		return "0.78,0.62,0.22"
+	case strings.Contains(lower, "marginal") || strings.Contains(lower, "mrgl"):
+		return "0.72,0.68,0.28"
+	default:
+		return "0.42,0.58,0.36"
+	}
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
 }

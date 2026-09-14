@@ -2,7 +2,7 @@
   "layerId": "core.cartography",
   "displayName": "Country Borders",
   "domain": "geography",
-  "acceptedSemanticTypes": ["geography.border", "geography.river"],
+  "acceptedSemanticTypes": ["geography.border", "geography.river", "geography.eez"],
   "geometryTypes": ["LineString", "MultiLineString"],
   "defaultVisibility": true,
   "defaultTimeWindowSeconds": 2592000,

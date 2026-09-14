@@ -84,6 +84,51 @@ func Do(ctx context.Context, client *http.Client, method, rawURL, contentType st
 	return io.ReadAll(io.LimitReader(response.Body, 64<<20))
 }
 
+// GetLimit is Get with a caller-chosen body cap (bytes).
+func GetLimit(ctx context.Context, client *http.Client, rawURL string, headers map[string]string, maxBytes int64) ([]byte, error) {
+	if maxBytes <= 0 {
+		maxBytes = 64 << 20
+	}
+	if client == nil {
+		client = &http.Client{Timeout: 45 * time.Second}
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	request.Header.Set("User-Agent", UserAgent)
+	for key, value := range headers {
+		request.Header.Set(key, value)
+	}
+	response, err := client.Do(request)
+	if err != nil {
+		return nil, err
+	}
+	defer response.Body.Close()
+	if response.StatusCode == http.StatusTooManyRequests {
+		return nil, RateLimitedError{RetryAfter: RetryAfter(response, 5*time.Minute)}
+	}
+	if response.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("%s returned %s", rawURL, response.Status)
+	}
+	return io.ReadAll(io.LimitReader(response.Body, maxBytes))
+}
+
+// Sleep waits interval or returns when ctx is done.
+func Sleep(ctx context.Context, interval time.Duration) error {
+	if interval < 0 {
+		interval = 0
+	}
+	timer := time.NewTimer(interval)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
+}
+
 type FileCache struct {
 	Path string
 	TTL  time.Duration
@@ -105,6 +150,17 @@ func (c FileCache) Load() ([]byte, time.Time, bool) {
 		return nil, info.ModTime(), false
 	}
 	return body, info.ModTime(), true
+}
+
+func (c FileCache) LoadStale() ([]byte, bool) {
+	if c.Path == "" {
+		return nil, false
+	}
+	body, err := os.ReadFile(c.Path)
+	if err != nil || len(body) == 0 {
+		return nil, false
+	}
+	return body, true
 }
 
 func (c FileCache) Store(body []byte) error {

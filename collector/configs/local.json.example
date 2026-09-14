@@ -38,6 +38,22 @@
       "id": "acled-events",
       "login": "YOUR_MYACLED_EMAIL",
       "password": "YOUR_MYACLED_PASSWORD"
+    },
+    {
+      "id": "openaip-airspace",
+      "apiKey": "YOUR_OPENAIP_API_KEY"
+    },
+    {
+      "id": "ucdp-ged",
+      "apiKey": "YOUR_UCDP_ACCESS_TOKEN"
+    },
+    {
+      "id": "cloudflare-radar",
+      "apiKey": "YOUR_CLOUDFLARE_RADAR_BEARER_TOKEN"
+    },
+    {
+      "id": "gfw-fishing",
+      "apiKey": "YOUR_GLOBAL_FISHING_WATCH_BEARER_TOKEN"
     }
   ]
 }

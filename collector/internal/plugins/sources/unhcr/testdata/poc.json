@@ -1,0 +1,4 @@
+{"type":"FeatureCollection","features":[
+  {"id":7769,"properties":{"iso3":"UGA","gis_name":"Maaji II","loc_type":"Refugee Camp","poc_subtype":"Refugee","gis_status":"active"},"geometry":{"type":"Point","coordinates":[31.656,3.190]}},
+  {"id":1,"properties":{"iso3":"XX","gis_name":"Closed","gis_status":"closed"},"geometry":{"type":"Point","coordinates":[0,0]}}
+]}

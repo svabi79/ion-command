@@ -1,0 +1,4 @@
+"id","ident","type","name","latitude_deg","longitude_deg","scheduled_service","iata_code"
+1,"KJFK","large_airport","John F Kennedy International Airport",40.639801,-73.7789,"yes","JFK"
+2,"KFOO","small_airport","Skip Me",40.0,-74.0,"no",""
+3,"EDDF","medium_airport","Frankfurt am Main Airport",50.033333,8.570556,"yes","FRA"

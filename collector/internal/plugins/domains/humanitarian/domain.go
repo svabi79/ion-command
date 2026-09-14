@@ -23,6 +23,9 @@ func (d *Domain) Normalize(_ context.Context, record plugins.RawRecord) ([]event
 	var kind struct {
 		Kind string `json:"kind"`
 	}
+	if json.Unmarshal(record.Payload, &kind) == nil && kind.Kind == "site" {
+		return d.normalizeSite(record)
+	}
 	if json.Unmarshal(record.Payload, &kind) == nil && kind.Kind == "disaster" {
 		return d.normalizeDisaster(record)
 	}
@@ -144,4 +147,54 @@ func markerScale(n int) float64 {
 	default:
 		return 0.9
 	}
+}
+
+func (d *Domain) normalizeSite(record plugins.RawRecord) ([]events.Envelope, error) {
+	var raw struct {
+		SiteID      string  `json:"siteId"`
+		Name        string  `json:"name"`
+		Kind        string  `json:"siteKind"`
+		Country     string  `json:"country"`
+		Latitude    float64 `json:"latitude"`
+		Longitude   float64 `json:"longitude"`
+		Attribution string  `json:"attribution"`
+	}
+	if err := json.Unmarshal(record.Payload, &raw); err != nil || raw.SiteID == "" {
+		return nil, fmt.Errorf("decode humanitarian site")
+	}
+	event := events.NewEnvelope(record.OriginalID, "humanitarian", "humanitarian.site", events.MessageAnnotation,
+		events.SourceRef{PluginID: record.SourcePluginID, InstanceID: record.SourceInstanceID, OriginalID: record.OriginalID},
+		record.ObservedUTC)
+	event.EntityID = "humanitarian:site:" + raw.SiteID
+	event.Geometry = events.Point(raw.Longitude, raw.Latitude, 0)
+	validUntil := record.ObservedUTC.Add(30 * 24 * time.Hour)
+	event.Time.ValidUntilUTC = &validUntil
+	title := raw.Name
+	if title == "" {
+		title = raw.SiteID
+	}
+	primary := raw.Kind
+	if primary == "" {
+		primary = "person of concern site"
+	}
+	event.Properties = map[string]any{
+		"visual.icon":        "station",
+		"visual.markerScale": 0.7,
+		"visual.tint":        "0.72,0.62,0.38",
+		"display.title":      title,
+		"display.primary":    primary,
+		"display.secondary":  firstNonEmpty(raw.Country, raw.Attribution),
+	}
+	measured := true
+	event.Quality.Measured = &measured
+	return []events.Envelope{event}, nil
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
 }
