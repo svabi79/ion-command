@@ -22,11 +22,25 @@ superseded configurations, is in
   stations, IODA country outages, UNHCR PoC sites; OpenAIP airspaces,
   UCDP GED, Cloudflare Radar outages, Global Fishing Watch fishing events.
   Caps and coarsening are documented in DATA-SOURCES. ReliefWeb and ACLED
-  are left to a parallel change. HANS/VONA skipped (404). G-AIRMET open
-  contours dropped. GFW SAR raster not fetched. Area layer capacity 512;
-  cartography path cap 800 so EEZ rides **BORDERS** / `B`, not CABLES.
-  **Wall must re-package the client** (EEZ cartography filter, area cap,
-  conflict-domain icon fallback). No UE on this VM. CodeFred[Agent].
+  stay as already merged on master (not duplicated). HANS/VONA skipped
+  (404). G-AIRMET open contours dropped. GFW SAR raster not fetched. Area
+  layer capacity 512; cartography path cap 800 so EEZ rides **BORDERS** /
+  `B`, not CABLES. **Wall must re-package the client** (EEZ cartography
+  filter, area cap, conflict-domain icon fallback). No UE on this VM.
+  CodeFred[Agent].
+
+- **ReliefWeb disasters and ACLED conflict events.** Two operator-keyed
+  poll sources, both registered **disabled** in tracked `live.json`.
+  `humanitarian.reliefweb` POSTs `api.reliefweb.int/v2/disasters` with a
+  pre-approved `appname` (`apiKey` overlay) and emits
+  `humanitarian.disaster` Points at ReliefWeb's published country
+  location. `conflict.acled` GETs `/api/acled/read` with a myACLED OAuth
+  Bearer (login/password overlay, or a 24-hour token in `apiKey`) and
+  emits `conflict.event` Points for a seven-day window. Enabled without
+  credentials is fail-closed; overlay `"enabled": true` to turn them on
+  without editing tracked configs. Disk cache, 429 `Retry-After`, no
+  invented severity. ACLED cache is a private operator copy — not a
+  bundled dataset. CodeFred[Agent].
 
 - **Per-satellite footprint pin.** `orbital.footprint` Areas still ride the
   30 s Celestrak cadence but carry `visual.defaultHidden` / `visual.pinKey`.

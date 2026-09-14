@@ -136,14 +136,14 @@ func (s *Source) sample(ctx context.Context) ([]plugins.RawRecord, error) {
 		if id == "" {
 			continue
 		}
-		title := item.WhereCoordinates
-		if item.ConflictName != "" {
-			title = item.ConflictName
+		location := item.WhereCoordinates
+		if location == "" {
+			location = item.ConflictName
 		}
 		payload, err := json.Marshal(map[string]any{
-			"eventId": id, "title": title, "eventKind": violenceKind(item.TypeOfViolence),
-			"country": item.Country, "deaths": item.Best,
-			"latitude": item.Latitude, "longitude": item.Longitude,
+			"eventId": id, "eventType": violenceKind(item.TypeOfViolence),
+			"subEventType": item.ConflictName, "location": location, "country": item.Country,
+			"fatalities": item.Best, "latitude": item.Latitude, "longitude": item.Longitude,
 			"attribution": "UCDP GED",
 		})
 		if err != nil {

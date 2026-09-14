@@ -49,7 +49,7 @@ func TestLoadMergesLocalOverlaySecrets(t *testing.T) {
 	overlayBody := `{
   "sources": [
     { "id": "opensky-world", "clientId": "cid", "clientSecret": "csecret", "pollSeconds": 60 },
-    { "id": "openaq-example", "apiKey": "aq-key" }
+    { "id": "openaq-example", "apiKey": "aq-key", "enabled": true }
   ]
 }`
 	if err := os.WriteFile(live, []byte(liveBody), 0o644); err != nil {
@@ -70,5 +70,8 @@ func TestLoadMergesLocalOverlaySecrets(t *testing.T) {
 	}
 	if cfg.Sources[1].ApiKey != "aq-key" {
 		t.Fatalf("openaq overlay not applied: %+v", cfg.Sources[1])
+	}
+	if !cfg.Sources[1].Enabled {
+		t.Fatal("overlay enabled:true must turn a shipped-disabled source on")
 	}
 }

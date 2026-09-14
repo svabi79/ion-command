@@ -35,6 +35,8 @@
       "geophysics.event",
       "space.pad",
       "humanitarian.displacement",
+      "humanitarian.disaster",
+      "conflict.event",
       "orbital.footprint",
       "solar.grayline",
       "radio.activity",
@@ -53,8 +55,7 @@
       "geography.outage",
       "humanitarian.site",
       "orbital.groundstation",
-      "maritime.fishing",
-      "conflict.event"
+      "maritime.fishing"
     ]
   },
   "recording": {
@@ -254,6 +255,19 @@
       "type": "humanitarian.hapi",
       "enabled": false,
       "pollSeconds": 86400
+    },
+    {
+      "id": "reliefweb-disasters",
+      "type": "humanitarian.reliefweb",
+      "enabled": false,
+      "pollSeconds": 900
+    },
+    {
+      "id": "acled-events",
+      "type": "conflict.acled",
+      "enabled": false,
+      "pollSeconds": 900,
+      "lookBackHours": 168
     },
     {
       "id": "nws-alerts",

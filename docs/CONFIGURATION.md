@@ -235,6 +235,8 @@ Additional fields by type:
 | `weather.nhc` | `pollSeconds` | NOAA NHC active storm centres and 5-day forecast cones. Floor five minutes. |
 | `space.pads` | `pollSeconds`, `apiKey`, `broker`, `cacheDirectory` | Earth spaceports from Launch Library 2. Floor six hours. |
 | `humanitarian.hapi` | `apiKey`, `pollSeconds` | UNHCR refugee host/origin countries. **Requires an HDX HAPI app identifier** in `local.json`; refuse to start if enabled without one. |
+| `humanitarian.reliefweb` | `apiKey`, `pollSeconds` | ReliefWeb current/alert disasters. **Requires a pre-approved appname** as `apiKey` in `local.json`; refuse to start if enabled without one. Floor five minutes. |
+| `conflict.acled` | `login`, `password`, `apiKey`, `pollSeconds`, `lookBackHours` | ACLED recent events. **Requires myACLED `login`+`password` (OAuth) or a Bearer `apiKey`** in `local.json`; refuse to start if enabled without credentials. Floor ten minutes; look-back floor 24 hours (default 168). |
 | `weather.nws` | `pollSeconds`, `broker`, `cacheDirectory` | NWS active alerts with native polygons. Floor two minutes. |
 | `aviation.aviationweather` | `pollSeconds`, `cacheDirectory` | SIGMET + G-AIRMET. Floor two minutes. Open contours dropped. |
 | `weather.spc` | `pollSeconds`, `cacheDirectory` | SPC day 1–3 categorical outlooks. Floor five minutes. |
@@ -345,17 +347,33 @@ carry secrets. Without credentials the source stays in `anon` mode. Lowering
 `pollSeconds` without credentials is rejected (5 minute anonymous floor).
 
 **OpenAQ (optional).** Same overlay: put an Explorer API key on
-`openaq-example`, then set `"enabled": true` on that source in `live.json`.
-The collector refuses to start if the source is enabled without a key.
-Left **disabled** in tracked `live.json` for that reason.
+`openaq-example`, then set `"enabled": true` on that source in `live.json`
+or on the same overlay entry. The collector refuses to start if the source
+is enabled without a key. Left **disabled** in tracked `live.json` for that
+reason.
 
 **HDX HAPI displacement (optional).** Mint an app identifier (application
 name + contact email, not a secret) from
 [HAPI's encode endpoint](https://hapi.humdata.org/api/v2/encode_app_identifier),
 put it on `hapi-displacement` as `apiKey` in `local.json`, then set
-`"enabled": true` on that source in `live.json`. The collector refuses to
-start if the source is enabled without an identifier. Left **disabled**
-in tracked `live.json` for that reason.
+`"enabled": true` on that source in `live.json` or on the same overlay
+entry. The collector refuses to start if the source is enabled without an
+identifier. Left **disabled** in tracked `live.json` for that reason.
+
+**ReliefWeb disasters (optional).** Request a pre-approved `appname` from
+[ReliefWeb's form](https://docs.google.com/forms/d/e/1FAIpQLScR5EE_SBhweLLg_2xMCnXNbT6md4zxqIB00OL0yZWyrqX_Nw/viewform?usp=header),
+put it on `reliefweb-disasters` as `apiKey` in `local.json`, then set
+`"enabled": true` on that overlay entry (or in `live.json`). The collector
+refuses to start if the source is enabled without an appname. Left
+**disabled** in tracked `live.json`.
+
+**ACLED conflict events (optional).** Register at
+[myACLED](https://acleddata.com/user/register), overlay `login` (email) and
+`password` on `acled-events` in `local.json` (or a 24-hour Bearer token as
+`apiKey`), then set `"enabled": true` on that overlay entry. The collector
+refuses to start if the source is enabled without credentials. Left
+**disabled** in tracked `live.json`. Do not commit tokens. This is not a
+redistributable bundled dataset.
 
 **OpenAIP / UCDP / Cloudflare Radar / Global Fishing Watch (optional).**
 Same overlay pattern as OpenAQ: put the token on the matching source id

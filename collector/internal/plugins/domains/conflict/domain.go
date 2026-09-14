@@ -1,12 +1,13 @@
-// Package conflict normalizes georeferenced organized-violence events
-// into canonical point observations. Vocabulary is generic; sources own
-// provider-specific fields.
+// Package conflict normalizes operator-keyed ACLED events into canonical
+// point observations. Fatality counts are passed through as reported;
+// this domain does not invent a severity scale.
 package conflict
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/ion-command/ion-command/collector/internal/events"
@@ -21,64 +22,61 @@ func (d *Domain) Domain() string { return "conflict" }
 
 func (d *Domain) Normalize(_ context.Context, record plugins.RawRecord) ([]events.Envelope, error) {
 	var raw struct {
-		EventID     string  `json:"eventId"`
-		Title       string  `json:"title"`
-		Kind        string  `json:"eventKind"`
-		Country     string  `json:"country"`
-		Deaths      int     `json:"deaths"`
-		Latitude    float64 `json:"latitude"`
-		Longitude   float64 `json:"longitude"`
-		Attribution string  `json:"attribution"`
+		EventId      string  `json:"eventId"`
+		EventType    string  `json:"eventType"`
+		SubEventType string  `json:"subEventType"`
+		Country      string  `json:"country"`
+		Location     string  `json:"location"`
+		Latitude     float64 `json:"latitude"`
+		Longitude    float64 `json:"longitude"`
+		Fatalities   int     `json:"fatalities"`
+		Attribution  string  `json:"attribution"`
 	}
-	if err := json.Unmarshal(record.Payload, &raw); err != nil || raw.EventID == "" {
+	if err := json.Unmarshal(record.Payload, &raw); err != nil || strings.TrimSpace(raw.EventId) == "" {
 		return nil, fmt.Errorf("decode conflict event")
 	}
+	id := strings.TrimSpace(raw.EventId)
 	event := events.NewEnvelope(record.OriginalID, "conflict", "conflict.event", events.MessageObservation,
 		events.SourceRef{PluginID: record.SourcePluginID, InstanceID: record.SourceInstanceID, OriginalID: record.OriginalID},
 		record.ObservedUTC)
-	event.EntityID = "conflict:event:" + raw.EventID
+	event.EntityID = "conflict:event:" + id
 	event.Geometry = events.Point(raw.Longitude, raw.Latitude, 0)
-	validUntil := record.ObservedUTC.Add(14 * 24 * time.Hour)
+	validUntil := record.ObservedUTC.Add(24 * time.Hour)
 	event.Time.ValidUntilUTC = &validUntil
-	title := raw.Title
+	title := strings.TrimSpace(raw.Location)
 	if title == "" {
-		title = raw.Kind
+		title = strings.TrimSpace(raw.Country)
+	} else if raw.Country != "" && !strings.EqualFold(title, raw.Country) {
+		title = title + ", " + raw.Country
 	}
 	if title == "" {
-		title = "Conflict event"
+		title = id
 	}
-	primary := raw.Kind
-	if raw.Deaths > 0 {
+	primary := strings.TrimSpace(raw.EventType)
+	if raw.SubEventType != "" {
 		if primary != "" {
-			primary = fmt.Sprintf("%s  //  %d killed", primary, raw.Deaths)
+			primary = raw.SubEventType + "  //  " + primary
 		} else {
-			primary = fmt.Sprintf("%d killed", raw.Deaths)
+			primary = raw.SubEventType
 		}
 	}
-	scale := 1.0
-	if raw.Deaths >= 100 {
-		scale = 1.8
-	} else if raw.Deaths >= 25 {
-		scale = 1.4
+	secondary := raw.Attribution
+	if raw.Fatalities > 0 {
+		reported := fmt.Sprintf("%d reported fatalities", raw.Fatalities)
+		if secondary != "" {
+			secondary = reported + "  //  " + secondary
+		} else {
+			secondary = reported
+		}
 	}
 	event.Properties = map[string]any{
-		"visual.icon":        "earthquake",
-		"visual.markerScale": scale,
-		"visual.tint":        "0.62,0.28,0.22",
+		"visual.icon":        "station",
+		"visual.markerScale": 1.0,
 		"display.title":      title,
 		"display.primary":    primary,
-		"display.secondary":  firstNonEmpty(raw.Country, raw.Attribution),
+		"display.secondary":  secondary,
 	}
 	measured := true
 	event.Quality.Measured = &measured
 	return []events.Envelope{event}, nil
-}
-
-func firstNonEmpty(values ...string) string {
-	for _, value := range values {
-		if value != "" {
-			return value
-		}
-	}
-	return ""
 }

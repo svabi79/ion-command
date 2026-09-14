@@ -4,6 +4,7 @@
 package pollutil
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -43,14 +44,29 @@ func RetryAfter(response *http.Response, fallback time.Duration) time.Duration {
 }
 
 func Get(ctx context.Context, client *http.Client, rawURL string, headers map[string]string) ([]byte, error) {
+	return Do(ctx, client, http.MethodGet, rawURL, "", nil, headers)
+}
+
+func Post(ctx context.Context, client *http.Client, rawURL, contentType string, body []byte, headers map[string]string) ([]byte, error) {
+	return Do(ctx, client, http.MethodPost, rawURL, contentType, body, headers)
+}
+
+func Do(ctx context.Context, client *http.Client, method, rawURL, contentType string, body []byte, headers map[string]string) ([]byte, error) {
 	if client == nil {
 		client = &http.Client{Timeout: 45 * time.Second}
 	}
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
+	var reader io.Reader
+	if body != nil {
+		reader = bytes.NewReader(body)
+	}
+	request, err := http.NewRequestWithContext(ctx, method, rawURL, reader)
 	if err != nil {
 		return nil, err
 	}
 	request.Header.Set("User-Agent", UserAgent)
+	if contentType != "" {
+		request.Header.Set("Content-Type", contentType)
+	}
 	for key, value := range headers {
 		request.Header.Set(key, value)
 	}

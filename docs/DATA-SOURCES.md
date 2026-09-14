@@ -41,6 +41,8 @@ non-commercial only.
 | **Brandmeister** | DMR last-heard activity from the public Brandmeister Socket.IO feed (`api.brandmeister.network`, path `/lh/socket.io`). No credentials. Talkgroup completions are placed at AD1C country-file centroids (country-level accuracy). No formal data licence published; hobby-scale, one connection, emit-throttled. Contact Brandmeister before any commercial or bulk-redistribution use. | [brandmeister.network](https://brandmeister.network) · [last-heard API](https://wiki.brandmeister.network/index.php/Code_Examples/LastHeard/Python) |
 | **The Space Devs / Launch Library 2 (locations)** | Earth spaceport coordinates from the same Launch Library 2 catalogue as upcoming launches. Anonymous access is limited to 15 calls/hour; this source polls daily. | [ll.thespacedevs.com](https://ll.thespacedevs.com) |
 | **UNHCR / HDX HAPI** | Current-year refugee totals (population group REF, all ages and genders) from the OCHA Humanitarian API. Host and origin countries with at least 100,000 people are placed at public-domain country centroids. Requires a free app identifier (application name + email, not a secret). Licensed **CC BY-IGO**; credit UNHCR and HDX HAPI. Disabled until the operator supplies an identifier in `local.json`. | [hapi.humdata.org](https://hapi.humdata.org) · [HAPI docs](https://docs.humdata.org/build/hdx-apis/hapi/how-to-query-hapi) |
+| **ReliefWeb** | Current and alert disasters from OCHA ReliefWeb's public v2 API. Since 1 November 2025 every request needs a **pre-approved `appname`** (not a secret): request one through [ReliefWeb's appname form](https://docs.google.com/forms/d/e/1FAIpQLScR5EE_SBhweLLg_2xMCnXNbT6md4zxqIB00OL0yZWyrqX_Nw/viewform?usp=header) (linked from the [API parameters docs](https://apidoc.reliefweb.int/parameters)); use a string that combines organisation, purpose and random characters, then wait for the approval email. Put the approved name on `reliefweb-disasters` as `apiKey`. Overlaps GDACS/EONET; still shipped as a separate operator-keyed feed. Credit ReliefWeb / OCHA. Disabled until the operator supplies an appname. | [reliefweb.int](https://reliefweb.int) · [API docs](https://apidoc.reliefweb.int/) |
+| **ACLED** | Recent political-violence and protest events from the Armed Conflict Location & Event Data Project. **Operator-keyed only** — ION COMMAND never ships live-enabled ACLED and never bundles the dataset. Register a [myACLED](https://acleddata.com/user/register) account, accept the [EULA](https://acleddata.com/eula) and [Content Usage Terms](https://acleddata.com/contentusage), then overlay `login` (account email) and `password` on `acled-events` so the collector can mint a 24-hour OAuth Bearer token (`POST https://acleddata.com/oauth/token`, `grant_type=password`, `client_id=acled`). A ready access token may be put in `apiKey` instead (tokens expire in 24 hours). Do not republish the on-disk cache under `data/acled/`. Cite: Armed Conflict Location & Event Data Project (ACLED); www.acleddata.com. Disabled until credentials are supplied. | [acleddata.com](https://acleddata.com) · [API getting started](https://acleddata.com/api-documentation/getting-started) |
 | **NOAA / NWS** | Active weather alerts from `api.weather.gov` (public domain, US Government work). Identifying User-Agent required. Most alerts are zone/county references with `geometry: null` and are skipped; only native GeoJSON Areas are drawn. NOAA does not endorse this project. Not a warning system for safety decisions. | [weather.gov services](https://www.weather.gov/documentation/services-web-api) |
 | **AviationWeather Center** | International SIGMET polygons and G-AIRMET GeoJSON from aviationweather.gov. Public US Government work. Closed rings become Areas; **open G-AIRMET contour LineStrings are dropped** (no contour renderer; they would otherwise pollute CABLES). | [aviationweather.gov/data/api](https://aviationweather.gov/data/api/) |
 | **NOAA / SPC** | Convective categorical outlook GeoJSON (day 1–3) from the Storm Prediction Center. Public domain. Coarsened MultiPolygons. | [spc.noaa.gov/gis](https://www.spc.noaa.gov/gis/) |
@@ -97,6 +99,8 @@ What each source actually does, in the order it appears in `live.json`:
 | `weather.nhc` | nhc.noaa.gov `CurrentStorms.json` plus each storm's `trackCone.kmzFile` | 600 s (floor 300 s) | `weather.storm`, `weather.storm.cone` | yes |
 | `space.pads` | ll.thespacedevs.com `/2.3.0/locations/` | 86400 s (floor 6 h) | `space.pad` | yes |
 | `humanitarian.hapi` | hapi.humdata.org refugees-persons-of-concern | 86400 s (floor 6 h) | `humanitarian.displacement` | **no** (needs app identifier in `local.json`) |
+| `humanitarian.reliefweb` | api.reliefweb.int `/v2/disasters` (POST; `appname` query) | 900 s (floor 300 s) | `humanitarian.disaster` | **no** (needs pre-approved appname in `local.json`) |
+| `conflict.acled` | acleddata.com `/api/acled/read` (OAuth Bearer) | 900 s (floor 600 s) | `conflict.event` | **no** (needs myACLED login/password or Bearer `apiKey` in `local.json`) |
 | `hamradio.rbn` | telnet `telnet.reversebeacon.net` | streaming | `hamradio` spots | yes (placeholder login `HB9HSJ`; overlay your callsign) |
 | `aprs.is` | TCP `rotate.aprs2.net:14580`, read-only login (passcode `-1`) | streaming | `aprs` → `aprs.station`, `aprs.object` | yes (placeholder login `HB9HSJ`; overlay your callsign) |
 | `wsjtx.udp` | local UDP listener | streaming | `hamradio` | no |
@@ -190,6 +194,59 @@ a key in tracked `live.json` is still wrong.
    shapes.
 3. **Restart the collector.** Bounding boxes are still required; a
    missing key only parks the source.
+
+## Enabling ReliefWeb disasters
+
+ReliefWeb's API has required a **pre-approved `appname` since 1 November
+2025**. The collector talks only to `https://api.reliefweb.int/v2/disasters`.
+Tracked `live.json` registers `reliefweb-disasters` **disabled**.
+
+1. Request an appname through
+   [ReliefWeb's short form](https://docs.google.com/forms/d/e/1FAIpQLScR5EE_SBhweLLg_2xMCnXNbT6md4zxqIB00OL0yZWyrqX_Nw/viewform?usp=header)
+   (the same form linked from
+   [apidoc.reliefweb.int/parameters](https://apidoc.reliefweb.int/parameters)).
+   The name must combine organisation, purpose and random characters.
+   Wait for the approval email — only the operator can complete that
+   step, because it needs their contact details.
+2. Copy `collector/configs/local.json.example` to gitignored `local.json`
+   and put the approved appname on `reliefweb-disasters` as `apiKey`. Set
+   `"enabled": true` on that overlay entry (or in `live.json`).
+3. Restart the collector. Enabled without an appname is fail-closed:
+   `New()` errors and the process does not start. Disabled without a key
+   is a clean start.
+
+Points are the disaster's `primary_country.location` (country centroid as
+published by ReliefWeb). Records without coordinates are dropped. Status
+and disaster type are shown as ReliefWeb reports them; this layer does
+not invent an alert colour.
+
+## Enabling ACLED conflict events
+
+ACLED retired key-in-query access (no new keys after the 2025 site
+cutover). Programmatic access is **myACLED OAuth**: register at
+[acleddata.com/user/register](https://acleddata.com/user/register),
+accept the EULA / Content Usage Terms / Attribution Policy, then mint a
+Bearer token.
+
+Tracked `live.json` registers `acled-events` **disabled**. Never put a
+token or password in a tracked config.
+
+1. Create a myACLED account (institutional email preferred).
+2. In gitignored `local.json` overlay `acled-events` with either:
+   - **Preferred:** `"login": "<account email>"` and `"password": "<password>"`
+     — the collector POSTs to `https://acleddata.com/oauth/token` with
+     `grant_type=password`, `client_id=acled`, `scope=authenticated` and
+     refreshes the 24-hour access token in memory; or
+   - `"apiKey": "<access_token>"` — a ready Bearer token (expires in 24
+     hours; no refresh unless login/password are also set).
+   Set `"enabled": true` on that overlay entry (or in `live.json`).
+3. Restart the collector. Enabled without credentials is fail-closed.
+   The on-disk cache under `data/acled/` is a private operator copy —
+   do not republish it as a dataset.
+
+The poll asks for events in a rolling window (`lookBackHours`, default
+168 / seven days, floor 24). Fatality counts are displayed as ACLED
+reported them; marker scale is constant.
 
 ### Why aisstream.io and not something else
 
@@ -299,8 +356,11 @@ these wrong silently produces a globe full of wrong ships:
 - Sources that need an identity (RBN, aisstream.io, APRS-IS, DX cluster)
   ship with a non-secret placeholder (`HB9HSJ`) or an empty key and take
   the real callsign/key from `local.json`. AIS idles without a key rather
-  than failing collector startup. OpenAQ and HDX HAPI stay **disabled**
-  until an identifier is supplied — they cannot start without one.
+  than failing collector startup. OpenAQ, HDX HAPI, ReliefWeb and ACLED stay
+  **disabled** until an identifier is supplied — they refuse `New()` without
+  one, so enabling them without a key takes the collector down. Overlay
+  `"enabled": true` on the same `local.json` entry to turn them on without
+  editing tracked `live.json`.
 - The AIS source reconnects with **exponential backoff (10 s → 5 min)**
   rather than a tight retry loop, honouring the provider's three
   connections-per-account / three connections-per-IP limits, and resets the

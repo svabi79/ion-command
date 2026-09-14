@@ -55,7 +55,7 @@ type Source struct {
 	// credentials JSON (OpenSky's downloadable credentials.json). The
 	// file may use clientId/clientSecret or client_id/client_secret.
 	CredentialsFile string `json:"credentialsFile,omitempty"`
-	PollSeconds     int     `json:"pollSeconds,omitempty"`
+	PollSeconds     int    `json:"pollSeconds,omitempty"`
 	// Login is the callsign or account used by sources that authenticate
 	// (e.g. the RBN telnet feed).
 	Login string `json:"login,omitempty"`
@@ -222,6 +222,11 @@ func applyLocalOverlay(cfg *Config, configPath string) error {
 		}
 		if extra.PollSeconds > 0 {
 			dst.PollSeconds = extra.PollSeconds
+		}
+		// Overlay can turn a shipped-disabled keyed source on without
+		// editing tracked live.json. The zero value cannot turn one off.
+		if extra.Enabled {
+			dst.Enabled = true
 		}
 	}
 	return nil

@@ -32,6 +32,7 @@ import (
 	"github.com/ion-command/ion-command/collector/internal/plugins/domains/spaceweather"
 	"github.com/ion-command/ion-command/collector/internal/plugins/domains/weather"
 	"github.com/ion-command/ion-command/collector/internal/plugins/domains/wildfire"
+	"github.com/ion-command/ion-command/collector/internal/plugins/sources/acled"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/adsb"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/ais"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/aprsis"
@@ -69,6 +70,7 @@ import (
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/powerplants"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/pskreporter"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/rbn"
+	"github.com/ion-command/ion-command/collector/internal/plugins/sources/reliefweb"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/satnogs"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/spc"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/swpc"
@@ -103,7 +105,7 @@ func run(configPath, listenAddress string, logger *slog.Logger) error {
 		cfg.Server.ListenAddress = listenAddress
 	}
 	registry := plugins.NewRegistry()
-	for _, domain := range []plugins.Domain{hamradio.New(), weather.New(), spaceweather.New(), ionosphere.New(), geophysics.New(), orbital.New(), aviation.New(), wildfire.New(), maritime.New(), aprs.New(), space.New(), geography.New(), humanitarian.New(), solar.New(), conflict.New()} {
+	for _, domain := range []plugins.Domain{hamradio.New(), weather.New(), spaceweather.New(), ionosphere.New(), geophysics.New(), orbital.New(), aviation.New(), wildfire.New(), maritime.New(), aprs.New(), space.New(), geography.New(), humanitarian.New(), conflict.New(), solar.New()} {
 		if err := registry.RegisterDomain(domain); err != nil {
 			return err
 		}
@@ -174,6 +176,10 @@ func run(configPath, listenAddress string, logger *slog.Logger) error {
 			source, err = pads.New(sourceConfig, logger)
 		case sourceConfig.Type == "humanitarian.hapi":
 			source, err = hapi.New(sourceConfig, logger)
+		case sourceConfig.Type == "humanitarian.reliefweb":
+			source, err = reliefweb.New(sourceConfig, logger)
+		case sourceConfig.Type == "conflict.acled":
+			source, err = acled.New(sourceConfig, logger)
 		case sourceConfig.Type == "hamradio.brandmeister":
 			source, err = brandmeister.New(sourceConfig, logger)
 		case sourceConfig.Type == "solar.grayline":

@@ -29,7 +29,7 @@ func TestSample(t *testing.T) {
 	}
 	var payload map[string]any
 	_ = json.Unmarshal(records[0].Payload, &payload)
-	if payload["deaths"].(float64) != 3 || payload["eventKind"] != "state-based" {
+	if payload["fatalities"].(float64) != 3 || payload["eventType"] != "state-based" {
 		t.Fatalf("%v", payload)
 	}
 }

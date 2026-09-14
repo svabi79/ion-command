@@ -28,6 +28,8 @@ Priorities for the platform as a whole are in
 | **AIS ships** — global maritime traffic | `aisstream.io` WebSocket | Point + Track | Free API key required | `shipped` — live-verified 2026-08-28 against European waters; disabled by default (needs an operator key) |
 | **Wildfires** — active fire detections | NASA FIRMS | Point | Free MAP_KEY may be required | `shipped` — registered as `wildfire.firms`, key-free tier |
 | **DX cluster + WSPR** — announced DX and weak-signal propagation reports | DX cluster telnet, `wspr.live` | GreatCircle, Point | Callsign for the cluster login | `shipped` — `hamradio.dxcluster` and `hamradio.wspr` |
+| **ReliefWeb disasters** — current/alert humanitarian disasters | ReliefWeb v2 `/disasters` | Point | Pre-approved `appname` since Nov 2025 | `shipped` — `humanitarian.reliefweb` → `humanitarian.disaster`; disabled until `local.json` overlays the appname |
+| **ACLED conflict events** — recent political violence / protest points | ACLED `/api/acled/read` | Point | myACLED OAuth or Bearer token | `shipped` — `conflict.acled` → `conflict.event`; `local.json` fail-closed only, never live-enabled with secrets |
 
 Rationale: aircraft and ships in motion, balloons climbing and drifting, and
 fires appearing and dying make the globe a living picture rather than a static
@@ -82,8 +84,6 @@ cleaner licence or API than we have today):
 
 | Candidate | Why deferred |
 | --- | --- |
-| ReliefWeb disasters | Left to a parallel implementation run; do not duplicate here. API historically required a pre-approved `appname`. |
-| ACLED conflict events | Left to a parallel implementation run; do not duplicate here. Keyed + terms. |
 | USGS HANS / VONA | `getRecent` returned 404 when probed; USGS volcano GeoJSON already carries alert level / color. |
 | AviationWeather open G-AIRMET contours | LineString contours (FZLVL etc.) have no Area fill and would draw on CABLES; closed rings are kept. |
 | Global Fishing Watch SAR / 4Wings presence | Raster / Field geometry; fishing-event Points are shipped instead (fail-closed). |
