@@ -39,5 +39,10 @@ public:
 
     UFUNCTION(BlueprintPure, Category="ION COMMAND|Solar")
     static double GraylineDistanceKm(const FGeoPosition& Position, const FDateTime& Utc);
+
+    // True when the globe sphere sits strictly between Eye and Point, so a
+    // far-side marker/edge is occluded the same way the terrain hides it.
+    // Not a UFUNCTION: pick helper only, no Blueprint need, no UHT churn.
+    static bool IsOccludedByGlobe(const FVector& Eye, const FVector& Point, double GlobeRadius);
 };
 

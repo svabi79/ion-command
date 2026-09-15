@@ -78,6 +78,18 @@ superseded configurations, is in
 
 ### Fixed
 
+- **Globe hover agrees with what is drawn.** Point pick now requires a live
+  render slot (domain off, aircraft filter, empty slot, hidden actor) and
+  culls globe-occluded far-side markers, so a tooltip cannot describe a
+  ghost on the other hemisphere. Area fills/outlines join the HUD hover
+  after cables and before muted borders; unpinned `visual.defaultHidden`
+  footprints stay unhoverable until **P**. A Brandmeister centroid that
+  arrives before an APRS fix no longer keeps the modelled entity id after
+  the GPS marker takes the slot — hover, click, and search FOCUS the
+  measured position. FT8 arcs, trails, heatmap, and ionosphere shells
+  stay intentionally non-hoverable. Wall visual verify remaining (no UE
+  on this VM). CodeFred[Agent].
+
 - **APRS one station, one marker.** A station beacon, an object/item named
   with the same callsign, and a third-party `}` wrap used to become three
   EntityIDs (`aprs:station:` / `:object:` / `:item:`), so search for

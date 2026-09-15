@@ -129,7 +129,7 @@ Press **O**. Every row is clickable and shows its state:
 | **Left mouse** | select a path / click menu rows |
 | **Right mouse** (drag) | orbit the globe |
 | **Mouse wheel** | zoom — steps scale with distance, down to ~32 km above the surface |
-| **Hover a marker** | tooltip with callsign/flight level/type/…; aircraft seen by an `aviation.adsb` circle also show their filed route (`CDG Paris  >  TUN Tunis`) once resolved. Over a satellite: **P FOOTPRINT** |
+| **Hover a marker** | tooltip with callsign/flight level/type/…; aircraft seen by an `aviation.adsb` circle also show their filed route (`CDG Paris  >  TUN Tunis`) once resolved. Over a satellite: **P FOOTPRINT**. Also names cable routes, area fills (alerts/cones/grayline when drawn), and cartography lines. Hidden, filtered, expired, unpinned, or far-side features do not show a tooltip. |
 | **Tab** | cycle HUD: full → minimal → hidden |
 | **O** | overlay menu |
 | **V** | show/hide paths |

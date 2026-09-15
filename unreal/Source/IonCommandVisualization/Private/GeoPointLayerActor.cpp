@@ -246,18 +246,28 @@ void AGeoPointLayerActor::Submit(const FGeoMessageEnvelope& Message)
     {
         if (const FString* Aliased = TitleToEntity.Find(TitleKey))
         {
-            if (int32* ExistingTitle = EntityToPoint.Find(*Aliased))
+            const FString AliasedKey = *Aliased;
+            if (const int32* ExistingTitle = EntityToPoint.Find(AliasedKey))
             {
+                const int32 ExistingIndex = *ExistingTitle;
                 if (bCentroid)
                 {
                     // Same station already plotted from a precise feed: keep
                     // that marker, refresh labels only, do not relocate.
-                    EntityKey = *Aliased;
+                    EntityKey = AliasedKey;
                 }
-                else if (ActivePoints[*ExistingTitle].bCentroid)
+                else if (ActivePoints[ExistingIndex].bCentroid)
                 {
-                    // Precise fix replaces a country-file centroid in place.
-                    EntityKey = *Aliased;
+                    // Precise fix replaces a country-file centroid in place
+                    // and takes over the slot's identity so hover/search/click
+                    // resolve the measured entity, not the modelled one.
+                    if (AliasedKey != EntityKey)
+                    {
+                        EntityToPoint.Remove(AliasedKey);
+                        EntityToPoint.Add(EntityKey, ExistingIndex);
+                        ActivePoints[ExistingIndex].EntityKey = EntityKey;
+                        TitleToEntity.Add(TitleKey, EntityKey);
+                    }
                 }
             }
         }
@@ -572,11 +582,15 @@ const FRenderedGeoPoint* AGeoPointLayerActor::FindNearestToRay(const FVector& Ra
     double BestAlong = TNumericLimits<double>::Max();
     for (const FRenderedGeoPoint& Point : ActivePoints)
     {
+        // RenderSlot is the instance that is actually drawn. Domain/expiry/
+        // aircraft filters can flip before the next reconcile Tick, so keep
+        // those checks too: hover and render must agree in both windows.
+        if (Point.RenderSlot == INDEX_NONE) continue;
         if (!IsDomainVisible(Point.Domain)) continue;
-        // Skip expired markers awaiting the batched cleanup sweep.
         if (IsExpired(Point, NowSeconds)) continue;
         if (IsAircraftFiltered(Point)) continue;
         const FVector PickLocation = ComputeRenderedLocation(Point, NowSeconds);
+        if (UGeoMathLibrary::IsOccludedByGlobe(RayOrigin, PickLocation, GlobeRadius)) continue;
         const FVector ToPoint = PickLocation - RayOrigin;
         const double Along = FVector::DotProduct(ToPoint, RayDirection);
         if (Along <= 0.0) continue;

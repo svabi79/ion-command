@@ -43,6 +43,8 @@ public:
     virtual void Submit(const FGeoMessageEnvelope& Message) override;
     virtual void Reset() override;
 
+    // Hidden actors, expired routes, and globe-occluded far-side segments
+    // do not win; matches the cable/border hover the HUD already uses.
     bool FindClosestMessageToRay(const FVector& RayOrigin, const FVector& RayDirection, double RayLength, double MaxDistance, FGeoMessageEnvelope& OutMessage) const;
     FGeoRenderLayerStatistics GetRenderStatistics() const;
     FString GetLegendNote() const;

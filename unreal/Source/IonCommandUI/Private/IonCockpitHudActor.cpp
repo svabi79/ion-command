@@ -1374,6 +1374,9 @@ void AIonCockpitHudActor::DrawSettings(float Scale, float Alpha)
 
 void AIonCockpitHudActor::DrawHoverTooltip(float Scale, float Alpha)
 {
+    // Hover agrees with what is drawn: Point markers first, then cables,
+    // then area fills/outlines, then cartography. Trails, heatmap,
+    // ionosphere shells, and FT8 arcs are intentionally non-hoverable.
     APlayerController* Player = PlayerOwner.Get();
     if (!Player) return;
     float MouseX = 0, MouseY = 0;
@@ -1449,22 +1452,43 @@ void AIonCockpitHudActor::DrawHoverTooltip(float Scale, float Alpha)
                     if (It->IsCartography()) CartographyLayer = *It;
                     else CableLayer = *It;
                 }
+                auto HoverEnvelope = [&](const FGeoMessageEnvelope& Message)
+                {
+                    HoverTitle = Message.Properties.FindRef(TEXT("display.title"));
+                    HoverPrimary = Message.Properties.FindRef(TEXT("display.primary"));
+                    HoverSecondary = Message.Properties.FindRef(TEXT("display.secondary"));
+                    HoverTertiary = Message.Properties.FindRef(TEXT("display.tertiary"));
+                    HoverDomain = Message.Domain.ToUpper();
+                    LastHoverPickX = MouseX;
+                    LastHoverPickY = MouseY;
+                    bHoverValid = true;
+                };
                 auto HoverPath = [&](AGeoPathLayerActor* Layer)
                 {
                     if (!Layer || Layer->IsHidden()) return false;
                     FGeoMessageEnvelope Path;
                     if (!Layer->FindClosestMessageToRay(RayOrigin, RayDirection, RayLength, 32.0, Path)) return false;
-                    HoverTitle = Path.Properties.FindRef(TEXT("display.title"));
-                    HoverPrimary = Path.Properties.FindRef(TEXT("display.primary"));
-                    HoverSecondary = Path.Properties.FindRef(TEXT("display.secondary"));
-                    HoverTertiary = Path.Properties.FindRef(TEXT("display.tertiary"));
-                    HoverDomain = Path.Domain.ToUpper();
-                    LastHoverPickX = MouseX;
-                    LastHoverPickY = MouseY;
-                    bHoverValid = true;
+                    HoverEnvelope(Path);
                     return true;
                 };
-                if (!HoverPath(CableLayer))
+                auto HoverAreas = [&]()
+                {
+                    for (TActorIterator<AGeoAreaLayerActor> It(GetWorld()); It; ++It)
+                    {
+                        if (It->IsHidden()) continue;
+                        FGeoMessageEnvelope Area;
+                        if (!It->FindClosestMessageToRay(RayOrigin, RayDirection, RayLength, 32.0, Area)) continue;
+                        HoverEnvelope(Area);
+                        return true;
+                    }
+                    return false;
+                };
+                // Points already ran. Cables beat areas and muted borders so a
+                // fill or cartography line under a named route cannot steal it.
+                // Areas beat borders so an alert/cone/grayline is hoverable.
+                // Trails, heatmap, ionosphere shells, and FT8 arcs stay
+                // intentionally non-hoverable (arcs remain click-selectable).
+                if (!HoverPath(CableLayer) && !HoverAreas())
                 {
                     HoverPath(CartographyLayer);
                 }

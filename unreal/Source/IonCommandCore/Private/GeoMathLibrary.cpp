@@ -176,3 +176,27 @@ double UGeoMathLibrary::GraylineDistanceKm(const FGeoPosition& Position, const F
     return FMath::Abs(AngularDistance - UE_HALF_PI) * EarthRadiusKm;
 }
 
+bool UGeoMathLibrary::IsOccludedByGlobe(const FVector& Eye, const FVector& Point, double GlobeRadius)
+{
+    const FVector Delta = Point - Eye;
+    const double Distance = Delta.Size();
+    if (Distance <= UE_KINDA_SMALL_NUMBER || GlobeRadius <= 0.0)
+    {
+        return false;
+    }
+    const FVector Direction = Delta / Distance;
+    // |Eye + t Direction|^2 = R^2, a = 1.
+    const double B = 2.0 * FVector::DotProduct(Eye, Direction);
+    const double C = Eye.SizeSquared() - GlobeRadius * GlobeRadius;
+    const double Discriminant = B * B - 4.0 * C;
+    if (Discriminant <= 0.0)
+    {
+        return false;
+    }
+    const double TNear = (-B - FMath::Sqrt(Discriminant)) * 0.5;
+    // Slack keeps surface features sitting just above the mesh from counting
+    // as behind it; a hit after the point is the far hemisphere, not occluder.
+    constexpr double Slack = 0.25;
+    return TNear > 1e-4 && TNear < Distance - Slack;
+}
+

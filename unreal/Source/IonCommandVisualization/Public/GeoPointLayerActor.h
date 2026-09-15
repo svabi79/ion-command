@@ -98,8 +98,11 @@ public:
     bool IsDomainVisible(const FString& Domain) const { return !HiddenDomains.Contains(Domain); }
     void SetDomainVisible(const FString& Domain, bool bVisible);
 
-    // Hover pick: nearest visible marker to the ray within MaxDistance world
-    // units, or nullptr. CPU scan, call throttled.
+    // Hover pick: nearest *drawn* marker to the ray within MaxDistance world
+    // units, or nullptr. Skips hidden actors, empty RenderSlots, filtered/
+    // expired/domain-off points, and globe-occluded far-side markers so the
+    // tooltip cannot describe something the operator cannot see. CPU scan,
+    // call throttled.
     const FRenderedGeoPoint* FindNearestToRay(const FVector& RayOrigin, const FVector& RayDirection, double MaxDistance) const;
 
     // Overlay-menu toggle: apply/ignore the domain-declared altitude

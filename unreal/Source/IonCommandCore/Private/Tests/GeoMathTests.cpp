@@ -43,5 +43,20 @@ bool FIonGreatCircleTest::RunTest(const FString& Parameters)
     return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FIonGlobeOcclusionTest, "IONCOMMAND.Core.Geo.GlobeOcclusion", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FIonGlobeOcclusionTest::RunTest(const FString& Parameters)
+{
+    constexpr double Radius = 1000.0;
+    const FVector Greenwich = UGeoMathLibrary::LatitudeLongitudeToUnitSphere(0.0, 0.0) * (Radius + 8.0);
+    const FVector NearEye = Greenwich.GetSafeNormal() * (Radius * 3.0);
+    const FVector FarEye = -NearEye;
+    TestFalse(TEXT("near-side surface marker is not occluded"), UGeoMathLibrary::IsOccludedByGlobe(NearEye, Greenwich, Radius));
+    TestTrue(TEXT("far-side surface marker is occluded by the globe"), UGeoMathLibrary::IsOccludedByGlobe(FarEye, Greenwich, Radius));
+    const FVector OffLimbSat(-Radius * 2.0, 0.0, 0.0);
+    const FVector PolarEye(0.0, 0.0, Radius * 3.0);
+    TestFalse(TEXT("line of sight that misses the globe is not occluded"), UGeoMathLibrary::IsOccludedByGlobe(PolarEye, OffLimbSat, Radius));
+    return true;
+}
+
 #endif
 
