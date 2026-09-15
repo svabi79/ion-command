@@ -16,7 +16,7 @@
 // These construct the actors with NewObject() directly (no SpawnActor, no
 // UWorld, no BeginPlay()) rather than spinning up a full world context:
 // every code path exercised here (Submit(), capacity trim, SetBandFocus,
-// SetDomainVisible, and a directly-invoked Tick()) only touches
+// SetDomainVisible, ray pick, and a directly-invoked Tick()) only touches
 // constructor-initialized state and is written to tolerate GetWorld()
 // returning null (the same guard the runtime already needs for an actor
 // ticked before its first BeginPlay). This deliberately does NOT exercise
@@ -84,6 +84,23 @@ namespace
         }
         Message.Geometry.RingLengths.Add(5);
         return Message;
+    }
+
+    void AimAt(const FVector& Target, FVector& OutOrigin, FVector& OutDirection)
+    {
+        OutOrigin = Target.GetSafeNormal() * (Target.Size() * 3.0);
+        OutDirection = (Target - OutOrigin).GetSafeNormal();
+    }
+
+    void AimThroughGlobe(const FVector& Target, FVector& OutOrigin, FVector& OutDirection)
+    {
+        OutOrigin = -Target.GetSafeNormal() * (Target.Size() * 3.0);
+        OutDirection = (Target - OutOrigin).GetSafeNormal();
+    }
+
+    FVector PointWorld(double Latitude, double Longitude, double GlobeRadius)
+    {
+        return UGeoMathLibrary::LatitudeLongitudeToUnitSphere(Latitude, Longitude) * (GlobeRadius + 8.0);
     }
 }
 
@@ -315,6 +332,15 @@ bool FGeoPathLayerRayPickHitsSubmittedRouteTest::RunTest(const FString& Paramete
     const FVector AwayOrigin = Away * 3.0;
     FGeoMessageEnvelope Miss;
     TestFalse(TEXT("ray aimed at empty ocean misses"), Actor->FindClosestMessageToRay(AwayOrigin, (Away - AwayOrigin).GetSafeNormal(), 10000.0, 32.0, Miss));
+
+    FVector FarOrigin, FarDirection;
+    AimThroughGlobe(Target, FarOrigin, FarDirection);
+    FGeoMessageEnvelope FarHit;
+    TestFalse(TEXT("far-side ray through the globe misses the route"), Actor->FindClosestMessageToRay(FarOrigin, FarDirection, 10000.0, 32.0, FarHit));
+
+    Actor->SetActorHiddenInGame(true);
+    FGeoMessageEnvelope HiddenHit;
+    TestFalse(TEXT("hidden path layer is not hoverable"), Actor->FindClosestMessageToRay(Origin, (Target - Origin).GetSafeNormal(), 10000.0, 32.0, HiddenHit));
     return true;
 }
 
@@ -358,34 +384,84 @@ bool FGeoAreaLayerCoveragePinGatesHiddenAreasTest::RunTest(const FString& Parame
     Actor->Submit(Gated);
     Actor->Submit(Open);
     TestEqual(TEXT("ungated area is drawn"), Actor->GetRenderStatistics().TrackedItems, 1);
+    const FVector OpenCenter = UGeoMathLibrary::LatitudeLongitudeToUnitSphere(
+        Open.Geometry.Positions[0].Latitude + 1.0, Open.Geometry.Positions[0].Longitude + 1.0) * (Actor->GlobeRadius + 3.5);
+    FVector Origin, Direction;
+    AimAt(OpenCenter, Origin, Direction);
+    FGeoMessageEnvelope Hit;
+    TestTrue(TEXT("ungated area is hoverable"), Actor->FindClosestMessageToRay(Origin, Direction, 10000.0, 32.0, Hit));
+
+    const FVector GatedCenter = UGeoMathLibrary::LatitudeLongitudeToUnitSphere(
+        Gated.Geometry.Positions[0].Latitude + 1.0, Gated.Geometry.Positions[0].Longitude + 1.0) * (Actor->GlobeRadius + 3.5);
+    FVector GatedOrigin, GatedDirection;
+    AimAt(GatedCenter, GatedOrigin, GatedDirection);
+    FGeoMessageEnvelope GatedHit;
+    TestFalse(TEXT("unpinned footprint is not hoverable"), Actor->FindClosestMessageToRay(GatedOrigin, GatedDirection, 10000.0, 32.0, GatedHit));
+
     Actor->SetCoveragePin(TEXT("25544"), true);
     TestEqual(TEXT("pinning reveals only that gated area"), Actor->GetRenderStatistics().TrackedItems, 2);
+    TestTrue(TEXT("pinned footprint becomes hoverable"), Actor->FindClosestMessageToRay(GatedOrigin, GatedDirection, 10000.0, 32.0, GatedHit));
     Actor->SetCoveragePin(TEXT("25544"), false);
     TestEqual(TEXT("unpinning removes the footprint and keeps the open area"), Actor->GetRenderStatistics().TrackedItems, 1);
+    TestFalse(TEXT("unpinned footprint stops being hoverable"), Actor->FindClosestMessageToRay(GatedOrigin, GatedDirection, 10000.0, 32.0, GatedHit));
     return true;
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FGeoPointLayerCentroidDoesNotStackOrMoveTest, "IONCOMMAND.Visualization.PointLayer.CentroidSharesTitle", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FGeoPointLayerCentroidDoesNotStackOrMoveTest::RunTest(const FString& Parameters)
 {
+    auto MakeStation = []()
+    {
+        FGeoMessageEnvelope Station = MakePointMessage(0, TEXT("aprs"));
+        Station.EntityId = TEXT("aprs:station:HB9SVT-5");
+        Station.Properties.Add(TEXT("display.title"), TEXT("HB9SVT-5"));
+        Station.Geometry.Positions[0].Longitude = 8.5;
+        Station.Geometry.Positions[0].Latitude = 47.4;
+        return Station;
+    };
+    auto MakeCentroid = []()
+    {
+        FGeoMessageEnvelope Centroid = MakePointMessage(1, TEXT("hamradio"));
+        Centroid.EntityId = TEXT("radio:activity:HB9SVT-5");
+        Centroid.Properties.Add(TEXT("display.title"), TEXT("HB9SVT-5"));
+        Centroid.Properties.Add(TEXT("visual.centroid"), TEXT("true"));
+        Centroid.Properties.Add(TEXT("display.primary"), TEXT("TG 228"));
+        Centroid.Geometry.Positions[0].Longitude = 10.45;
+        Centroid.Geometry.Positions[0].Latitude = 51.16;
+        return Centroid;
+    };
+
     AGeoPointLayerActor* Actor = NewObject<AGeoPointLayerActor>(GetTransientPackage());
-    FGeoMessageEnvelope Station = MakePointMessage(0, TEXT("aprs"));
-    Station.EntityId = TEXT("aprs:station:HB9SVT-5");
-    Station.Properties.Add(TEXT("display.title"), TEXT("HB9SVT-5"));
-    Station.Geometry.Positions[0].Longitude = 8.5;
-    Station.Geometry.Positions[0].Latitude = 47.4;
-    Actor->Submit(Station);
-
-    FGeoMessageEnvelope Centroid = MakePointMessage(1, TEXT("hamradio"));
-    Centroid.EntityId = TEXT("radio:activity:HB9SVT-5");
-    Centroid.Properties.Add(TEXT("display.title"), TEXT("HB9SVT-5"));
-    Centroid.Properties.Add(TEXT("visual.centroid"), TEXT("true"));
-    Centroid.Properties.Add(TEXT("display.primary"), TEXT("TG 228"));
-    Centroid.Geometry.Positions[0].Longitude = 8.2;
-    Centroid.Geometry.Positions[0].Latitude = 47.0;
-    Actor->Submit(Centroid);
-
+    Actor->Submit(MakeStation());
+    Actor->Submit(MakeCentroid());
     TestEqual(TEXT("centroid does not add a second marker"), Actor->GetRenderStatistics().TrackedItems, 1);
+
+    const FVector Measured = PointWorld(47.4, 8.5, Actor->GlobeRadius);
+    const FVector Country = PointWorld(51.16, 10.45, Actor->GlobeRadius);
+    FVector Origin, Direction;
+    AimAt(Measured, Origin, Direction);
+    const FRenderedGeoPoint* Hit = Actor->FindNearestToRay(Origin, Direction, 14.0);
+    TestTrue(TEXT("hover at the GPS fix finds the station"), Hit != nullptr);
+    if (Hit)
+    {
+        TestEqual(TEXT("hover identity stays the measured APRS entity"), Hit->EntityKey, FString(TEXT("aprs:station:HB9SVT-5")));
+        TestTrue(TEXT("marker stays at the measured fix"), Hit->Location.Equals(Measured, 0.05));
+    }
+    AimAt(Country, Origin, Direction);
+    TestTrue(TEXT("hover at the country centroid misses the GPS marker"), Actor->FindNearestToRay(Origin, Direction, 14.0) == nullptr);
+
+    AGeoPointLayerActor* CentroidFirst = NewObject<AGeoPointLayerActor>(GetTransientPackage());
+    CentroidFirst->Submit(MakeCentroid());
+    CentroidFirst->Submit(MakeStation());
+    TestEqual(TEXT("precise fix does not stack on a prior centroid"), CentroidFirst->GetRenderStatistics().TrackedItems, 1);
+    AimAt(Measured, Origin, Direction);
+    const FRenderedGeoPoint* Remapped = CentroidFirst->FindNearestToRay(Origin, Direction, 14.0);
+    TestTrue(TEXT("centroid-then-GPS still hovers at the measured fix"), Remapped != nullptr);
+    if (Remapped)
+    {
+        TestEqual(TEXT("precise fix takes over the slot identity"), Remapped->EntityKey, FString(TEXT("aprs:station:HB9SVT-5")));
+        TestTrue(TEXT("centroid-first marker relocates to the GPS fix"), Remapped->Location.Equals(Measured, 0.05));
+    }
     return true;
 }
 
@@ -403,6 +479,100 @@ bool FGeoAreaLayerCapacityTrimIsIncrementalTest::RunTest(const FString& Paramete
     TestTrue(TEXT("tracked count stays at or under the capacity bound"), Stats.TrackedItems <= Actor->MaxVisibleAreas);
     TestTrue(TEXT("capacity eviction fired"), Stats.CapacityEvictions > 0);
     TestEqual(TEXT("no full rebuild under capacity pressure"), Stats.FullRebuilds, (int64)0);
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FGeoPointLayerHoverAgreesWithVisibilityTest, "IONCOMMAND.Visualization.PointLayer.HoverAgreesWithVisibility", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FGeoPointLayerHoverAgreesWithVisibilityTest::RunTest(const FString& Parameters)
+{
+    AGeoPointLayerActor* Actor = NewObject<AGeoPointLayerActor>(GetTransientPackage());
+    FGeoMessageEnvelope Station = MakePointMessage(0, TEXT("aprs"));
+    Station.Geometry.Positions[0].Latitude = 47.4;
+    Station.Geometry.Positions[0].Longitude = 8.5;
+    Actor->Submit(Station);
+
+    const FVector Target = PointWorld(47.4, 8.5, Actor->GlobeRadius);
+    FVector Origin, Direction;
+    AimAt(Target, Origin, Direction);
+    TestTrue(TEXT("drawn marker is hoverable"), Actor->FindNearestToRay(Origin, Direction, 14.0) != nullptr);
+
+    const FVector Swapped = UGeoMathLibrary::LatitudeLongitudeToUnitSphere(8.5, 47.4) * (Actor->GlobeRadius + 8.0);
+    FVector SwapOrigin, SwapDirection;
+    AimAt(Swapped, SwapOrigin, SwapDirection);
+    TestTrue(TEXT("swapped lon/lat does not hover the marker"), Actor->FindNearestToRay(SwapOrigin, SwapDirection, 14.0) == nullptr);
+
+    FVector FarOrigin, FarDirection;
+    AimThroughGlobe(Target, FarOrigin, FarDirection);
+    TestTrue(TEXT("far-side ray through the globe misses the marker"), Actor->FindNearestToRay(FarOrigin, FarDirection, 14.0) == nullptr);
+
+    Actor->SetDomainVisible(TEXT("aprs"), false);
+    TestTrue(TEXT("domain-off marker is not hoverable before Tick"), Actor->FindNearestToRay(Origin, Direction, 14.0) == nullptr);
+    Actor->Tick(0.0f);
+    TestTrue(TEXT("domain-off marker stays unhoverable after instances drop"), Actor->FindNearestToRay(Origin, Direction, 14.0) == nullptr);
+
+    Actor->SetDomainVisible(TEXT("aprs"), true);
+    TestTrue(TEXT("domain-on but empty RenderSlot is not hoverable"), Actor->FindNearestToRay(Origin, Direction, 14.0) == nullptr);
+    Actor->Tick(0.0f);
+    TestTrue(TEXT("re-shown marker is hoverable after it is drawn"), Actor->FindNearestToRay(Origin, Direction, 14.0) != nullptr);
+
+    Actor->SetActorHiddenInGame(true);
+    TestTrue(TEXT("hidden point layer is not hoverable"), Actor->FindNearestToRay(Origin, Direction, 14.0) == nullptr);
+    Actor->SetActorHiddenInGame(false);
+
+    AGeoPointLayerActor* Aviation = NewObject<AGeoPointLayerActor>(GetTransientPackage());
+    FGeoMessageEnvelope Plane = MakePointMessage(0, TEXT("aviation"));
+    Plane.Geometry.Positions[0].Latitude = 0.0;
+    Plane.Geometry.Positions[0].Longitude = 0.0;
+    Plane.Geometry.Positions[0].AltitudeMeters = 500.0;
+    Aviation->Submit(Plane);
+    const FVector PlaneTarget = PointWorld(0.0, 0.0, Aviation->GlobeRadius);
+    FVector PlaneOrigin, PlaneDirection;
+    AimAt(PlaneTarget, PlaneOrigin, PlaneDirection);
+    TestTrue(TEXT("unfiltered aircraft is hoverable"), Aviation->FindNearestToRay(PlaneOrigin, PlaneDirection, 24.0) != nullptr);
+    Aviation->SetMinAircraftAltitudeMeters(3000.0);
+    TestTrue(TEXT("altitude-filtered aircraft is not hoverable"), Aviation->FindNearestToRay(PlaneOrigin, PlaneDirection, 24.0) == nullptr);
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FGeoAreaLayerHoverInteriorAndVisibilityTest, "IONCOMMAND.Visualization.AreaLayer.HoverInteriorAndVisibility", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FGeoAreaLayerHoverInteriorAndVisibilityTest::RunTest(const FString& Parameters)
+{
+    AGeoAreaLayerActor* Actor = NewObject<AGeoAreaLayerActor>(GetTransientPackage());
+    FGeoMessageEnvelope Area;
+    Area.MessageId = TEXT("alert-wide");
+    Area.EntityId = TEXT("weather:alert:wide");
+    Area.Domain = TEXT("weather");
+    Area.MessageType = EGeoMessageType::Area;
+    Area.SemanticType = TEXT("weather.alert");
+    Area.Geometry.Type = EGeoGeometryType::Polygon;
+    const double CornerLon[] = {-10.0, 10.0, 10.0, -10.0, -10.0};
+    const double CornerLat[] = {-10.0, -10.0, 10.0, 10.0, -10.0};
+    for (int32 Corner = 0; Corner < 5; ++Corner)
+    {
+        FGeoPosition Position;
+        Position.Longitude = CornerLon[Corner];
+        Position.Latitude = CornerLat[Corner];
+        Area.Geometry.Positions.Add(Position);
+    }
+    Area.Geometry.RingLengths.Add(5);
+    Area.Properties.Add(TEXT("display.title"), TEXT("Wide Alert"));
+    Actor->Submit(Area);
+
+    const FVector Center = UGeoMathLibrary::LatitudeLongitudeToUnitSphere(0.0, 0.0) * (Actor->GlobeRadius + 3.5);
+    FVector Origin, Direction;
+    AimAt(Center, Origin, Direction);
+    FGeoMessageEnvelope Hit;
+    TestTrue(TEXT("ray through the fill interior hits the area"), Actor->FindClosestMessageToRay(Origin, Direction, 10000.0, 32.0, Hit));
+    TestEqual(TEXT("interior pick returns the submitted area"), Hit.MessageId, FString(TEXT("alert-wide")));
+
+    FVector FarOrigin, FarDirection;
+    AimThroughGlobe(Center, FarOrigin, FarDirection);
+    FGeoMessageEnvelope FarHit;
+    TestFalse(TEXT("far-side ray through the globe misses the area"), Actor->FindClosestMessageToRay(FarOrigin, FarDirection, 10000.0, 32.0, FarHit));
+
+    Actor->SetActorHiddenInGame(true);
+    FGeoMessageEnvelope HiddenHit;
+    TestFalse(TEXT("hidden area layer is not hoverable"), Actor->FindClosestMessageToRay(Origin, Direction, 10000.0, 32.0, HiddenHit));
     return true;
 }
 

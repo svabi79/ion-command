@@ -573,10 +573,15 @@ bool AGeoPathLayerActor::FindClosestMessageToRay(const FVector& RayOrigin, const
         return false;
     }
     const FVector RayEnd = RayOrigin + RayDirection.GetSafeNormal() * RayLength;
+    const double NowSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
     double BestDistanceSquared = FMath::Square(MaxDistance);
     bool bFound = false;
     for (const FRenderedGeoPath& Path : ActivePaths)
     {
+        if (IsExpired(Path, NowSeconds))
+        {
+            continue;
+        }
         const int32 Lines = Path.Message.Geometry.NumLines();
         for (int32 LineIndex = 0; LineIndex < Lines; ++LineIndex)
         {
@@ -592,6 +597,10 @@ bool AGeoPathLayerActor::FindClosestMessageToRay(const FVector& RayOrigin, const
                 FVector ClosestRay;
                 FVector ClosestEdge;
                 FMath::SegmentDistToSegmentSafe(RayOrigin, RayEnd, World[Index], World[Index + 1], ClosestRay, ClosestEdge);
+                if (UGeoMathLibrary::IsOccludedByGlobe(RayOrigin, ClosestEdge, GlobeRadius))
+                {
+                    continue;
+                }
                 const double DistanceSquared = FVector::DistSquared(ClosestRay, ClosestEdge);
                 if (DistanceSquared < BestDistanceSquared)
                 {

@@ -58,7 +58,12 @@ The component list is in [COMPONENTS.md](COMPONENTS.md) — not repeated here.
   or the overlay menu's BORDERS row. Cable hover and `C` stay on the cable role.
 - Cockpit HUD: status bar, band histogram, path-rate sparkline, top DXCC
   regions with flags, auroral oval, HF conditions estimate, hop/MUF path
-  analysis, hover tooltips, own-station reticle
+  analysis, hover tooltips, own-station reticle. Hover targets the same
+  geographic fix the marker is drawn at (Point, cable Path, Area fill/
+  outline, then cartography). Hidden layers, domain-off / filtered /
+  expired / unpinned / far-side-occluded features do not win. Trails,
+  heatmap, ionosphere shells, and FT8 arcs are intentionally
+  non-hoverable (arcs remain click-selectable).
 - Overlay menu (per-layer and per-domain visibility) and an in-app settings
   panel with text entry for callsign and grid locator, persisted to `Game.ini`
 - Timeline: pause, replay of the recent window, variable speed, return to live

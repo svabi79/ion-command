@@ -60,6 +60,54 @@ bool PointInTriangle(const FGeoPosition& P, const FGeoPosition& A, const FGeoPos
     return !(bHasNeg && bHasPos);
 }
 
+bool PointInUnwrappedRing(const FGeoPosition& Query, const TArray<FGeoPosition>& Unwrapped)
+{
+    const int32 Count = Unwrapped.Num();
+    if (Count < 3)
+    {
+        return false;
+    }
+    bool bInside = false;
+    for (int32 Index = 0, Previous = Count - 1; Index < Count; Previous = Index++)
+    {
+        const FGeoPosition& A = Unwrapped[Previous];
+        const FGeoPosition& B = Unwrapped[Index];
+        if ((A.Latitude > Query.Latitude) == (B.Latitude > Query.Latitude))
+        {
+            continue;
+        }
+        const double Denom = B.Latitude - A.Latitude;
+        if (FMath::Abs(Denom) < 1e-12)
+        {
+            continue;
+        }
+        const double CrossingLon = (B.Longitude - A.Longitude) * (Query.Latitude - A.Latitude) / Denom + A.Longitude;
+        if (Query.Longitude < CrossingLon)
+        {
+            bInside = !bInside;
+        }
+    }
+    return bInside;
+}
+
+bool RayHitsSphere(const FVector& Origin, const FVector& UnitDirection, double Radius, double MaxDistance, FVector& OutHit)
+{
+    const double B = 2.0 * FVector::DotProduct(Origin, UnitDirection);
+    const double C = Origin.SizeSquared() - Radius * Radius;
+    const double Discriminant = B * B - 4.0 * C;
+    if (Discriminant < 0.0)
+    {
+        return false;
+    }
+    const double T = (-B - FMath::Sqrt(Discriminant)) * 0.5;
+    if (T < 1e-4 || T > MaxDistance)
+    {
+        return false;
+    }
+    OutHit = Origin + UnitDirection * T;
+    return true;
+}
+
 void CloseAndDedup(TArray<FGeoPosition>& Ring)
 {
     if (Ring.Num() >= 2)
@@ -796,11 +844,86 @@ void AGeoAreaLayerActor::RefreshSelectionHighlight()
 
 bool AGeoAreaLayerActor::FindClosestMessageToRay(const FVector& RayOrigin, const FVector& RayDirection, double RayLength, double MaxDistance, FGeoMessageEnvelope& OutMessage) const
 {
-    const FVector RayEnd = RayOrigin + RayDirection.GetSafeNormal() * RayLength;
+    if (IsHidden())
+    {
+        return false;
+    }
+    const FVector Direction = RayDirection.GetSafeNormal();
+    const FVector RayEnd = RayOrigin + Direction * RayLength;
+    const double NowSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+
+    FVector GlobeHit;
+    if (RayHitsSphere(RayOrigin, Direction, GlobeRadius + FillHeight, RayLength, GlobeHit))
+    {
+        const FGeoPosition Query = UGeoMathLibrary::UnitSphereToLatitudeLongitude(GlobeHit);
+        double BestMetric = TNumericLimits<double>::Max();
+        bool bInterior = false;
+        for (const FRenderedGeoArea& Area : ActiveAreas)
+        {
+            if (IsExpired(Area, NowSeconds))
+            {
+                continue;
+            }
+            const int32 Rings = Area.Message.Geometry.NumRings();
+            bool bContains = false;
+            double Metric = 0.0;
+            for (int32 RingIndex = 0; RingIndex < Rings; ++RingIndex)
+            {
+                TArray<FGeoPosition> Ring;
+                if (!Area.Message.Geometry.GetRing(RingIndex, Ring))
+                {
+                    continue;
+                }
+                TArray<FGeoPosition> Work = Ring;
+                CloseAndDedup(Work);
+                if (Work.Num() < 3)
+                {
+                    continue;
+                }
+                TArray<FGeoPosition> Unwrapped;
+                Unwrapped.Reserve(Work.Num());
+                double PreviousLon = Work[0].Longitude;
+                for (const FGeoPosition& Position : Work)
+                {
+                    FGeoPosition UnwrappedPosition = Position;
+                    UnwrappedPosition.Longitude = UnwrapDelta(PreviousLon, Position.Longitude);
+                    PreviousLon = UnwrappedPosition.Longitude;
+                    Unwrapped.Add(UnwrappedPosition);
+                }
+                FGeoPosition UnwrappedQuery = Query;
+                while (UnwrappedQuery.Longitude - Unwrapped[0].Longitude > 180.0) UnwrappedQuery.Longitude -= 360.0;
+                while (UnwrappedQuery.Longitude - Unwrapped[0].Longitude < -180.0) UnwrappedQuery.Longitude += 360.0;
+                if (PointInUnwrappedRing(UnwrappedQuery, Unwrapped))
+                {
+                    bContains = true;
+                    Metric += FMath::Abs(SignedArea(Unwrapped));
+                }
+            }
+            if (!bContains)
+            {
+                continue;
+            }
+            if (Metric < BestMetric)
+            {
+                BestMetric = Metric;
+                OutMessage = Area.Message;
+                bInterior = true;
+            }
+        }
+        if (bInterior)
+        {
+            return true;
+        }
+    }
+
     double BestDistanceSquared = FMath::Square(MaxDistance);
     bool bFound = false;
     for (const FRenderedGeoArea& Area : ActiveAreas)
     {
+        if (IsExpired(Area, NowSeconds))
+        {
+            continue;
+        }
         const int32 Rings = Area.Message.Geometry.NumRings();
         for (int32 RingIndex = 0; RingIndex < Rings; ++RingIndex)
         {
@@ -817,6 +940,10 @@ bool AGeoAreaLayerActor::FindClosestMessageToRay(const FVector& RayOrigin, const
                 FVector ClosestRay;
                 FVector ClosestEdge;
                 FMath::SegmentDistToSegmentSafe(RayOrigin, RayEnd, World[Index], World[(Index + 1) % World.Num()], ClosestRay, ClosestEdge);
+                if (UGeoMathLibrary::IsOccludedByGlobe(RayOrigin, ClosestEdge, GlobeRadius))
+                {
+                    continue;
+                }
                 const double DistanceSquared = FVector::DistSquared(ClosestRay, ClosestEdge);
                 if (DistanceSquared < BestDistanceSquared)
                 {

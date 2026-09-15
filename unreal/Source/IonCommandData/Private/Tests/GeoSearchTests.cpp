@@ -182,15 +182,23 @@ bool FIonSearchCollapsesSameTitlePreferringFixTest::RunTest(const FString& Param
     UGameInstance* GameInstance = NewObject<UGameInstance>();
     UGeoSearchSubsystem* Search = NewObject<UGeoSearchSubsystem>(GameInstance);
     const FDateTime Now(2026, 9, 13, 12, 0, 0);
-    Search->IngestMessage(MakeEnvelope(TEXT("aprs-1"), TEXT("aprs:station:HB9SVT-5"), TEXT("aprs"), TEXT("aprs.station"), TEXT("HB9SVT-5"), TEXT("Car"), Now));
+    FGeoMessageEnvelope Station = MakeEnvelope(TEXT("aprs-1"), TEXT("aprs:station:HB9SVT-5"), TEXT("aprs"), TEXT("aprs.station"), TEXT("HB9SVT-5"), TEXT("Car"), Now);
+    Station.Geometry.Positions[0].Longitude = 8.5;
+    Station.Geometry.Positions[0].Latitude = 47.4;
+    Search->IngestMessage(Station);
     FGeoMessageEnvelope Activity = MakeEnvelope(TEXT("bm-1"), TEXT("radio:activity:HB9SVT-5"), TEXT("hamradio"), TEXT("radio.activity"), TEXT("HB9SVT-5"), TEXT("TG 228"), Now + FTimespan::FromSeconds(5));
     Activity.Properties.Add(TEXT("visual.centroid"), TEXT("true"));
+    Activity.Geometry.Positions[0].Longitude = 10.45;
+    Activity.Geometry.Positions[0].Latitude = 51.16;
     Search->IngestMessage(Activity);
     const TArray<FGeoSearchResult> Hits = Search->Search(TEXT("HB9SVT-5"));
     TestEqual(TEXT("same title collapses to one result"), Hits.Num(), 1);
     if (Hits.Num() == 1)
     {
         TestEqual(TEXT("FOCUS keeps the measured APRS station"), Hits[0].Key, FString(TEXT("aprs:station:HB9SVT-5")));
+        TestTrue(TEXT("FOCUS geometry is the measured fix, not the country centroid"), Hits[0].Envelope.Geometry.Positions.Num() == 1
+            && FMath::IsNearlyEqual(Hits[0].Envelope.Geometry.Positions[0].Longitude, 8.5, 1e-6)
+            && FMath::IsNearlyEqual(Hits[0].Envelope.Geometry.Positions[0].Latitude, 47.4, 1e-6));
     }
     return true;
 }

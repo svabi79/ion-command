@@ -37,6 +37,10 @@ public:
     virtual void Submit(const FGeoMessageEnvelope& Message) override;
     virtual void Reset() override;
 
+    // Hover/click pick: fill interior at the near globe hit, else nearest
+    // visible outline. Hidden actors, expired areas, unpinned footprints
+    // (never submitted into ActiveAreas), and globe-occluded far-side edges
+    // do not win.
     bool FindClosestMessageToRay(const FVector& RayOrigin, const FVector& RayDirection, double RayLength, double MaxDistance, FGeoMessageEnvelope& OutMessage) const;
     FGeoRenderLayerStatistics GetRenderStatistics() const;
 
