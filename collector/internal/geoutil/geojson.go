@@ -306,7 +306,13 @@ func DecimatePolygons(polygons [][][][]float64, minKm float64, maxVertices int) 
 		cleaned := make([][][]float64, 0, len(rings))
 		for _, ring := range rings {
 			reduced := DecimateLine(ring, minKm, maxVertices)
-			if closed := closedRing(reduced); len(closed) >= 4 {
+			closed := closedRing(reduced)
+			if len(closed) < 4 {
+				// A ring smaller than minKm would collapse to a line; keep
+				// the original so small globe-scale fills still draw.
+				closed = closedRing(ring)
+			}
+			if len(closed) >= 4 {
 				cleaned = append(cleaned, closed)
 			}
 		}

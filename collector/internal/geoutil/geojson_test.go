@@ -64,6 +64,14 @@ func TestParseWKTPolygon(t *testing.T) {
 	}
 }
 
+func TestDecimatePolygonsKeepsSmallRing(t *testing.T) {
+	tiny := [][][][]float64{{{{-71.62, 42.52}, {-71.58, 42.52}, {-71.58, 42.56}, {-71.62, 42.56}, {-71.62, 42.52}}}}
+	got := DecimatePolygons(tiny, 20, 28)
+	if len(got) != 1 || len(got[0][0]) < 4 {
+		t.Fatalf("small ring dropped %#v", got)
+	}
+}
+
 func TestTakeLargestPolygons(t *testing.T) {
 	small := [][][]float64{{{0, 0}, {1, 0}, {1, 1}, {0, 0}}}
 	large := [][][]float64{{{0, 0}, {2, 0}, {2, 1}, {2, 2}, {1, 2}, {0, 2}, {0, 0}}}
