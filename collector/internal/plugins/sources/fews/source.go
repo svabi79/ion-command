@@ -1,7 +1,7 @@
 // Package fews polls FEWS NET IPC phase-map polygons from the FDW GeoJSON
-// API. Crisis and worse (IPC 3+) only, coarsened and capped. The plugin is
-// registered disabled: IPC maps mix FEWS NET public records with IPC
-// partnership copyright, and the live payload is tens of megabytes.
+// API. Crisis and worse (IPC 3+) only, coarsened and capped. IPC maps mix
+// FEWS NET public records with IPC partnership copyright, and the live
+// payload is tens of megabytes.
 package fews
 
 import (
