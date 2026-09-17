@@ -1,0 +1,4 @@
+{"type":"FeatureCollection","features":[
+  {"properties":{"NAME":"R-4001","TYPE_CODE":"R","TIMESOFUSE":"INTERMITTENT","CITY":"ABERDEEN","STATE":"MD"},"geometry":{"type":"Polygon","coordinates":[[[-76.2,39.4],[-76.1,39.4],[-76.1,39.5],[-76.2,39.5],[-76.2,39.4]]]}},
+  {"properties":{"NAME":"A-220","TYPE_CODE":"A","TIMESOFUSE":"0800 - 2200, DAILY","CITY":"MCGUIRE AFB","STATE":"NJ"},"geometry":{"type":"Polygon","coordinates":[[[-74.3,39.9],[-74.2,39.9],[-74.2,40.1],[-74.3,40.1],[-74.3,39.9]]]}}
+]}

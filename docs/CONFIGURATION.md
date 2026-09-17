@@ -253,6 +253,18 @@ Additional fields by type:
 | `conflict.ucdp` | `apiKey`, `pollSeconds`, `broker`, `cacheDirectory` | UCDP GED events. **Requires a token** in `local.json`; refuse to start if enabled without one. Floor one hour. |
 | `geography.cloudflare` | `apiKey`, `pollSeconds`, `broker`, `cacheDirectory` | Cloudflare Radar outages. **Requires a bearer token** in `local.json`; refuse to start if enabled without one. Floor five minutes. |
 | `maritime.gfw` | `apiKey`, `pollSeconds`, `broker`, `cacheDirectory` | GFW fishing events. **Requires a bearer token** in `local.json`; refuse to start if enabled without one. CC BY-NC. Floor one hour. |
+| `aviation.tfr` | `pollSeconds`, `broker`, `cacheDirectory` | FAA TFR WFS polygons. Floor two minutes. |
+| `aviation.sua` | `pollSeconds`, `broker`, `cacheDirectory` | FAA Special Use Airspace. Floor six hours. |
+| `wildfire.wfigs` | `pollSeconds`, `broker`, `cacheDirectory` | WFIGS fire perimeters. Floor five minutes. |
+| `weather.usdm` | `pollSeconds`, `broker`, `cacheDirectory` | U.S. Drought Monitor. Floor six hours. |
+| `humanitarian.cems` | `pollSeconds`, `broker`, `topic`, `cacheDirectory` | Copernicus EMS Rapid Mapping. `broker` overrides the list URL; `topic` the detail prefix. Floor fifteen minutes. |
+| `weather.glofas` | `pollSeconds`, `broker`, `cacheDirectory` | GloFAS Rapid Flood Mapping zip. Floor one hour. Download cap 12 MB. |
+| `geography.milbases` | `pollSeconds`, `broker`, `cacheDirectory` | NTAD military bases. Floor 24 hours. |
+| `maritime.incidentnews` | `pollSeconds`, `broker`, `lookBackHours`, `cacheDirectory` | NOAA IncidentNews CSV. Floor one hour; look-back default 180 days. |
+| `maritime.wpi` | `pollSeconds`, `broker`, `cacheDirectory` | NGA World Port Index CSV. Floor 24 hours. |
+| `humanitarian.fews` | `pollSeconds`, `broker`, `cacheDirectory` | FEWS NET IPC phase map. Floor 24 hours. **Disabled** in tracked configs (mixed IPC copyright + large payload). Overlay `"enabled": true` to turn on. |
+| `weather.ndbc` | `pollSeconds`, `broker`, `cacheDirectory` | NDBC latest observations. Floor five minutes. |
+| `weather.cpc` | `pollSeconds`, `broker`, `cacheDirectory` | CPC 8–14 day outlooks. Floor six hours. |
 | `hamradio.rbn` | `login` | Reverse Beacon Network telnet; **requires a real callsign**. Disabled by default. |
 | `aprs.is` | `login`, `filter`, `broker`, `latitude`/`longitude`/`radiusNm` | APRS-IS packet stream; **requires a real callsign**. Disabled by default. |
 | `wsjtx.udp` | `broker` (listen address) | Local WSJT-X UDP feed. |
@@ -382,6 +394,12 @@ in `local.json` (`openaip-airspace`, `ucdp-ged`, `cloudflare-radar`,
 The collector refuses to start if any of these is enabled without a key.
 All four stay **disabled** in tracked `live.json`. OpenAIP and GFW are
 CC BY-NC.
+
+**FEWS NET IPC (optional).** The plugin is shipped **disabled**. FDW tabular
+rows often say public, but IPC phase maps mix FEWS NET and IPC Global
+Partnership copyright and the GeoJSON is ~27 MB. Overlay `"enabled": true`
+on `fews-ipc` only if you accept those terms and want Crisis-and-worse
+Areas. Attribute FEWS NET / IPC.
 
 **Turn on recording** (`recording.enabled: true`) to capture a JSONL event log
 for later replay. Mind the volume — the live feeds produce several GB per hour;

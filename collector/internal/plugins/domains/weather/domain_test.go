@@ -79,3 +79,39 @@ func TestStormConeNormalizesAsArea(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestDroughtFloodBuoy(t *testing.T) {
+	ring := [][][]float64{{{-100, 35}, {-98, 35}, {-98, 37}, {-100, 37}, {-100, 35}}}
+	drought, _ := json.Marshal(map[string]any{
+		"kind": "drought", "areaId": "D2", "label": "Severe Drought", "class": "D2", "rings": ring,
+		"attribution": "USDM",
+	})
+	messages, err := New().Normalize(context.Background(), plugins.RawRecord{
+		SourcePluginID: "usdm", SourceInstanceID: "t", OriginalID: "d", Domain: "weather",
+		ObservedUTC: time.Now().UTC(), Payload: drought,
+	})
+	if err != nil || messages[0].SemanticType != "weather.drought" || messages[0].Geometry.Type != "Polygon" {
+		t.Fatalf("drought %v %#v", err, messages)
+	}
+	flood, _ := json.Marshal(map[string]any{
+		"kind": "flood", "areaId": "rfm-1", "title": "GloFAS RFM", "label": "rapid flood mapping", "rings": ring,
+	})
+	messages, err = New().Normalize(context.Background(), plugins.RawRecord{
+		SourcePluginID: "glofas", SourceInstanceID: "t", OriginalID: "f", Domain: "weather",
+		ObservedUTC: time.Now().UTC(), Payload: flood,
+	})
+	if err != nil || messages[0].SemanticType != "weather.flood" {
+		t.Fatalf("flood %v %#v", err, messages)
+	}
+	buoy, _ := json.Marshal(map[string]any{
+		"kind": "buoy", "stationId": "41001", "buoyKind": "buoy", "windMs": 6.2, "waveM": 1.5,
+		"latitude": 34.7, "longitude": -72.7, "attribution": "NDBC",
+	})
+	messages, err = New().Normalize(context.Background(), plugins.RawRecord{
+		SourcePluginID: "ndbc", SourceInstanceID: "t", OriginalID: "b", Domain: "weather",
+		ObservedUTC: time.Now().UTC(), Payload: buoy,
+	})
+	if err != nil || messages[0].SemanticType != "weather.buoy" || messages[0].Geometry.Type != "Point" {
+		t.Fatalf("buoy %v %#v", err, messages)
+	}
+}

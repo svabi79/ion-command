@@ -29,6 +29,12 @@ func (d *Domain) Normalize(_ context.Context, record plugins.RawRecord) ([]event
 	if json.Unmarshal(record.Payload, &kind) == nil && kind.Kind == "disaster" {
 		return d.normalizeDisaster(record)
 	}
+	if json.Unmarshal(record.Payload, &kind) == nil && kind.Kind == "activation" {
+		return d.normalizeActivation(record)
+	}
+	if json.Unmarshal(record.Payload, &kind) == nil && kind.Kind == "foodsecurity" {
+		return d.normalizeFoodSecurity(record)
+	}
 	return d.normalizeDisplacement(record)
 }
 
@@ -188,6 +194,128 @@ func (d *Domain) normalizeSite(record plugins.RawRecord) ([]events.Envelope, err
 	measured := true
 	event.Quality.Measured = &measured
 	return []events.Envelope{event}, nil
+}
+
+func (d *Domain) normalizeActivation(record plugins.RawRecord) ([]events.Envelope, error) {
+	var raw struct {
+		ActivationID string          `json:"activationId"`
+		Name         string          `json:"name"`
+		Category     string          `json:"category"`
+		Country      string          `json:"country"`
+		Polygons     [][][][]float64 `json:"polygons"`
+		Rings        [][][]float64   `json:"rings"`
+		Attribution  string          `json:"attribution"`
+	}
+	if err := json.Unmarshal(record.Payload, &raw); err != nil || raw.ActivationID == "" {
+		return nil, fmt.Errorf("decode humanitarian activation")
+	}
+	var geom events.Geometry
+	if len(raw.Polygons) > 1 {
+		geom = events.MultiPolygon(raw.Polygons)
+	} else if len(raw.Polygons) == 1 {
+		geom = events.Polygon(raw.Polygons[0])
+	} else if len(raw.Rings) > 0 {
+		geom = events.Polygon(raw.Rings)
+	} else {
+		return nil, fmt.Errorf("humanitarian activation requires polygon")
+	}
+	event := events.NewEnvelope(record.OriginalID, "humanitarian", "humanitarian.activation", events.MessageArea,
+		events.SourceRef{PluginID: record.SourcePluginID, InstanceID: record.SourceInstanceID, OriginalID: record.OriginalID},
+		record.ObservedUTC)
+	event.EntityID = "humanitarian:activation:" + raw.ActivationID
+	event.Geometry = geom
+	validUntil := record.ObservedUTC.Add(14 * 24 * time.Hour)
+	event.Time.ValidUntilUTC = &validUntil
+	title := raw.Name
+	if title == "" {
+		title = raw.ActivationID
+	}
+	event.Properties = map[string]any{
+		"visual.color":      activationColor(raw.Category),
+		"visual.opacity":    0.18,
+		"display.title":     title,
+		"display.primary":   firstNonEmpty(raw.Category, "rapid mapping"),
+		"display.secondary": firstNonEmpty(raw.Country, raw.Attribution),
+	}
+	measured := true
+	event.Quality.Measured = &measured
+	return []events.Envelope{event}, nil
+}
+
+func (d *Domain) normalizeFoodSecurity(record plugins.RawRecord) ([]events.Envelope, error) {
+	var raw struct {
+		AreaID      string          `json:"areaId"`
+		Label       string          `json:"label"`
+		Phase       string          `json:"phase"`
+		Country     string          `json:"country"`
+		Polygons    [][][][]float64 `json:"polygons"`
+		Rings       [][][]float64   `json:"rings"`
+		Attribution string          `json:"attribution"`
+	}
+	if err := json.Unmarshal(record.Payload, &raw); err != nil || raw.AreaID == "" {
+		return nil, fmt.Errorf("decode humanitarian food security")
+	}
+	var geom events.Geometry
+	if len(raw.Polygons) > 1 {
+		geom = events.MultiPolygon(raw.Polygons)
+	} else if len(raw.Polygons) == 1 {
+		geom = events.Polygon(raw.Polygons[0])
+	} else if len(raw.Rings) > 0 {
+		geom = events.Polygon(raw.Rings)
+	} else {
+		return nil, fmt.Errorf("humanitarian food security requires polygon")
+	}
+	event := events.NewEnvelope(record.OriginalID, "humanitarian", "humanitarian.foodsecurity", events.MessageArea,
+		events.SourceRef{PluginID: record.SourcePluginID, InstanceID: record.SourceInstanceID, OriginalID: record.OriginalID},
+		record.ObservedUTC)
+	event.EntityID = "humanitarian:foodsecurity:" + raw.AreaID
+	event.Geometry = geom
+	validUntil := record.ObservedUTC.Add(40 * 24 * time.Hour)
+	event.Time.ValidUntilUTC = &validUntil
+	title := raw.Label
+	if title == "" {
+		title = "Food security"
+	}
+	event.Properties = map[string]any{
+		"visual.color":      ipcColor(raw.Phase),
+		"visual.opacity":    0.16,
+		"display.title":     title,
+		"display.primary":   firstNonEmpty(raw.Phase, "IPC"),
+		"display.secondary": firstNonEmpty(raw.Country, raw.Attribution),
+	}
+	measured := false
+	event.Quality.Measured = &measured
+	event.Quality.Classification = "analysed"
+	return []events.Envelope{event}, nil
+}
+
+func activationColor(category string) string {
+	lower := strings.ToLower(category)
+	switch {
+	case strings.Contains(lower, "wildfire") || strings.Contains(lower, "fire"):
+		return "0.82,0.32,0.12"
+	case strings.Contains(lower, "flood"):
+		return "0.18,0.42,0.72"
+	case strings.Contains(lower, "storm"):
+		return "0.48,0.38,0.72"
+	default:
+		return "0.62,0.42,0.22"
+	}
+}
+
+func ipcColor(phase string) string {
+	switch strings.TrimSpace(phase) {
+	case "5":
+		return "0.55,0.12,0.12"
+	case "4":
+		return "0.72,0.22,0.14"
+	case "3":
+		return "0.78,0.48,0.16"
+	case "2":
+		return "0.78,0.68,0.22"
+	default:
+		return "0.55,0.62,0.32"
+	}
 }
 
 func firstNonEmpty(values ...string) string {

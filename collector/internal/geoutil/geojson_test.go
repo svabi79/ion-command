@@ -45,3 +45,38 @@ func TestOpenLineStringIsNotAPolygon(t *testing.T) {
 		t.Fatalf("open contour became polygon %#v", polys)
 	}
 }
+
+func TestGeometryCollectionPolygons(t *testing.T) {
+	coords, _ := json.Marshal([][][]float64{{{0, 0}, {1, 0}, {1, 1}, {0, 0}}})
+	polys := Polygons(Geometry{Type: "GeometryCollection", Geometries: []Geometry{{Type: "Polygon", Coordinates: coords}}})
+	if len(polys) != 1 {
+		t.Fatalf("%#v", polys)
+	}
+}
+
+func TestParseWKTPolygon(t *testing.T) {
+	polys := ParseWKTPolygons("POLYGON ((16.4 43.2, 16.6 43.2, 16.6 43.4, 16.4 43.4, 16.4 43.2))")
+	if len(polys) != 1 || len(polys[0][0]) < 4 {
+		t.Fatalf("%#v", polys)
+	}
+	if polys[0][0][0][0] != 16.4 || polys[0][0][0][1] != 43.2 {
+		t.Fatalf("lon/lat order %#v", polys[0][0][0])
+	}
+}
+
+func TestDecimatePolygonsKeepsSmallRing(t *testing.T) {
+	tiny := [][][][]float64{{{{-71.62, 42.52}, {-71.58, 42.52}, {-71.58, 42.56}, {-71.62, 42.56}, {-71.62, 42.52}}}}
+	got := DecimatePolygons(tiny, 20, 28)
+	if len(got) != 1 || len(got[0][0]) < 4 {
+		t.Fatalf("small ring dropped %#v", got)
+	}
+}
+
+func TestTakeLargestPolygons(t *testing.T) {
+	small := [][][]float64{{{0, 0}, {1, 0}, {1, 1}, {0, 0}}}
+	large := [][][]float64{{{0, 0}, {2, 0}, {2, 1}, {2, 2}, {1, 2}, {0, 2}, {0, 0}}}
+	got := TakeLargestPolygons([][][][]float64{small, large, small}, 1)
+	if len(got) != 1 || len(got[0][0]) != len(large[0]) {
+		t.Fatalf("%#v", got)
+	}
+}

@@ -23,6 +23,7 @@ type Feature struct {
 type Geometry struct {
 	Type        string          `json:"type"`
 	Coordinates json.RawMessage `json:"coordinates"`
+	Geometries  []Geometry      `json:"geometries"`
 }
 
 func ParseFeatureCollection(body []byte) (FeatureCollection, error) {
@@ -141,6 +142,12 @@ func Polygons(geom Geometry) [][][][]float64 {
 			}
 			return out
 		}
+	case "GeometryCollection":
+		out := make([][][][]float64, 0)
+		for _, child := range geom.Geometries {
+			out = append(out, Polygons(child)...)
+		}
+		return out
 	}
 	return nil
 }
@@ -299,7 +306,13 @@ func DecimatePolygons(polygons [][][][]float64, minKm float64, maxVertices int) 
 		cleaned := make([][][]float64, 0, len(rings))
 		for _, ring := range rings {
 			reduced := DecimateLine(ring, minKm, maxVertices)
-			if closed := closedRing(reduced); len(closed) >= 4 {
+			closed := closedRing(reduced)
+			if len(closed) < 4 {
+				// A ring smaller than minKm would collapse to a line; keep
+				// the original so small globe-scale fills still draw.
+				closed = closedRing(ring)
+			}
+			if len(closed) >= 4 {
 				cleaned = append(cleaned, closed)
 			}
 		}
@@ -325,4 +338,136 @@ func LargestPolygon(polygons [][][][]float64) [][][]float64 {
 		}
 	}
 	return best
+}
+
+// TakeLargestPolygons keeps the n polygons with the most exterior vertices.
+func TakeLargestPolygons(polygons [][][][]float64, n int) [][][][]float64 {
+	if n <= 0 || len(polygons) <= n {
+		return polygons
+	}
+	type ranked struct {
+		poly [][][]float64
+		n    int
+	}
+	items := make([]ranked, 0, len(polygons))
+	for _, rings := range polygons {
+		count := 0
+		if len(rings) > 0 {
+			count = len(rings[0])
+		}
+		items = append(items, ranked{poly: rings, n: count})
+	}
+	for i := 0; i < len(items); i++ {
+		best := i
+		for j := i + 1; j < len(items); j++ {
+			if items[j].n > items[best].n {
+				best = j
+			}
+		}
+		items[i], items[best] = items[best], items[i]
+	}
+	out := make([][][][]float64, 0, n)
+	for i := 0; i < n; i++ {
+		out = append(out, items[i].poly)
+	}
+	return out
+}
+
+// ParseWKTPolygons reads POLYGON / MULTIPOLYGON / POINT WKT (lon lat).
+func ParseWKTPolygons(wkt string) [][][][]float64 {
+	text := strings.TrimSpace(wkt)
+	if text == "" {
+		return nil
+	}
+	upper := strings.ToUpper(text)
+	switch {
+	case strings.HasPrefix(upper, "MULTIPOLYGON"):
+		body := extractParens(text[len("MULTIPOLYGON"):])
+		return parseWKTMultiPolygon(body)
+	case strings.HasPrefix(upper, "POLYGON"):
+		body := extractParens(text[len("POLYGON"):])
+		if rings := parseWKTPolygon(body); len(rings) > 0 {
+			return [][][][]float64{rings}
+		}
+	case strings.HasPrefix(upper, "POINT"):
+		// Points are not areas; callers that only have a centroid skip fill.
+		return nil
+	}
+	return nil
+}
+
+func extractParens(text string) string {
+	text = strings.TrimSpace(text)
+	if strings.HasPrefix(text, "(") && strings.HasSuffix(text, ")") {
+		return strings.TrimSpace(text[1 : len(text)-1])
+	}
+	return text
+}
+
+func parseWKTMultiPolygon(body string) [][][][]float64 {
+	parts := splitTopTuples(body)
+	out := make([][][][]float64, 0, len(parts))
+	for _, part := range parts {
+		if rings := parseWKTPolygon(extractParens(part)); len(rings) > 0 {
+			out = append(out, rings)
+		}
+	}
+	return out
+}
+
+func parseWKTPolygon(body string) [][][]float64 {
+	parts := splitTopTuples(body)
+	rings := make([][][]float64, 0, len(parts))
+	for _, part := range parts {
+		ring := parseWKTRing(extractParens(part))
+		if closed := closedRing(ring); len(closed) >= 4 {
+			rings = append(rings, closed)
+		}
+	}
+	return rings
+}
+
+func parseWKTRing(body string) [][]float64 {
+	pairs := strings.Split(body, ",")
+	ring := make([][]float64, 0, len(pairs))
+	for _, pair := range pairs {
+		fields := strings.Fields(strings.TrimSpace(pair))
+		if len(fields) < 2 {
+			continue
+		}
+		lon, errLon := strconv.ParseFloat(fields[0], 64)
+		lat, errLat := strconv.ParseFloat(fields[1], 64)
+		if errLon != nil || errLat != nil {
+			continue
+		}
+		ring = append(ring, []float64{lon, lat})
+	}
+	return ring
+}
+
+func splitTopTuples(body string) []string {
+	body = strings.TrimSpace(body)
+	if body == "" {
+		return nil
+	}
+	parts := make([]string, 0)
+	depth := 0
+	start := 0
+	for i, r := range body {
+		switch r {
+		case '(':
+			depth++
+		case ')':
+			depth--
+		case ',':
+			if depth == 0 {
+				parts = append(parts, strings.TrimSpace(body[start:i]))
+				start = i + 1
+			}
+		}
+	}
+	if tail := strings.TrimSpace(body[start:]); tail != "" {
+		parts = append(parts, tail)
+	}
+	return parts
 }

@@ -12,6 +12,19 @@ superseded configurations, is in
 
 ### Added
 
+- **OSINT wave 3 — twelve Area/Point feeds.** FAA TFR and Special Use
+  Airspace, NIFC/WFIGS fire perimeters, US Drought Monitor (D1–D4),
+  Copernicus EMS Rapid Mapping, GloFAS Rapid Flood Mapping (hard geometry
+  cap), NTAD/BTS military bases, NOAA IncidentNews, NGA World Port Index,
+  NDBC buoys + DART, NOAA CPC 8–14 day outlooks (Normal skipped). Eleven
+  key-free sources are **on** in `live.json`. FEWS NET IPC phase maps
+  ship as a complete plugin but stay **disabled** (mixed IPC copyright
+  plus a ~27 MB GeoJSON). Caps/coarsening in DATA-SOURCES. Existing Area
+  and Point layers suffice — **no Unreal change**. Token-gated NIFC
+  `Current_WildlandFire_Perimeters` is not fetched (public WFIGS
+  Interagency layer used instead). No RainViewer/Field, no WorldMonitor
+  copy. CodeFred[Agent].
+
 - **OSINT scout layers (weather, aviation, volcanoes, EEZ, outages).** Sixteen
   source plugins on the canonical pipeline — twelve key-free (on in
   `live.json`) and four fail-closed keyed (`enabled: false` until

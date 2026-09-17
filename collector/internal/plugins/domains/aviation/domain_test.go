@@ -93,3 +93,21 @@ func TestEmergencySquawkIsStickyAndLongLived(t *testing.T) {
 		t.Fatalf("null squawk must not clear a remembered 7700: %#v", later[0].Properties)
 	}
 }
+
+func TestTFRNormalizesAsArea(t *testing.T) {
+	payload, _ := json.Marshal(map[string]any{
+		"kind": "tfr", "spaceId": "6/2715", "title": "20NM N LEAVENWORTH, WA", "hazard": "HAZARDS",
+		"rings":       [][][]float64{{{-120.9, 48.1}, {-120.2, 47.8}, {-120.2, 48.1}, {-120.9, 48.1}}},
+		"attribution": "FAA TFR",
+	})
+	messages, err := New().Normalize(context.Background(), plugins.RawRecord{
+		SourcePluginID: "tfr", SourceInstanceID: "t", OriginalID: "tfr-1", Domain: "aviation",
+		ObservedUTC: time.Now().UTC(), Payload: payload,
+	})
+	if err != nil || len(messages) != 1 || messages[0].SemanticType != "aviation.tfr" {
+		t.Fatalf("%v %#v", err, messages)
+	}
+	if messages[0].Geometry.Type != "Polygon" {
+		t.Fatalf("geom %s", messages[0].Geometry.Type)
+	}
+}

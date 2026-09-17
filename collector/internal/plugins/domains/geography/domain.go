@@ -50,6 +50,8 @@ func (d *Domain) Normalize(_ context.Context, record plugins.RawRecord) ([]event
 		return d.plant(record)
 	case "outage":
 		return d.outage(record)
+	case "base":
+		return d.base(record)
 	default:
 		return nil, fmt.Errorf("geography record has unknown kind %q", kind.Kind)
 	}
@@ -564,6 +566,53 @@ func (d *Domain) outage(record plugins.RawRecord) ([]events.Envelope, error) {
 	}
 	measured := true
 	event.Quality.Measured = &measured
+	return []events.Envelope{event}, nil
+}
+
+func (d *Domain) base(record plugins.RawRecord) ([]events.Envelope, error) {
+	var raw struct {
+		BaseID      string          `json:"baseId"`
+		Name        string          `json:"name"`
+		Component   string          `json:"component"`
+		Status      string          `json:"status"`
+		State       string          `json:"state"`
+		Country     string          `json:"country"`
+		Polygons    [][][][]float64 `json:"polygons"`
+		Rings       [][][]float64   `json:"rings"`
+		Attribution string          `json:"attribution"`
+	}
+	if err := json.Unmarshal(record.Payload, &raw); err != nil || raw.BaseID == "" {
+		return nil, fmt.Errorf("geography base requires id")
+	}
+	var geom events.Geometry
+	if len(raw.Polygons) > 1 {
+		geom = events.MultiPolygon(raw.Polygons)
+	} else if len(raw.Polygons) == 1 {
+		geom = events.Polygon(raw.Polygons[0])
+	} else if len(raw.Rings) > 0 {
+		geom = events.Polygon(raw.Rings)
+	} else {
+		return nil, fmt.Errorf("geography base requires polygon")
+	}
+	event := events.NewEnvelope(record.OriginalID, "geography", "geography.base", events.MessageArea,
+		events.SourceRef{PluginID: record.SourcePluginID, InstanceID: record.SourceInstanceID, OriginalID: record.OriginalID},
+		record.ObservedUTC)
+	event.EntityID = "geography:base:" + raw.BaseID
+	event.Geometry = geom
+	validUntil := cartographicUntil(record.ObservedUTC)
+	event.Time.ValidUntilUTC = &validUntil
+	title := raw.Name
+	if title == "" {
+		title = raw.BaseID
+	}
+	primary := firstNonEmpty(raw.Component, raw.Status, "installation")
+	event.Properties = map[string]any{
+		"visual.color":      "0.42,0.48,0.40",
+		"visual.opacity":    0.16,
+		"display.title":     title,
+		"display.primary":   primary,
+		"display.secondary": firstNonEmpty(raw.State, raw.Country, raw.Attribution),
+	}
 	return []events.Envelope{event}, nil
 }
 

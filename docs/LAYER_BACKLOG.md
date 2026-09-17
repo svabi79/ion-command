@@ -65,6 +65,18 @@ remaining `Field` geometry work. `Area` is now rendered.
 | **Marine Regions EEZ** | VLIZ WFS 200 NM lines | `LineString` — **shipped** coarsened as `geography.eez` on **BORDERS** / `B` |
 | **IODA outages** | IODA country alerts | `Point` at ISO centroids — **shipped**; Georgia Tech copyright, hobby display |
 | **OpenAIP / UCDP / Cloudflare Radar / GFW** | keyed APIs | Fail-closed, off in `live.json` — **shipped** plugins |
+| **FAA TFR** | tfr.faa.gov WFS GeoJSON | `Area` — **shipped** as `aviation.tfr`; cap 40 |
+| **FAA Special Use Airspace** | ArcGIS `Special_Use_Airspace` | `Area` — **shipped** as `aviation.sua` → `aviation.airspace`; P/R/W/MOA/A, cap 40 |
+| **NIFC/WFIGS fire perimeters** | WFIGS Interagency Perimeters Current | `Area` — **shipped** as `wildfire.wfigs` → `wildfire.perimeter`; token-gated NIFC layer skipped |
+| **US Drought Monitor** | NCEI USDM GeoJSON | `Area` — **shipped** as `weather.usdm` → `weather.drought`; D0 skipped |
+| **Copernicus EMS Rapid Mapping** | Rapid Mapping dashboard API | `Area` — **shipped** as `humanitarian.cems` → `humanitarian.activation`; open, cap 12 |
+| **GloFAS Rapid Flood Mapping** | EFAS/GloFAS download API shapefile | `Area` — **shipped** as `weather.glofas` → `weather.flood`; largest rings, 12 MB cap |
+| **NTAD/BTS military bases** | ArcGIS `NTAD_Military_Bases` | `Area` — **shipped** as `geography.milbases` → `geography.base`; active, cap 40 |
+| **NOAA IncidentNews** | `incidents.csv` | `Point` — **shipped** as `maritime.incidentnews` → `maritime.incident`; 180 d, cap 80 |
+| **NGA World Port Index** | Pub 150 CSV | `Point` — **shipped** as `maritime.wpi` → `maritime.port`; Large/Medium, cap 400 |
+| **FEWS NET IPC** | fdw.fews.net ipcphasemap | `Area` — **shipped disabled** as `humanitarian.fews` → `humanitarian.foodsecurity`; licence mixed |
+| **NDBC buoys + DART** | `latest_obs.txt` | `Point` — **shipped** as `weather.ndbc` → `weather.buoy`; cap 180 |
+| **NOAA CPC 8–14 day** | `cpc_8_14_day_outlk` MapServer | `Area` — **shipped** as `weather.cpc` → `weather.outlook`; Normal skipped |
 
 ## Wave 4 — the operator's own receiver
 

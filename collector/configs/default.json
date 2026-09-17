@@ -55,7 +55,17 @@
       "geography.outage",
       "humanitarian.site",
       "orbital.groundstation",
-      "maritime.fishing"
+      "maritime.fishing",
+      "aviation.tfr",
+      "wildfire.perimeter",
+      "weather.drought",
+      "weather.flood",
+      "weather.buoy",
+      "geography.base",
+      "humanitarian.activation",
+      "humanitarian.foodsecurity",
+      "maritime.incident",
+      "maritime.port"
     ]
   },
   "recording": {
@@ -364,6 +374,78 @@
       "type": "maritime.gfw",
       "enabled": false,
       "pollSeconds": 21600
+    },
+    {
+      "id": "faa-tfr",
+      "type": "aviation.tfr",
+      "enabled": true,
+      "pollSeconds": 300
+    },
+    {
+      "id": "faa-sua",
+      "type": "aviation.sua",
+      "enabled": true,
+      "pollSeconds": 86400
+    },
+    {
+      "id": "wfigs-perimeters",
+      "type": "wildfire.wfigs",
+      "enabled": true,
+      "pollSeconds": 900
+    },
+    {
+      "id": "usdm-drought",
+      "type": "weather.usdm",
+      "enabled": true,
+      "pollSeconds": 86400
+    },
+    {
+      "id": "cems-rapidmapping",
+      "type": "humanitarian.cems",
+      "enabled": true,
+      "pollSeconds": 3600
+    },
+    {
+      "id": "glofas-rfm",
+      "type": "weather.glofas",
+      "enabled": true,
+      "pollSeconds": 21600
+    },
+    {
+      "id": "ntad-military-bases",
+      "type": "geography.milbases",
+      "enabled": true,
+      "pollSeconds": 604800
+    },
+    {
+      "id": "noaa-incidentnews",
+      "type": "maritime.incidentnews",
+      "enabled": true,
+      "pollSeconds": 21600
+    },
+    {
+      "id": "nga-wpi",
+      "type": "maritime.wpi",
+      "enabled": true,
+      "pollSeconds": 604800
+    },
+    {
+      "id": "fews-ipc",
+      "type": "humanitarian.fews",
+      "enabled": false,
+      "pollSeconds": 604800
+    },
+    {
+      "id": "ndbc-obs",
+      "type": "weather.ndbc",
+      "enabled": true,
+      "pollSeconds": 600
+    },
+    {
+      "id": "cpc-outlook-8-14",
+      "type": "weather.cpc",
+      "enabled": true,
+      "pollSeconds": 86400
     }
   ]
 }

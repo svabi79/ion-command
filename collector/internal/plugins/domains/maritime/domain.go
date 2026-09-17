@@ -137,6 +137,12 @@ func (d *Domain) Normalize(_ context.Context, record plugins.RawRecord) ([]event
 	if kind.Kind == "fishing" {
 		return d.normalizeFishing(record)
 	}
+	if kind.Kind == "incident" {
+		return d.normalizeIncident(record)
+	}
+	if kind.Kind == "port" {
+		return d.normalizePort(record)
+	}
 	if kind.MMSI <= 0 {
 		return nil, fmt.Errorf("ais record requires a positive mmsi")
 	}
@@ -544,4 +550,94 @@ func (d *Domain) normalizeFishing(record plugins.RawRecord) ([]events.Envelope, 
 	measured := true
 	event.Quality.Measured = &measured
 	return []events.Envelope{event}, nil
+}
+
+func (d *Domain) normalizeIncident(record plugins.RawRecord) ([]events.Envelope, error) {
+	var raw struct {
+		IncidentID  string  `json:"incidentId"`
+		Name        string  `json:"name"`
+		Threat      string  `json:"threat"`
+		Location    string  `json:"location"`
+		Opened      string  `json:"opened"`
+		Latitude    float64 `json:"latitude"`
+		Longitude   float64 `json:"longitude"`
+		Attribution string  `json:"attribution"`
+	}
+	if err := json.Unmarshal(record.Payload, &raw); err != nil || raw.IncidentID == "" {
+		return nil, fmt.Errorf("decode maritime incident")
+	}
+	event := events.NewEnvelope(record.OriginalID, "maritime", "maritime.incident", events.MessageObservation,
+		events.SourceRef{PluginID: record.SourcePluginID, InstanceID: record.SourceInstanceID, OriginalID: record.OriginalID},
+		record.ObservedUTC)
+	event.EntityID = "maritime:incident:" + raw.IncidentID
+	event.Geometry = events.Point(raw.Longitude, raw.Latitude, 0)
+	validUntil := record.ObservedUTC.Add(21 * 24 * time.Hour)
+	event.Time.ValidUntilUTC = &validUntil
+	title := raw.Name
+	if title == "" {
+		title = "Pollution incident"
+	}
+	event.Properties = map[string]any{
+		"visual.icon":        "vessel",
+		"visual.markerScale": 1.1,
+		"visual.tint":        "0.82,0.42,0.12",
+		"display.title":      title,
+		"display.primary":    firstNonEmpty(raw.Threat, raw.Opened, "incident"),
+		"display.secondary":  firstNonEmpty(raw.Location, raw.Attribution),
+	}
+	measured := true
+	event.Quality.Measured = &measured
+	return []events.Envelope{event}, nil
+}
+
+func (d *Domain) normalizePort(record plugins.RawRecord) ([]events.Envelope, error) {
+	var raw struct {
+		PortID      string  `json:"portId"`
+		Name        string  `json:"name"`
+		Size        string  `json:"size"`
+		Country     string  `json:"country"`
+		HarborUse   string  `json:"harborUse"`
+		Latitude    float64 `json:"latitude"`
+		Longitude   float64 `json:"longitude"`
+		Attribution string  `json:"attribution"`
+	}
+	if err := json.Unmarshal(record.Payload, &raw); err != nil || raw.PortID == "" {
+		return nil, fmt.Errorf("decode maritime port")
+	}
+	event := events.NewEnvelope(record.OriginalID, "maritime", "maritime.port", events.MessageAnnotation,
+		events.SourceRef{PluginID: record.SourcePluginID, InstanceID: record.SourceInstanceID, OriginalID: record.OriginalID},
+		record.ObservedUTC)
+	event.EntityID = "maritime:port:" + raw.PortID
+	event.Geometry = events.Point(raw.Longitude, raw.Latitude, 0)
+	validUntil := record.ObservedUTC.Add(30 * 24 * time.Hour)
+	event.Time.ValidUntilUTC = &validUntil
+	title := raw.Name
+	if title == "" {
+		title = raw.PortID
+	}
+	scale := 0.7
+	if strings.EqualFold(raw.Size, "Large") {
+		scale = 1.15
+	} else if strings.EqualFold(raw.Size, "Medium") {
+		scale = 0.9
+	}
+	event.Properties = map[string]any{
+		"visual.icon":        "vessel",
+		"visual.markerScale": scale,
+		"display.title":      title,
+		"display.primary":    firstNonEmpty(raw.Size, raw.HarborUse, "port"),
+		"display.secondary":  firstNonEmpty(raw.Country, raw.Attribution),
+	}
+	measured := true
+	event.Quality.Measured = &measured
+	return []events.Envelope{event}, nil
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
 }

@@ -1,0 +1,4 @@
+{"type":"FeatureCollection","features":[
+  {"id":"skip","properties":{"value":2,"country_code":"NE"},"geometry":{"type":"Polygon","coordinates":[[[0,0],[1,0],[1,1],[0,0]]]}},
+  {"id":"keep","properties":{"value":4,"country_code":"ET","projection_start":"2026-08-01"},"geometry":{"type":"Polygon","coordinates":[[[38,8],[39,8],[39,9],[38,8]]]}}
+]}

@@ -47,6 +47,12 @@ func (d *Domain) ID() string     { return "domain.wildfire" }
 func (d *Domain) Domain() string { return "wildfire" }
 
 func (d *Domain) Normalize(_ context.Context, record plugins.RawRecord) ([]events.Envelope, error) {
+	var kind struct {
+		Kind string `json:"kind"`
+	}
+	if json.Unmarshal(record.Payload, &kind) == nil && kind.Kind == "perimeter" {
+		return d.normalizePerimeter(record)
+	}
 	var raw rawDetection
 	if err := json.Unmarshal(record.Payload, &raw); err != nil {
 		return nil, fmt.Errorf("decode wildfire detection record: %w", err)
@@ -106,6 +112,64 @@ func (d *Domain) Normalize(_ context.Context, record plugins.RawRecord) ([]event
 	event.Quality.Measured = &measured
 
 	return []events.Envelope{event}, nil
+}
+
+func (d *Domain) normalizePerimeter(record plugins.RawRecord) ([]events.Envelope, error) {
+	var raw struct {
+		PerimeterID string          `json:"perimeterId"`
+		Name        string          `json:"name"`
+		Category    string          `json:"category"`
+		Polygons    [][][][]float64 `json:"polygons"`
+		Rings       [][][]float64   `json:"rings"`
+		Attribution string          `json:"attribution"`
+	}
+	if err := json.Unmarshal(record.Payload, &raw); err != nil || raw.PerimeterID == "" {
+		return nil, fmt.Errorf("decode wildfire perimeter")
+	}
+	var geom events.Geometry
+	if len(raw.Polygons) > 1 {
+		geom = events.MultiPolygon(raw.Polygons)
+	} else if len(raw.Polygons) == 1 {
+		geom = events.Polygon(raw.Polygons[0])
+	} else if len(raw.Rings) > 0 {
+		geom = events.Polygon(raw.Rings)
+	} else {
+		return nil, fmt.Errorf("wildfire perimeter requires polygon")
+	}
+	event := events.NewEnvelope(record.OriginalID, "wildfire", "wildfire.perimeter", events.MessageArea,
+		events.SourceRef{PluginID: record.SourcePluginID, InstanceID: record.SourceInstanceID, OriginalID: record.OriginalID},
+		record.ObservedUTC)
+	event.EntityID = "wildfire:perimeter:" + raw.PerimeterID
+	event.Geometry = geom
+	validUntil := record.ObservedUTC.Add(36 * time.Hour)
+	event.Time.ValidUntilUTC = &validUntil
+	title := raw.Name
+	if title == "" {
+		title = "Fire perimeter"
+	}
+	primary := "mapped perimeter"
+	if raw.Category != "" {
+		primary = raw.Category + "  //  mapped perimeter"
+	}
+	event.Properties = map[string]any{
+		"visual.color":      "0.82,0.28,0.10",
+		"visual.opacity":    0.20,
+		"display.title":     title,
+		"display.primary":   primary,
+		"display.secondary": firstNonEmpty(raw.Attribution, "NIFC / WFIGS"),
+	}
+	measured := true
+	event.Quality.Measured = &measured
+	return []events.Envelope{event}, nil
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func dayNightLabel(code string) string {

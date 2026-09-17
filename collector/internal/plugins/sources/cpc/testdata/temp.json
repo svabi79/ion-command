@@ -1,0 +1,4 @@
+{"type":"FeatureCollection","features":[
+  {"id":1,"properties":{"objectid":1,"cat":"Normal","prob":33},"geometry":{"type":"Polygon","coordinates":[[[-100,30],[-99,30],[-99,31],[-100,30]]]}},
+  {"id":2,"properties":{"objectid":2,"cat":"Above","prob":40},"geometry":{"type":"Polygon","coordinates":[[[-110,40],[-108,40],[-108,42],[-110,40]]]}}
+]}
