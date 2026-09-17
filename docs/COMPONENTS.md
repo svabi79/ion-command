@@ -74,7 +74,7 @@ messages itself — that is the domain's job.
 | `geography.milbases` | USDOT BTS NTAD military installations | HTTP poll | **on** | no | US Government work; active sites, cap 40 |
 | `maritime.incidentnews` | NOAA IncidentNews pollution/hazard incidents | HTTP poll | **on** | no | public CSV; 180-day window, cap 80 |
 | `maritime.wpi` | NGA World Port Index (Pub 150) | HTTP poll | **on** | no | US Government work; Large then Medium harbors, cap 400 |
-| `humanitarian.fews` | FEWS NET IPC phase-map polygons | HTTP poll | **off** (licence mixed + ~27 MB payload) | no | IPC 3+ only, coarsened, cap 24; operator-enabled |
+| `humanitarian.fews` | FEWS NET IPC phase-map polygons | HTTP poll | **on** | no | IPC 3+ only, coarsened, cap 24; ~27 MB payload; attribute FEWS NET / IPC Global Partnership |
 | `weather.ndbc` | NDBC latest buoy + DART observations | HTTP poll | **on** | no | public domain; DART first (cap 40) then buoys, 180 points |
 | `weather.cpc` | NOAA CPC 8–14 day temperature/precip outlooks | HTTP poll | **on** | no | public domain; Normal/EC skipped; coarsened, cap 16 |
 | `mock.*` | deterministic synthetic traffic | in-process | off | no | development and tests only |

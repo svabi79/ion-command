@@ -74,7 +74,7 @@ remaining `Field` geometry work. `Area` is now rendered.
 | **NTAD/BTS military bases** | ArcGIS `NTAD_Military_Bases` | `Area` — **shipped** as `geography.milbases` → `geography.base`; active, cap 40 |
 | **NOAA IncidentNews** | `incidents.csv` | `Point` — **shipped** as `maritime.incidentnews` → `maritime.incident`; 180 d, cap 80 |
 | **NGA World Port Index** | Pub 150 CSV | `Point` — **shipped** as `maritime.wpi` → `maritime.port`; Large/Medium, cap 400 |
-| **FEWS NET IPC** | fdw.fews.net ipcphasemap | `Area` — **shipped disabled** as `humanitarian.fews` → `humanitarian.foodsecurity`; licence mixed |
+| **FEWS NET IPC** | fdw.fews.net ipcphasemap | `Area` — **shipped** as `humanitarian.fews` → `humanitarian.foodsecurity`; **on** in live.json; attribute FEWS NET / IPC Global Partnership; IPC 3+, cap 24 |
 | **NDBC buoys + DART** | `latest_obs.txt` | `Point` — **shipped** as `weather.ndbc` → `weather.buoy`; cap 180 |
 | **NOAA CPC 8–14 day** | `cpc_8_14_day_outlk` MapServer | `Area` — **shipped** as `weather.cpc` → `weather.outlook`; Normal skipped |
 

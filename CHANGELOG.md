@@ -118,6 +118,13 @@ superseded configurations, is in
 
 ### Changed
 
+- **FEWS NET IPC is on in tracked configs.** `fews-ipc`
+  (`humanitarian.fews`) is `"enabled": true` in `live.json` and
+  `default.json`. IPC 3+ filter, coarsening (~40 km / 24 vertices), and
+  the 24-area cap are unchanged. Attribute FEWS NET / IPC Global
+  Partnership; the FDW GeoJSON remains ~27 MB. Overlay `"enabled": false`
+  to turn it off. CodeFred[Agent].
+
 - **Emergency squawks stay sticky globally.** Aviation remembers
   7500/7600/7700 for two hours even when a later OpenSky snapshot omits
   the squawk or the airframe is on the ground, and keeps the marker

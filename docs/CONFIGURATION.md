@@ -262,7 +262,7 @@ Additional fields by type:
 | `geography.milbases` | `pollSeconds`, `broker`, `cacheDirectory` | NTAD military bases. Floor 24 hours. |
 | `maritime.incidentnews` | `pollSeconds`, `broker`, `lookBackHours`, `cacheDirectory` | NOAA IncidentNews CSV. Floor one hour; look-back default 180 days. |
 | `maritime.wpi` | `pollSeconds`, `broker`, `cacheDirectory` | NGA World Port Index CSV. Floor 24 hours. |
-| `humanitarian.fews` | `pollSeconds`, `broker`, `cacheDirectory` | FEWS NET IPC phase map. Floor 24 hours. **Disabled** in tracked configs (mixed IPC copyright + large payload). Overlay `"enabled": true` to turn on. |
+| `humanitarian.fews` | `pollSeconds`, `broker`, `cacheDirectory` | FEWS NET IPC phase map. Floor 24 hours. **Enabled** in tracked configs. IPC 3+, coarsened, cap 24. Attribute FEWS NET / IPC Global Partnership. Overlay `"enabled": false` to turn off. |
 | `weather.ndbc` | `pollSeconds`, `broker`, `cacheDirectory` | NDBC latest observations. Floor five minutes. |
 | `weather.cpc` | `pollSeconds`, `broker`, `cacheDirectory` | CPC 8–14 day outlooks. Floor six hours. |
 | `hamradio.rbn` | `login` | Reverse Beacon Network telnet; **requires a real callsign**. Disabled by default. |
@@ -395,11 +395,11 @@ The collector refuses to start if any of these is enabled without a key.
 All four stay **disabled** in tracked `live.json`. OpenAIP and GFW are
 CC BY-NC.
 
-**FEWS NET IPC (optional).** The plugin is shipped **disabled**. FDW tabular
+**FEWS NET IPC.** Enabled in tracked `live.json` as `fews-ipc`. FDW tabular
 rows often say public, but IPC phase maps mix FEWS NET and IPC Global
-Partnership copyright and the GeoJSON is ~27 MB. Overlay `"enabled": true`
-on `fews-ipc` only if you accept those terms and want Crisis-and-worse
-Areas. Attribute FEWS NET / IPC.
+Partnership copyright and the GeoJSON is ~27 MB. Crisis-and-worse (IPC 3+)
+Areas only, coarsened, cap 24. Attribute FEWS NET / IPC. Overlay
+`"enabled": false` on `fews-ipc` to turn it off.
 
 **Turn on recording** (`recording.enabled: true`) to capture a JSONL event log
 for later replay. Mind the volume — the live feeds produce several GB per hour;

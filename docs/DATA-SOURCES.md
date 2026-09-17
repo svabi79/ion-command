@@ -68,7 +68,7 @@ non-commercial only.
 | **USDOT BTS NTAD Military Bases** | Active US military installation polygons from the National Transportation Atlas Database. US Government work. | [bts.gov](https://geodata.bts.gov) |
 | **NOAA IncidentNews** | Recent pollution and marine-hazard incident points from the public IncidentNews CSV. Public domain. NOAA does not endorse this project. | [incidentnews.noaa.gov](https://incidentnews.noaa.gov) |
 | **NGA World Port Index** | Harbor points from NGA Pub 150 (`UpdatedPub150.csv`). US Government work. Large then Medium harbors only. | [msi.nga.mil](https://msi.nga.mil) |
-| **FEWS NET / IPC** | IPC acute food-insecurity phase-map polygons from the FEWS NET Data Warehouse. Tabular FDW rows often mark `data_usage_policy: Public`, but the maps mix FEWS NET and IPC Global Partnership copyright. Plugin is implemented and **disabled** until an operator accepts those terms. Attribute FEWS NET / IPC if enabled. | [fews.net](https://fews.net) · [fdw.fews.net](https://fdw.fews.net) |
+| **FEWS NET / IPC** | IPC acute food-insecurity phase-map polygons from the FEWS NET Data Warehouse. Tabular FDW rows often mark `data_usage_policy: Public`, but the maps mix FEWS NET and IPC Global Partnership copyright. **Enabled** in tracked configs (`fews-ipc`). Attribute FEWS NET / IPC Global Partnership. | [fews.net](https://fews.net) · [fdw.fews.net](https://fdw.fews.net) |
 | **NOAA NDBC** | Latest moored-buoy and DART tsunami-buoy observations from `latest_obs.txt`. Public domain. NOAA does not endorse this project. | [ndbc.noaa.gov](https://www.ndbc.noaa.gov) |
 | **NOAA CPC** | Climate Prediction Center 8–14 day temperature and precipitation outlook polygons. Public domain. Normal / equal-chance categories are not drawn. | [cpc.ncep.noaa.gov](https://www.cpc.ncep.noaa.gov) |
 | **AIS Stream (aisstream.io)** | Vessel AIS data from aisstream.io, free with a self-service API key. No commercial-use restriction or redistribution licence is published as of this writing; treated with the same hobby-scale, attributed posture as the other unlicensed feeds below until the operator confirms otherwise. Direct browser connections to the stream are against its terms — ION COMMAND already only connects from the collector process, never from client JavaScript, so this is satisfied by the existing architecture. See [below](#enabling-ais-ships-aisstreamio) for the full picture. | [aisstream.io](https://aisstream.io) · [docs](https://aisstream.io/documentation) |
@@ -146,7 +146,7 @@ What each source actually does, in the order it appears in `live.json`:
 | `geography.milbases` | ArcGIS `NTAD_Military_Bases` GeoJSON | 604800 s (floor 24 h) | `geography.base` (Area, cap 40) | yes |
 | `maritime.incidentnews` | incidentnews.noaa.gov `incidents.csv` | 21600 s (floor 1 h) | `maritime.incident` (Point, 180 d, cap 80) | yes |
 | `maritime.wpi` | NGA `UpdatedPub150.csv` | 604800 s (floor 24 h) | `maritime.port` (Point, Large/Medium, cap 400) | yes |
-| `humanitarian.fews` | fdw.fews.net `ipcphasemap` GeoJSON | 604800 s (floor 24 h) | `humanitarian.foodsecurity` (Area, IPC 3+, cap 24) | **no** (licence mixed) |
+| `humanitarian.fews` | fdw.fews.net `ipcphasemap` GeoJSON | 604800 s (floor 24 h) | `humanitarian.foodsecurity` (Area, IPC 3+, cap 24) | yes |
 | `weather.ndbc` | ndbc.noaa.gov `latest_obs.txt` | 600 s (floor 5 min) | `weather.buoy` (Point, DART+buoys, cap 180) | yes |
 | `weather.cpc` | mapservices.weather.noaa.gov CPC 8–14 day MapServer | 86400 s (floor 6 h) | `weather.outlook` (Area, skip Normal, cap 16) | yes |
 
@@ -174,7 +174,7 @@ These layers are globe-scale, not GIS-desktop resolution:
 - **NTAD bases:** active sites ordered by area, cap 40, ~6 km / 24 vertices.
 - **IncidentNews:** 180-day geocoded rows, cap 80.
 - **World Port Index:** Large then Medium harbors, cap 400.
-- **FEWS IPC:** IPC phase ≥ 3, 24 areas, ~40 km / 24 vertices; **off** in tracked configs.
+- **FEWS IPC:** IPC phase ≥ 3, 24 areas, ~40 km / 24 vertices; **on** in tracked configs. Attribute FEWS NET / IPC Global Partnership.
 - **NDBC:** DART IDs first (40) then buoys, 180 points.
 - **CPC 8–14 day:** temperature + precipitation layers; Normal/EC skipped; server-side `maxAllowableOffset` plus ~40 km / 32 vertices, cap 16.
 
