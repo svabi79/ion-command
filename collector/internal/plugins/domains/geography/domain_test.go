@@ -217,3 +217,18 @@ func TestBorderCityRiverLandmark(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestBaseNormalizesAsArea(t *testing.T) {
+	payload, _ := json.Marshal(map[string]any{
+		"kind": "base", "baseId": "1", "name": "Devens", "component": "usar", "status": "act",
+		"state": "ma", "rings": [][][]float64{{{-71.6, 42.5}, {-71.5, 42.5}, {-71.5, 42.6}, {-71.6, 42.5}}},
+		"attribution": "NTAD / BTS",
+	})
+	messages, err := New().Normalize(context.Background(), plugins.RawRecord{
+		SourcePluginID: "milbases", SourceInstanceID: "t", OriginalID: "b", Domain: "geography",
+		ObservedUTC: time.Now().UTC(), Payload: payload,
+	})
+	if err != nil || messages[0].SemanticType != "geography.base" || messages[0].Geometry.Type != "Polygon" {
+		t.Fatalf("%v %#v", err, messages)
+	}
+}

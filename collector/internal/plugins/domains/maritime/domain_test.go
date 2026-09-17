@@ -427,3 +427,28 @@ func TestDisruptionNormalizes(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestIncidentAndPort(t *testing.T) {
+	incident, _ := json.Marshal(map[string]any{
+		"kind": "incident", "incidentId": "11219", "name": "Fishing Vessel Fire", "threat": "Oil",
+		"location": "Nantucket", "latitude": 40.9, "longitude": -70.25, "attribution": "NOAA IncidentNews",
+	})
+	messages, err := New().Normalize(context.Background(), plugins.RawRecord{
+		SourcePluginID: "incidentnews", SourceInstanceID: "t", OriginalID: "i", Domain: "maritime",
+		ObservedUTC: time.Now().UTC(), Payload: incident,
+	})
+	if err != nil || messages[0].SemanticType != "maritime.incident" {
+		t.Fatalf("incident %v %#v", err, messages)
+	}
+	port, _ := json.Marshal(map[string]any{
+		"kind": "port", "portId": "7950", "name": "Maurer", "size": "Large", "country": "United States",
+		"latitude": 40.6, "longitude": -74.2, "attribution": "NGA WPI",
+	})
+	messages, err = New().Normalize(context.Background(), plugins.RawRecord{
+		SourcePluginID: "wpi", SourceInstanceID: "t", OriginalID: "p", Domain: "maritime",
+		ObservedUTC: time.Now().UTC(), Payload: port,
+	})
+	if err != nil || messages[0].SemanticType != "maritime.port" {
+		t.Fatalf("port %v %#v", err, messages)
+	}
+}

@@ -43,6 +43,12 @@ func (d *Domain) Normalize(_ context.Context, record plugins.RawRecord) ([]event
 			return d.normalizeAlert(record)
 		case "outlook":
 			return d.normalizeOutlook(record)
+		case "drought":
+			return d.normalizeDrought(record)
+		case "flood":
+			return d.normalizeFlood(record)
+		case "buoy":
+			return d.normalizeBuoy(record)
 		}
 	}
 	var raw rawLightning
@@ -380,8 +386,179 @@ func outlookColor(label string) string {
 		return "0.78,0.62,0.22"
 	case strings.Contains(lower, "marginal") || strings.Contains(lower, "mrgl"):
 		return "0.72,0.68,0.28"
+	case strings.Contains(lower, "above") && strings.Contains(lower, "precip"):
+		return "0.22,0.52,0.38"
+	case strings.Contains(lower, "below") && strings.Contains(lower, "precip"):
+		return "0.62,0.48,0.22"
+	case strings.Contains(lower, "above"):
+		return "0.78,0.38,0.22"
+	case strings.Contains(lower, "below"):
+		return "0.28,0.48,0.72"
 	default:
 		return "0.42,0.58,0.36"
+	}
+}
+
+func (d *Domain) normalizeDrought(record plugins.RawRecord) ([]events.Envelope, error) {
+	var raw struct {
+		AreaID      string          `json:"areaId"`
+		Label       string          `json:"label"`
+		Class       string          `json:"class"`
+		Polygons    [][][][]float64 `json:"polygons"`
+		Rings       [][][]float64   `json:"rings"`
+		Provider    string          `json:"provider"`
+		Attribution string          `json:"attribution"`
+	}
+	if err := json.Unmarshal(record.Payload, &raw); err != nil || raw.AreaID == "" {
+		return nil, fmt.Errorf("decode weather drought")
+	}
+	geom, ok := areaGeometry(raw.Rings, raw.Polygons)
+	if !ok {
+		return nil, fmt.Errorf("weather drought requires polygon")
+	}
+	event := events.NewEnvelope(record.OriginalID, "weather", "weather.drought", events.MessageArea,
+		events.SourceRef{PluginID: record.SourcePluginID, InstanceID: record.SourceInstanceID, OriginalID: record.OriginalID},
+		record.ObservedUTC)
+	event.EntityID = "weather:drought:" + raw.AreaID
+	event.Geometry = geom
+	validUntil := record.ObservedUTC.Add(10 * 24 * time.Hour)
+	event.Time.ValidUntilUTC = &validUntil
+	title := raw.Label
+	if title == "" {
+		title = "Drought"
+	}
+	event.Properties = map[string]any{
+		"visual.color":      droughtColor(raw.Class),
+		"visual.opacity":    0.16,
+		"display.title":     title,
+		"display.primary":   firstNonEmpty(raw.Class, "drought"),
+		"display.secondary": firstNonEmpty(raw.Attribution, raw.Provider),
+	}
+	measured := false
+	event.Quality.Measured = &measured
+	event.Quality.Classification = "analysed"
+	return []events.Envelope{event}, nil
+}
+
+func (d *Domain) normalizeFlood(record plugins.RawRecord) ([]events.Envelope, error) {
+	var raw struct {
+		AreaID      string          `json:"areaId"`
+		Title       string          `json:"title"`
+		Label       string          `json:"label"`
+		Polygons    [][][][]float64 `json:"polygons"`
+		Rings       [][][]float64   `json:"rings"`
+		Provider    string          `json:"provider"`
+		Attribution string          `json:"attribution"`
+	}
+	if err := json.Unmarshal(record.Payload, &raw); err != nil || raw.AreaID == "" {
+		return nil, fmt.Errorf("decode weather flood")
+	}
+	geom, ok := areaGeometry(raw.Rings, raw.Polygons)
+	if !ok {
+		return nil, fmt.Errorf("weather flood requires polygon")
+	}
+	event := events.NewEnvelope(record.OriginalID, "weather", "weather.flood", events.MessageArea,
+		events.SourceRef{PluginID: record.SourcePluginID, InstanceID: record.SourceInstanceID, OriginalID: record.OriginalID},
+		record.ObservedUTC)
+	event.EntityID = "weather:flood:" + raw.AreaID
+	event.Geometry = geom
+	validUntil := record.ObservedUTC.Add(36 * time.Hour)
+	event.Time.ValidUntilUTC = &validUntil
+	title := raw.Title
+	if title == "" {
+		title = raw.Label
+	}
+	if title == "" {
+		title = "Flood extent"
+	}
+	event.Properties = map[string]any{
+		"visual.color":      "0.18,0.42,0.72",
+		"visual.opacity":    0.18,
+		"display.title":     title,
+		"display.primary":   firstNonEmpty(raw.Label, "rapid flood mapping"),
+		"display.secondary": firstNonEmpty(raw.Attribution, raw.Provider),
+	}
+	measured := false
+	event.Quality.Measured = &measured
+	event.Quality.Classification = "modelled"
+	return []events.Envelope{event}, nil
+}
+
+func (d *Domain) normalizeBuoy(record plugins.RawRecord) ([]events.Envelope, error) {
+	var raw struct {
+		StationID   string  `json:"stationId"`
+		Name        string  `json:"name"`
+		Kind        string  `json:"buoyKind"`
+		WindMS      float64 `json:"windMs"`
+		WaveM       float64 `json:"waveM"`
+		PressureHpa float64 `json:"pressureHpa"`
+		WaterTempC  float64 `json:"waterTempC"`
+		Latitude    float64 `json:"latitude"`
+		Longitude   float64 `json:"longitude"`
+		Attribution string  `json:"attribution"`
+	}
+	if err := json.Unmarshal(record.Payload, &raw); err != nil || raw.StationID == "" {
+		return nil, fmt.Errorf("decode weather buoy")
+	}
+	event := events.NewEnvelope(record.OriginalID, "weather", "weather.buoy", events.MessageObservation,
+		events.SourceRef{PluginID: record.SourcePluginID, InstanceID: record.SourceInstanceID, OriginalID: record.OriginalID},
+		record.ObservedUTC)
+	event.EntityID = "weather:buoy:" + raw.StationID
+	event.Geometry = events.Point(raw.Longitude, raw.Latitude, 0)
+	validUntil := record.ObservedUTC.Add(2 * time.Hour)
+	event.Time.ValidUntilUTC = &validUntil
+	title := raw.Name
+	if title == "" {
+		title = raw.StationID
+	}
+	var parts []string
+	if raw.Kind != "" {
+		parts = append(parts, raw.Kind)
+	}
+	if raw.WindMS > 0 {
+		parts = append(parts, fmt.Sprintf("%.0f m/s wind", raw.WindMS))
+	}
+	if raw.WaveM > 0 {
+		parts = append(parts, fmt.Sprintf("%.1f m waves", raw.WaveM))
+	}
+	if raw.PressureHpa > 0 {
+		parts = append(parts, fmt.Sprintf("%.0f hPa", raw.PressureHpa))
+	}
+	if raw.WaterTempC != 0 {
+		parts = append(parts, fmt.Sprintf("%.0f C water", raw.WaterTempC))
+	}
+	primary := strings.Join(parts, "  //  ")
+	if primary == "" {
+		primary = "NDBC observation"
+	}
+	icon := "sounding"
+	if strings.Contains(strings.ToLower(raw.Kind), "dart") {
+		icon = "signal"
+	}
+	event.Properties = map[string]any{
+		"visual.icon":        icon,
+		"visual.markerScale": 0.7,
+		"display.title":      title,
+		"display.primary":    primary,
+		"display.secondary":  raw.Attribution,
+	}
+	measured := true
+	event.Quality.Measured = &measured
+	return []events.Envelope{event}, nil
+}
+
+func droughtColor(class string) string {
+	switch strings.ToUpper(strings.TrimSpace(class)) {
+	case "D4":
+		return "0.55,0.16,0.12"
+	case "D3":
+		return "0.72,0.32,0.14"
+	case "D2":
+		return "0.78,0.55,0.18"
+	case "D1":
+		return "0.78,0.72,0.28"
+	default:
+		return "0.70,0.68,0.32"
 	}
 }
 

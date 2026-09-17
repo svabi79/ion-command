@@ -144,3 +144,18 @@ func TestMarkerScaleMonotonicAndBounded(t *testing.T) {
 }
 
 func ptr(v float64) *float64 { return &v }
+
+func TestPerimeterNormalizesAsArea(t *testing.T) {
+	payload, _ := json.Marshal(map[string]any{
+		"kind": "perimeter", "perimeterId": "50645", "name": "Demo Fire", "category": "WF",
+		"rings":       [][][]float64{{{-111.8, 40.1}, {-111.7, 40.1}, {-111.7, 40.2}, {-111.8, 40.1}}},
+		"attribution": "NIFC / WFIGS",
+	})
+	messages, err := New().Normalize(context.Background(), plugins.RawRecord{
+		SourcePluginID: "wfigs", SourceInstanceID: "t", OriginalID: "p", Domain: "wildfire",
+		ObservedUTC: time.Now().UTC(), Payload: payload,
+	})
+	if err != nil || messages[0].SemanticType != "wildfire.perimeter" || messages[0].Geometry.Type != "Polygon" {
+		t.Fatalf("%v %#v", err, messages)
+	}
+}

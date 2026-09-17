@@ -61,3 +61,29 @@ func TestDisasterNormalizes(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestActivationAndFoodSecurity(t *testing.T) {
+	ring := [][][]float64{{{16.4, 43.2}, {16.6, 43.2}, {16.6, 43.4}, {16.4, 43.2}}}
+	activation, _ := json.Marshal(map[string]any{
+		"kind": "activation", "activationId": "EMSR929", "name": "Wildfire in Greece", "category": "Wildfire",
+		"country": "Greece", "rings": ring, "attribution": "Copernicus EMS",
+	})
+	messages, err := New().Normalize(context.Background(), plugins.RawRecord{
+		SourcePluginID: "cems", SourceInstanceID: "t", OriginalID: "a", Domain: "humanitarian",
+		ObservedUTC: time.Now().UTC(), Payload: activation,
+	})
+	if err != nil || messages[0].SemanticType != "humanitarian.activation" {
+		t.Fatalf("activation %v %#v", err, messages)
+	}
+	food, _ := json.Marshal(map[string]any{
+		"kind": "foodsecurity", "areaId": "AF-3", "label": "IPC 3", "phase": "3", "country": "AF",
+		"rings": ring, "attribution": "FEWS NET",
+	})
+	messages, err = New().Normalize(context.Background(), plugins.RawRecord{
+		SourcePluginID: "fews", SourceInstanceID: "t", OriginalID: "f", Domain: "humanitarian",
+		ObservedUTC: time.Now().UTC(), Payload: food,
+	})
+	if err != nil || messages[0].SemanticType != "humanitarian.foodsecurity" {
+		t.Fatalf("food %v %#v", err, messages)
+	}
+}

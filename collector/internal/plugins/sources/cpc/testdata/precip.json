@@ -1,0 +1,3 @@
+{"type":"FeatureCollection","features":[
+  {"id":3,"properties":{"objectid":3,"cat":"Below","prob":40},"geometry":{"type":"Polygon","coordinates":[[[-90,35],[-88,35],[-88,37],[-90,35]]]}}
+]}

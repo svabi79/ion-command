@@ -76,7 +76,7 @@ func (d *Domain) Normalize(_ context.Context, record plugins.RawRecord) ([]event
 		switch kind.Kind {
 		case "interference":
 			return d.normalizeInterference(record)
-		case "sigmet", "airmet", "airspace":
+		case "sigmet", "airmet", "airspace", "tfr":
 			return d.normalizeAirspace(record)
 		case "airport":
 			return d.normalizeAirport(record)
@@ -256,6 +256,11 @@ func (d *Domain) normalizeAirspace(record plugins.RawRecord) ([]events.Envelope,
 		entityPrefix = "aviation:airmet:"
 		opacity = 0.14
 		color = "0.68,0.52,0.24"
+	} else if raw.Kind == "tfr" {
+		semantic = "aviation.tfr"
+		entityPrefix = "aviation:tfr:"
+		opacity = 0.20
+		color = "0.72,0.22,0.18"
 	}
 	event := events.NewEnvelope(record.OriginalID, "aviation", semantic, events.MessageArea,
 		events.SourceRef{PluginID: record.SourcePluginID, InstanceID: record.SourceInstanceID, OriginalID: record.OriginalID},
