@@ -43,3 +43,9 @@ func TestCapPolygonLonLatOrder(t *testing.T) {
 		t.Fatalf("%v", ring)
 	}
 }
+
+func TestFetchAcceptsAnyContentType(t *testing.T) {
+	if feedAccept != "*/*" {
+		t.Fatalf("MeteoAlarm 406s atom/xml Accept, need */* (got %q)", feedAccept)
+	}
+}

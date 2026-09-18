@@ -31,6 +31,10 @@ const (
 	maxAlerts   = 40
 	minVertexKm = 15.0
 	maxVertices = 32
+	// MeteoAlarm 406s application/atom+xml and application/xml (probed
+	// 2026-09-18, including Switzerland). */* returns 200. User-Agent
+	// does not matter.
+	feedAccept = "*/*"
 )
 
 // countrySlugs is the European legacy-atom index as fetched 2026-09-18
@@ -92,7 +96,7 @@ func New(sourceConfig config.Source, logger *slog.Logger) (*Source, error) {
 		if strings.Contains(rawURL, "%s") {
 			rawURL = fmt.Sprintf(rawURL, slug)
 		}
-		return pollutil.Get(ctx, source.client, rawURL, map[string]string{"Accept": "application/atom+xml, application/xml"})
+		return pollutil.Get(ctx, source.client, rawURL, map[string]string{"Accept": feedAccept})
 	}
 	return source, nil
 }
