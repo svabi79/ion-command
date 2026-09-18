@@ -451,4 +451,27 @@ func TestIncidentAndPort(t *testing.T) {
 	if err != nil || messages[0].SemanticType != "maritime.port" {
 		t.Fatalf("port %v %#v", err, messages)
 	}
+	fault, _ := json.Marshal(map[string]any{
+		"kind": "fault", "faultId": "170", "name": "Merikari", "faultType": "Unlit", "atonType": "Ramark",
+		"state": "Open", "latitude": 60.2, "longitude": 25.1, "attribution": "Digitraffic",
+	})
+	messages, err = New().Normalize(context.Background(), plugins.RawRecord{
+		SourcePluginID: "digitraffic", SourceInstanceID: "t", OriginalID: "f", Domain: "maritime",
+		ObservedUTC: time.Now().UTC(), Payload: fault,
+	})
+	if err != nil || messages[0].SemanticType != "maritime.fault" {
+		t.Fatalf("fault %v %#v", err, messages)
+	}
+	dirway, _ := json.Marshal(map[string]any{
+		"kind": "dirway", "dirwayId": "d1", "name": "Bay of Bothnia",
+		"segments":    [][][]float64{{{20.0, 63.5}, {21.0, 64.0}}},
+		"attribution": "Digitraffic",
+	})
+	messages, err = New().Normalize(context.Background(), plugins.RawRecord{
+		SourcePluginID: "digitraffic", SourceInstanceID: "t", OriginalID: "d", Domain: "maritime",
+		ObservedUTC: time.Now().UTC(), Payload: dirway,
+	})
+	if err != nil || messages[0].SemanticType != "maritime.dirway" || messages[0].Geometry.Type != "LineString" {
+		t.Fatalf("dirway %v %#v", err, messages)
+	}
 }

@@ -232,3 +232,17 @@ func TestBaseNormalizesAsArea(t *testing.T) {
 		t.Fatalf("%v %#v", err, messages)
 	}
 }
+
+func TestFacilityNormalizes(t *testing.T) {
+	payload, _ := json.Marshal(map[string]any{
+		"kind": "facility", "facilityId": "1", "name": "Equinix Ashburn", "city": "Ashburn", "country": "US",
+		"netCount": 500, "latitude": 39.01, "longitude": -77.45, "attribution": "PeeringDB",
+	})
+	messages, err := New().Normalize(context.Background(), plugins.RawRecord{
+		SourcePluginID: "peeringdb", SourceInstanceID: "t", OriginalID: "f", Domain: "geography",
+		ObservedUTC: time.Now().UTC(), Payload: payload,
+	})
+	if err != nil || messages[0].SemanticType != "geography.facility" || messages[0].Geometry.Type != "Point" {
+		t.Fatalf("%v %#v", err, messages)
+	}
+}

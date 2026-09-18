@@ -1,0 +1,1 @@
+{"type":"FeatureCollection","features":[{"type":"Feature","properties":{"id":170,"type":"Unlit","state":"Open","aton_id":170,"aton_name_fi":"Merikari","aton_type":"Ramark"},"geometry":{"type":"Point","coordinates":[25.12,60.21]}},{"type":"Feature","properties":{"id":171,"type":"Unlit","state":"Fixed","aton_name_fi":"Old"},"geometry":{"type":"Point","coordinates":[25.0,60.0]}}]}

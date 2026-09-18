@@ -114,4 +114,37 @@ func TestDroughtFloodBuoy(t *testing.T) {
 	if err != nil || messages[0].SemanticType != "weather.buoy" || messages[0].Geometry.Type != "Point" {
 		t.Fatalf("buoy %v %#v", err, messages)
 	}
+	gauge, _ := json.Marshal(map[string]any{
+		"kind": "gauge", "stationId": "01646500", "name": "Potomac River", "streamflowCfs": 4200.0,
+		"latitude": 38.95, "longitude": -77.13, "attribution": "USGS NWIS",
+	})
+	messages, err = New().Normalize(context.Background(), plugins.RawRecord{
+		SourcePluginID: "nwis", SourceInstanceID: "t", OriginalID: "g", Domain: "weather",
+		ObservedUTC: time.Now().UTC(), Payload: gauge,
+	})
+	if err != nil || messages[0].SemanticType != "weather.gauge" {
+		t.Fatalf("gauge %v %#v", err, messages)
+	}
+	tide, _ := json.Marshal(map[string]any{
+		"kind": "tide", "stationId": "8454000", "name": "Providence", "state": "RI", "stationKind": "waterlevels",
+		"latitude": 41.8, "longitude": -71.4, "attribution": "NOAA CO-OPS",
+	})
+	messages, err = New().Normalize(context.Background(), plugins.RawRecord{
+		SourcePluginID: "coops", SourceInstanceID: "t", OriginalID: "t", Domain: "weather",
+		ObservedUTC: time.Now().UTC(), Payload: tide,
+	})
+	if err != nil || messages[0].SemanticType != "weather.tide" {
+		t.Fatalf("tide %v %#v", err, messages)
+	}
+	sonde, _ := json.Marshal(map[string]any{
+		"kind": "sonde", "serial": "Y3322142", "sondeType": "RS41", "latitude": 60.73, "longitude": 26.05,
+		"altitudeM": 12400.0, "attribution": "SondeHub",
+	})
+	messages, err = New().Normalize(context.Background(), plugins.RawRecord{
+		SourcePluginID: "sondehub", SourceInstanceID: "t", OriginalID: "s", Domain: "weather",
+		ObservedUTC: time.Now().UTC(), Payload: sonde,
+	})
+	if err != nil || messages[0].SemanticType != "weather.sonde" || messages[0].Geometry.Type != "Point" {
+		t.Fatalf("sonde %v %#v", err, messages)
+	}
 }

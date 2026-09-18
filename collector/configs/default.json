@@ -61,11 +61,17 @@
       "weather.drought",
       "weather.flood",
       "weather.buoy",
+      "weather.gauge",
+      "weather.tide",
+      "weather.sonde",
       "geography.base",
+      "geography.facility",
       "humanitarian.activation",
       "humanitarian.foodsecurity",
       "maritime.incident",
-      "maritime.port"
+      "maritime.port",
+      "maritime.fault",
+      "maritime.dirway"
     ]
   },
   "recording": {
@@ -446,6 +452,66 @@
       "type": "weather.cpc",
       "enabled": true,
       "pollSeconds": 86400
+    },
+    {
+      "id": "meteoalarm-europe",
+      "type": "weather.meteoalarm",
+      "enabled": true,
+      "pollSeconds": 600
+    },
+    {
+      "id": "met-metalerts",
+      "type": "weather.metalerts",
+      "enabled": true,
+      "pollSeconds": 600
+    },
+    {
+      "id": "eccc-alerts",
+      "type": "weather.eccc",
+      "enabled": true,
+      "pollSeconds": 600
+    },
+    {
+      "id": "usgs-nwis",
+      "type": "weather.nwis",
+      "enabled": true,
+      "pollSeconds": 900
+    },
+    {
+      "id": "noaa-coops",
+      "type": "weather.coops",
+      "enabled": true,
+      "pollSeconds": 86400
+    },
+    {
+      "id": "bc-wildfire",
+      "type": "wildfire.bc",
+      "enabled": true,
+      "pollSeconds": 900
+    },
+    {
+      "id": "digitraffic-aton",
+      "type": "maritime.digitraffic",
+      "enabled": true,
+      "pollSeconds": 600
+    },
+    {
+      "id": "sondehub-sondes",
+      "type": "weather.sondehub",
+      "enabled": true,
+      "pollSeconds": 120
+    },
+    {
+      "id": "peeringdb-facilities",
+      "type": "geography.peeringdb",
+      "enabled": true,
+      "pollSeconds": 86400
+    },
+    {
+      "id": "adsbfi-mil",
+      "type": "aviation.adsbfi",
+      "enabled": true,
+      "pollSeconds": 30
     }
   ]
 }

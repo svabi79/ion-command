@@ -1,0 +1,1 @@
+{"type":"FeatureCollection","features":[{"type":"Feature","id":1,"properties":{"FIRE_NUMBER":"G70210","FIRE_STATUS":"Out of Control","FIRE_SIZE_HECTARES":1200,"GEOGRAPHIC_DESCRIPTION":"Chilcotin","FIRE_OF_NOTE_NAME":"Demo Fire"},"geometry":{"type":"Polygon","coordinates":[[[-122.46,53.04],[-122.40,53.04],[-122.40,53.10],[-122.46,53.10],[-122.46,53.04]]]}}]}

@@ -1,0 +1,5 @@
+# comment
+agency_cd	site_no	station_nm	site_tp_cd	dec_lat_va	dec_long_va	drain_area_va
+5s	15s	50s	6s	16s	16s	10s
+USGS	01646500	POTOMAC RIVER NEAR WASH, DC	ST	38.94977778	-77.12763889	11560
+USGS	01638500	POTOMAC RIVER AT POINT OF ROCKS, MD	ST	39.27371389	-77.5427667	9651

@@ -34,17 +34,22 @@ import (
 	"github.com/ion-command/ion-command/collector/internal/plugins/domains/wildfire"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/acled"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/adsb"
+	"github.com/ion-command/ion-command/collector/internal/plugins/sources/adsbfi"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/ais"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/aprsis"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/aviationweather"
+	"github.com/ion-command/ion-command/collector/internal/plugins/sources/bcwildfire"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/blitzortung"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/brandmeister"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/cables"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/celestrak"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/cems"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/cloudflare"
+	"github.com/ion-command/ion-command/collector/internal/plugins/sources/coops"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/cpc"
+	"github.com/ion-command/ion-command/collector/internal/plugins/sources/digitraffic"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/dxcluster"
+	"github.com/ion-command/ion-command/collector/internal/plugins/sources/eccc"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/emsc"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/eonet"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/fews"
@@ -61,11 +66,14 @@ import (
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/kc2g"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/launchlibrary"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/marineregions"
+	"github.com/ion-command/ion-command/collector/internal/plugins/sources/metalerts"
+	"github.com/ion-command/ion-command/collector/internal/plugins/sources/meteoalarm"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/milbases"
 	mocksource "github.com/ion-command/ion-command/collector/internal/plugins/sources/mock"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/naturalearth"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/ndbc"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/nhc"
+	"github.com/ion-command/ion-command/collector/internal/plugins/sources/nwis"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/nws"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/openaip"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/openaq"
@@ -73,12 +81,14 @@ import (
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/opensky"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/ourairports"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/pads"
+	"github.com/ion-command/ion-command/collector/internal/plugins/sources/peeringdb"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/portwatch"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/powerplants"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/pskreporter"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/rbn"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/reliefweb"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/satnogs"
+	"github.com/ion-command/ion-command/collector/internal/plugins/sources/sondehub"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/spc"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/sua"
 	"github.com/ion-command/ion-command/collector/internal/plugins/sources/swpc"
@@ -252,6 +262,26 @@ func run(configPath, listenAddress string, logger *slog.Logger) error {
 			source, err = ndbc.New(sourceConfig, logger)
 		case sourceConfig.Type == "weather.cpc":
 			source, err = cpc.New(sourceConfig, logger)
+		case sourceConfig.Type == "weather.meteoalarm":
+			source, err = meteoalarm.New(sourceConfig, logger)
+		case sourceConfig.Type == "weather.metalerts":
+			source, err = metalerts.New(sourceConfig, logger)
+		case sourceConfig.Type == "weather.eccc":
+			source, err = eccc.New(sourceConfig, logger)
+		case sourceConfig.Type == "weather.nwis":
+			source, err = nwis.New(sourceConfig, logger)
+		case sourceConfig.Type == "weather.coops":
+			source, err = coops.New(sourceConfig, logger)
+		case sourceConfig.Type == "wildfire.bc":
+			source, err = bcwildfire.New(sourceConfig, logger)
+		case sourceConfig.Type == "maritime.digitraffic":
+			source, err = digitraffic.New(sourceConfig, logger)
+		case sourceConfig.Type == "weather.sondehub":
+			source, err = sondehub.New(sourceConfig, logger)
+		case sourceConfig.Type == "geography.peeringdb":
+			source, err = peeringdb.New(sourceConfig, logger)
+		case sourceConfig.Type == "aviation.adsbfi":
+			source, err = adsbfi.New(sourceConfig, logger)
 		default:
 			err = fmt.Errorf("unknown source type %q", sourceConfig.Type)
 		}

@@ -143,6 +143,12 @@ func (d *Domain) Normalize(_ context.Context, record plugins.RawRecord) ([]event
 	if kind.Kind == "port" {
 		return d.normalizePort(record)
 	}
+	if kind.Kind == "fault" {
+		return d.normalizeFault(record)
+	}
+	if kind.Kind == "dirway" {
+		return d.normalizeDirway(record)
+	}
 	if kind.MMSI <= 0 {
 		return nil, fmt.Errorf("ais record requires a positive mmsi")
 	}
@@ -627,6 +633,85 @@ func (d *Domain) normalizePort(record plugins.RawRecord) ([]events.Envelope, err
 		"display.title":      title,
 		"display.primary":    firstNonEmpty(raw.Size, raw.HarborUse, "port"),
 		"display.secondary":  firstNonEmpty(raw.Country, raw.Attribution),
+	}
+	measured := true
+	event.Quality.Measured = &measured
+	return []events.Envelope{event}, nil
+}
+
+func (d *Domain) normalizeFault(record plugins.RawRecord) ([]events.Envelope, error) {
+	var raw struct {
+		FaultID     string  `json:"faultId"`
+		Name        string  `json:"name"`
+		FaultType   string  `json:"faultType"`
+		AtonType    string  `json:"atonType"`
+		State       string  `json:"state"`
+		Latitude    float64 `json:"latitude"`
+		Longitude   float64 `json:"longitude"`
+		Attribution string  `json:"attribution"`
+	}
+	if err := json.Unmarshal(record.Payload, &raw); err != nil || raw.FaultID == "" {
+		return nil, fmt.Errorf("decode maritime fault")
+	}
+	event := events.NewEnvelope(record.OriginalID, "maritime", "maritime.fault", events.MessageObservation,
+		events.SourceRef{PluginID: record.SourcePluginID, InstanceID: record.SourceInstanceID, OriginalID: record.OriginalID},
+		record.ObservedUTC)
+	event.EntityID = "maritime:fault:" + raw.FaultID
+	event.Geometry = events.Point(raw.Longitude, raw.Latitude, 0)
+	validUntil := record.ObservedUTC.Add(36 * time.Hour)
+	event.Time.ValidUntilUTC = &validUntil
+	title := raw.Name
+	if title == "" {
+		title = "Aid to navigation fault"
+	}
+	primary := firstNonEmpty(raw.FaultType, raw.AtonType, "fault")
+	if raw.State != "" {
+		primary = primary + "  //  " + raw.State
+	}
+	event.Properties = map[string]any{
+		"visual.icon":        "signal",
+		"visual.markerScale": 0.8,
+		"visual.tint":        "0.82,0.48,0.16",
+		"display.title":      title,
+		"display.primary":    primary,
+		"display.secondary":  firstNonEmpty(raw.Attribution, "Digitraffic"),
+	}
+	measured := true
+	event.Quality.Measured = &measured
+	return []events.Envelope{event}, nil
+}
+
+func (d *Domain) normalizeDirway(record plugins.RawRecord) ([]events.Envelope, error) {
+	var raw struct {
+		DirwayID    string        `json:"dirwayId"`
+		Name        string        `json:"name"`
+		Segments    [][][]float64 `json:"segments"`
+		Attribution string        `json:"attribution"`
+	}
+	if err := json.Unmarshal(record.Payload, &raw); err != nil || raw.DirwayID == "" || len(raw.Segments) == 0 {
+		return nil, fmt.Errorf("decode maritime dirway")
+	}
+	event := events.NewEnvelope(record.OriginalID, "maritime", "maritime.dirway", events.MessageRelationship,
+		events.SourceRef{PluginID: record.SourcePluginID, InstanceID: record.SourceInstanceID, OriginalID: record.OriginalID},
+		record.ObservedUTC)
+	event.EntityID = "maritime:dirway:" + raw.DirwayID
+	if len(raw.Segments) == 1 {
+		event.Geometry = events.LineString(raw.Segments[0])
+	} else {
+		event.Geometry = events.MultiLineString(raw.Segments)
+	}
+	validUntil := record.ObservedUTC.Add(14 * 24 * time.Hour)
+	event.Time.ValidUntilUTC = &validUntil
+	title := raw.Name
+	if title == "" {
+		title = "Winter dirway"
+	}
+	event.Properties = map[string]any{
+		"visual.color":       "0.55,0.78,0.88",
+		"visual.legendIndex": 1,
+		"display.title":      title,
+		"display.primary":    "winter navigation dirway",
+		"display.secondary":  firstNonEmpty(raw.Attribution, "Digitraffic"),
 	}
 	measured := true
 	event.Quality.Measured = &measured

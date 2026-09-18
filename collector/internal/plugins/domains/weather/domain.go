@@ -49,6 +49,12 @@ func (d *Domain) Normalize(_ context.Context, record plugins.RawRecord) ([]event
 			return d.normalizeFlood(record)
 		case "buoy":
 			return d.normalizeBuoy(record)
+		case "gauge":
+			return d.normalizeGauge(record)
+		case "tide":
+			return d.normalizeTide(record)
+		case "sonde":
+			return d.normalizeSonde(record)
 		}
 	}
 	var raw rawLightning
@@ -541,6 +547,130 @@ func (d *Domain) normalizeBuoy(record plugins.RawRecord) ([]events.Envelope, err
 		"display.title":      title,
 		"display.primary":    primary,
 		"display.secondary":  raw.Attribution,
+	}
+	measured := true
+	event.Quality.Measured = &measured
+	return []events.Envelope{event}, nil
+}
+
+func (d *Domain) normalizeGauge(record plugins.RawRecord) ([]events.Envelope, error) {
+	var raw struct {
+		StationID   string  `json:"stationId"`
+		Name        string  `json:"name"`
+		Streamflow  float64 `json:"streamflowCfs"`
+		GageHeight  float64 `json:"gageHeightFt"`
+		Latitude    float64 `json:"latitude"`
+		Longitude   float64 `json:"longitude"`
+		Attribution string  `json:"attribution"`
+	}
+	if err := json.Unmarshal(record.Payload, &raw); err != nil || raw.StationID == "" {
+		return nil, fmt.Errorf("decode weather gauge")
+	}
+	event := events.NewEnvelope(record.OriginalID, "weather", "weather.gauge", events.MessageObservation,
+		events.SourceRef{PluginID: record.SourcePluginID, InstanceID: record.SourceInstanceID, OriginalID: record.OriginalID},
+		record.ObservedUTC)
+	event.EntityID = "weather:gauge:" + raw.StationID
+	event.Geometry = events.Point(raw.Longitude, raw.Latitude, 0)
+	validUntil := record.ObservedUTC.Add(2 * time.Hour)
+	event.Time.ValidUntilUTC = &validUntil
+	title := raw.Name
+	if title == "" {
+		title = raw.StationID
+	}
+	var parts []string
+	if raw.Streamflow != 0 {
+		parts = append(parts, fmt.Sprintf("%.0f cfs", raw.Streamflow))
+	}
+	if raw.GageHeight != 0 {
+		parts = append(parts, fmt.Sprintf("%.1f ft stage", raw.GageHeight))
+	}
+	primary := strings.Join(parts, "  //  ")
+	if primary == "" {
+		primary = "stream gauge"
+	}
+	event.Properties = map[string]any{
+		"visual.icon":        "sounding",
+		"visual.markerScale": 0.65,
+		"display.title":      title,
+		"display.primary":    primary,
+		"display.secondary":  firstNonEmpty(raw.Attribution, "USGS NWIS"),
+	}
+	measured := true
+	event.Quality.Measured = &measured
+	return []events.Envelope{event}, nil
+}
+
+func (d *Domain) normalizeTide(record plugins.RawRecord) ([]events.Envelope, error) {
+	var raw struct {
+		StationID   string  `json:"stationId"`
+		Name        string  `json:"name"`
+		State       string  `json:"state"`
+		Kind        string  `json:"stationKind"`
+		Latitude    float64 `json:"latitude"`
+		Longitude   float64 `json:"longitude"`
+		Attribution string  `json:"attribution"`
+	}
+	if err := json.Unmarshal(record.Payload, &raw); err != nil || raw.StationID == "" {
+		return nil, fmt.Errorf("decode weather tide station")
+	}
+	event := events.NewEnvelope(record.OriginalID, "weather", "weather.tide", events.MessageAnnotation,
+		events.SourceRef{PluginID: record.SourcePluginID, InstanceID: record.SourceInstanceID, OriginalID: record.OriginalID},
+		record.ObservedUTC)
+	event.EntityID = "weather:tide:" + raw.StationID
+	event.Geometry = events.Point(raw.Longitude, raw.Latitude, 0)
+	validUntil := record.ObservedUTC.Add(14 * 24 * time.Hour)
+	event.Time.ValidUntilUTC = &validUntil
+	title := raw.Name
+	if title == "" {
+		title = raw.StationID
+	}
+	primary := firstNonEmpty(raw.Kind, "water level")
+	if raw.State != "" {
+		primary = primary + "  //  " + raw.State
+	}
+	event.Properties = map[string]any{
+		"visual.icon":        "signal",
+		"visual.markerScale": 0.6,
+		"display.title":      title,
+		"display.primary":    primary,
+		"display.secondary":  firstNonEmpty(raw.Attribution, "NOAA CO-OPS"),
+	}
+	measured := true
+	event.Quality.Measured = &measured
+	return []events.Envelope{event}, nil
+}
+
+func (d *Domain) normalizeSonde(record plugins.RawRecord) ([]events.Envelope, error) {
+	var raw struct {
+		Serial      string  `json:"serial"`
+		SondeType   string  `json:"sondeType"`
+		Latitude    float64 `json:"latitude"`
+		Longitude   float64 `json:"longitude"`
+		AltitudeM   float64 `json:"altitudeM"`
+		Attribution string  `json:"attribution"`
+	}
+	if err := json.Unmarshal(record.Payload, &raw); err != nil || raw.Serial == "" {
+		return nil, fmt.Errorf("decode weather sonde")
+	}
+	event := events.NewEnvelope(record.OriginalID, "weather", "weather.sonde", events.MessageObservation,
+		events.SourceRef{PluginID: record.SourcePluginID, InstanceID: record.SourceInstanceID, OriginalID: record.OriginalID},
+		record.ObservedUTC)
+	event.EntityID = "weather:sonde:" + raw.Serial
+	event.Geometry = events.Point(raw.Longitude, raw.Latitude, raw.AltitudeM)
+	validUntil := record.ObservedUTC.Add(3 * time.Hour)
+	event.Time.ValidUntilUTC = &validUntil
+	title := raw.Serial
+	primary := firstNonEmpty(raw.SondeType, "radiosonde")
+	if raw.AltitudeM != 0 {
+		primary = fmt.Sprintf("%s  //  %.0f m", primary, raw.AltitudeM)
+	}
+	event.Properties = map[string]any{
+		"visual.icon":          "balloon",
+		"visual.markerScale":   0.85,
+		"visual.altitudeScale": 8,
+		"display.title":        title,
+		"display.primary":      primary,
+		"display.secondary":    firstNonEmpty(raw.Attribution, "SondeHub"),
 	}
 	measured := true
 	event.Quality.Measured = &measured
