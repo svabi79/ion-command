@@ -5,6 +5,7 @@ package pollutil
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"fmt"
 	"io"
@@ -45,6 +46,33 @@ func RetryAfter(response *http.Response, fallback time.Duration) time.Duration {
 
 func Get(ctx context.Context, client *http.Client, rawURL string, headers map[string]string) ([]byte, error) {
 	return Do(ctx, client, http.MethodGet, rawURL, "", nil, headers)
+}
+
+// GetGzip sets Accept-Encoding: gzip and decompresses the body when the
+// server actually gzip-compressed it. Use this when a provider asks for
+// the header explicitly (Go's default Transport otherwise swallows it).
+func GetGzip(ctx context.Context, client *http.Client, rawURL string, headers map[string]string) ([]byte, error) {
+	merged := map[string]string{"Accept-Encoding": "gzip"}
+	for key, value := range headers {
+		merged[key] = value
+	}
+	body, err := Get(ctx, client, rawURL, merged)
+	if err != nil {
+		return nil, err
+	}
+	return MaybeGunzip(body)
+}
+
+func MaybeGunzip(body []byte) ([]byte, error) {
+	if len(body) < 2 || body[0] != 0x1f || body[1] != 0x8b {
+		return body, nil
+	}
+	reader, err := gzip.NewReader(bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	defer reader.Close()
+	return io.ReadAll(io.LimitReader(reader, 64<<20))
 }
 
 func Post(ctx context.Context, client *http.Client, rawURL, contentType string, body []byte, headers map[string]string) ([]byte, error) {

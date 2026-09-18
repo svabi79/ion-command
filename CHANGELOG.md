@@ -12,6 +12,19 @@ superseded configurations, is in
 
 ### Added
 
+- **GitHub-scout sources 1–10 (Area/Point, existing pipeline).** Ten
+  key-free collector plugins, all **on** in `live.json` / `default.json`.
+  MeteoAlarm, MET Norway MetAlerts 2.0, and ECCC weather-alert Areas;
+  USGS NWIS IV gauges, NOAA CO-OPS water-level stations, SondeHub
+  radiosondes, PeeringDB facilities, and adsb.fi military aircraft
+  Points; BC Wildfire perimeters; Digitraffic ATON faults (optional
+  winter dirways when the path feed is a real LineString). Caps and
+  coarsening in DATA-SOURCES. MeteoAlarm is runtime-fetch only — the
+  raw Atom feed is not bundled or exported. adsb.fi uses `/api/v2/mil`
+  only (civil snapshot refused, ≥1 req/s). No RainViewer/Field, no
+  WorldMonitor/AGPL copy, no second AIS position feed. Existing Point /
+  Area / Path layers suffice — **no Unreal change**. CodeFred[Agent].
+
 - **OSINT wave 3 — twelve Area/Point feeds.** FAA TFR and Special Use
   Airspace, NIFC/WFIGS fire perimeters, US Drought Monitor (D1–D4),
   Copernicus EMS Rapid Mapping, GloFAS Rapid Flood Mapping (hard geometry

@@ -265,6 +265,16 @@ Additional fields by type:
 | `humanitarian.fews` | `pollSeconds`, `broker`, `cacheDirectory` | FEWS NET IPC phase map. Floor 24 hours. **Enabled** in tracked configs. IPC 3+, coarsened, cap 24. Attribute FEWS NET / IPC Global Partnership. Overlay `"enabled": false` to turn off. |
 | `weather.ndbc` | `pollSeconds`, `broker`, `cacheDirectory` | NDBC latest observations. Floor five minutes. |
 | `weather.cpc` | `pollSeconds`, `broker`, `cacheDirectory` | CPC 8–14 day outlooks. Floor six hours. |
+| `weather.meteoalarm` | `pollSeconds`, `broker`, `cacheDirectory` | MeteoAlarm Atom country feeds. Floor five minutes. `broker` with `%s` overrides the URL pattern; a full URL polls that one feed. |
+| `weather.metalerts` | `pollSeconds`, `broker`, `cacheDirectory` | MET Norway MetAlerts 2.0. Floor five minutes. |
+| `weather.eccc` | `pollSeconds`, `broker`, `cacheDirectory` | ECCC weather alerts. Floor five minutes. |
+| `weather.nwis` | `pollSeconds`, `broker`, `cacheDirectory` | USGS NWIS IV gauges. Floor ten minutes. `broker` overrides the IV URL. |
+| `weather.coops` | `pollSeconds`, `broker`, `cacheDirectory` | NOAA CO-OPS water-level stations. Floor six hours. |
+| `wildfire.bc` | `pollSeconds`, `broker`, `cacheDirectory` | BC Wildfire current perimeters. Floor five minutes. |
+| `maritime.digitraffic` | `pollSeconds`, `broker`, `topic`, `cacheDirectory` | ATON faults (`broker`) and optional dirways (`topic`). Floor two minutes. AIS locations are not fetched. |
+| `weather.sondehub` | `pollSeconds`, `broker`, `cacheDirectory` | SondeHub v2 sondes. Floor one minute. |
+| `geography.peeringdb` | `pollSeconds`, `broker`, `cacheDirectory` | PeeringDB facilities. Floor six hours. Guest GET. |
+| `aviation.adsbfi` | `pollSeconds`, `broker`, `cacheDirectory` | adsb.fi military snapshot. Floor one second. Civil snapshot URLs are refused. |
 | `hamradio.rbn` | `login` | Reverse Beacon Network telnet; **requires a real callsign**. Disabled by default. |
 | `aprs.is` | `login`, `filter`, `broker`, `latitude`/`longitude`/`radiusNm` | APRS-IS packet stream; **requires a real callsign**. Disabled by default. |
 | `wsjtx.udp` | `broker` (listen address) | Local WSJT-X UDP feed. |

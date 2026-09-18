@@ -52,6 +52,8 @@ func (d *Domain) Normalize(_ context.Context, record plugins.RawRecord) ([]event
 		return d.outage(record)
 	case "base":
 		return d.base(record)
+	case "facility":
+		return d.facility(record)
 	default:
 		return nil, fmt.Errorf("geography record has unknown kind %q", kind.Kind)
 	}
@@ -612,6 +614,48 @@ func (d *Domain) base(record plugins.RawRecord) ([]events.Envelope, error) {
 		"display.title":     title,
 		"display.primary":   primary,
 		"display.secondary": firstNonEmpty(raw.State, raw.Country, raw.Attribution),
+	}
+	return []events.Envelope{event}, nil
+}
+
+func (d *Domain) facility(record plugins.RawRecord) ([]events.Envelope, error) {
+	var raw struct {
+		FacilityID  string  `json:"facilityId"`
+		Name        string  `json:"name"`
+		City        string  `json:"city"`
+		Country     string  `json:"country"`
+		NetCount    int     `json:"netCount"`
+		Latitude    float64 `json:"latitude"`
+		Longitude   float64 `json:"longitude"`
+		Attribution string  `json:"attribution"`
+	}
+	if err := json.Unmarshal(record.Payload, &raw); err != nil || raw.FacilityID == "" {
+		return nil, fmt.Errorf("geography facility requires id")
+	}
+	event := events.NewEnvelope(record.OriginalID, "geography", "geography.facility", events.MessageAnnotation,
+		events.SourceRef{PluginID: record.SourcePluginID, InstanceID: record.SourceInstanceID, OriginalID: record.OriginalID},
+		record.ObservedUTC)
+	event.EntityID = "geography:facility:" + raw.FacilityID
+	event.Geometry = events.Point(raw.Longitude, raw.Latitude, 0)
+	validUntil := cartographicUntil(record.ObservedUTC)
+	event.Time.ValidUntilUTC = &validUntil
+	title := raw.Name
+	if title == "" {
+		title = "Peering facility"
+	}
+	primary := firstNonEmpty(raw.City, raw.Country, "facility")
+	if raw.City != "" && raw.Country != "" {
+		primary = raw.City + "  //  " + raw.Country
+	}
+	if raw.NetCount > 0 {
+		primary = fmt.Sprintf("%s  //  %d nets", primary, raw.NetCount)
+	}
+	event.Properties = map[string]any{
+		"visual.icon":        "station",
+		"visual.markerScale": 0.55,
+		"display.title":      title,
+		"display.primary":    primary,
+		"display.secondary":  firstNonEmpty(raw.Attribution, "PeeringDB"),
 	}
 	return []events.Envelope{event}, nil
 }

@@ -77,6 +77,16 @@ remaining `Field` geometry work. `Area` is now rendered.
 | **FEWS NET IPC** | fdw.fews.net ipcphasemap | `Area` — **shipped** as `humanitarian.fews` → `humanitarian.foodsecurity`; **on** in live.json; attribute FEWS NET / IPC Global Partnership; IPC 3+, cap 24 |
 | **NDBC buoys + DART** | `latest_obs.txt` | `Point` — **shipped** as `weather.ndbc` → `weather.buoy`; cap 180 |
 | **NOAA CPC 8–14 day** | `cpc_8_14_day_outlk` MapServer | `Area` — **shipped** as `weather.cpc` → `weather.outlook`; Normal skipped |
+| **MeteoAlarm** | legacy Atom `{country}` `cap:polygon` | `Area` — **shipped** as `weather.meteoalarm` → `weather.alert`; runtime fetch only; cap 40 |
+| **MET Norway MetAlerts 2.0** | `current.json` | `Area` — **shipped** as `weather.metalerts` → `weather.alert`; cap 24 |
+| **ECCC weather alerts** | MSC GeoMet `weather-alerts` | `Area` — **shipped** as `weather.eccc` → `weather.alert`; cap 40 |
+| **USGS NWIS gauges** | site catalog + `/nwis/iv/` | `Point` — **shipped** as `weather.nwis` → `weather.gauge`; cap 250 |
+| **NOAA CO-OPS stations** | `stations.json?type=waterlevels` | `Point` — **shipped** as `weather.coops` → `weather.tide`; ~300 |
+| **BC Wildfire perimeters** | MapServer 624 GeoJSON | `Area` — **shipped** as `wildfire.bc` → `wildfire.perimeter`; cap 24 |
+| **Digitraffic marine faults** | ATON faults (+ dirways if a real path) | `Point` / optional `Path` — **shipped** as `maritime.digitraffic`; no AIS locations |
+| **SondeHub v2** | `GET /sondes` | `Point` — **shipped** as `weather.sondehub` → `weather.sonde`; cap 80 |
+| **PeeringDB facilities** | guest `/api/fac` | `Point` — **shipped** as `geography.peeringdb` → `geography.facility`; runtime points only |
+| **adsb.fi military** | `/api/v2/mil` only | `Point` — **shipped** as `aviation.adsbfi` → `aviation.aircraft`; no civil snapshot |
 
 ## Wave 4 — the operator's own receiver
 

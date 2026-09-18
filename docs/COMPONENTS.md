@@ -77,6 +77,16 @@ messages itself — that is the domain's job.
 | `humanitarian.fews` | FEWS NET IPC phase-map polygons | HTTP poll | **on** | no | IPC 3+ only, coarsened, cap 24; ~27 MB payload; attribute FEWS NET / IPC Global Partnership |
 | `weather.ndbc` | NDBC latest buoy + DART observations | HTTP poll | **on** | no | public domain; DART first (cap 40) then buoys, 180 points |
 | `weather.cpc` | NOAA CPC 8–14 day temperature/precip outlooks | HTTP poll | **on** | no | public domain; Normal/EC skipped; coarsened, cap 16 |
+| `weather.meteoalarm` | MeteoAlarm legacy Atom country feeds (`cap:polygon`) | HTTP poll | **on** | no | CC BY 4.0 plus extra redistribution terms; **runtime fetch only, do not bundle or export the raw feed**; Extreme/Severe first, cap 40 |
+| `weather.metalerts` | MET Norway MetAlerts 2.0 current GeoJSON | HTTP poll | **on** | no | NLOD 2.0 / CC BY 4.0; identifying User-Agent; cap 24 |
+| `weather.eccc` | ECCC / MSC weather-alert GeoJSON | HTTP poll | **on** | no | Government of Canada / MSC; native polygons, cap 40 |
+| `weather.nwis` | USGS NWIS IV stream gauges (+ site catalog) | HTTP poll | **on** | no | public domain; observed gauges not flood polygons; cap 250 |
+| `weather.coops` | NOAA CO-OPS water-level stations | HTTP poll | **on** | no | public domain; distinct from NDBC buoys; ~300 stations |
+| `wildfire.bc` | BC Wildfire current perimeters (ArcGIS GeoJSON) | HTTP poll | **on** | no | OGL-BC; coarsened, cap 24; points layer not fetched |
+| `maritime.digitraffic` | Digitraffic ATON faults (+ seasonal winter dirways) | HTTP poll | **on** | no | CC BY 4.0; gzip; AIS locations not fetched; empty dirways skipped |
+| `weather.sondehub` | SondeHub v2 live radiosondes | HTTP poll | **on** | no | CC BY-SA 2.0; last 6 h, cap 80 |
+| `geography.peeringdb` | PeeringDB facilities with lat/lon (guest GET) | HTTP poll | **on** | no | runtime points only — not a catalog republish; cap 250 |
+| `aviation.adsbfi` | adsb.fi military snapshot `/api/v2/mil` | HTTP poll | **on** | no | personal non-commercial; military endpoint only; ≥1 s between requests |
 | `mock.*` | deterministic synthetic traffic | in-process | off | no | development and tests only |
 
 Terms and attribution in full: [DATA-SOURCES.md](DATA-SOURCES.md).
@@ -91,19 +101,19 @@ envelope. Domains own the vocabulary; nothing above them does.
 | --- | --- | --- |
 | `hamradio` | `radio.reception`, `radio.station`, `radio.activity` | `pskreporter.mqtt`, `hamradio.rbn`, `wsjtx.udp`, `hamradio.dxcluster`, `hamradio.wspr`, `hamradio.brandmeister` |
 | `aprs` | `aprs.station`, `aprs.object` | `aprs.is` |
-| `aviation` | `aviation.aircraft`, `aviation.interference`, `aviation.sigmet`, `aviation.airmet`, `aviation.airspace`, `aviation.airport`, `aviation.tfr` | `aviation.adsb`, `aviation.opensky`, `aviation.gpsjam`, `aviation.aviationweather`, `aviation.ourairports`, `aviation.openaip`, `aviation.tfr`, `aviation.sua` |
-| `weather` | `weather.lightning`, `weather.observation`, `weather.airquality`, `weather.storm`, `weather.storm.cone`, `weather.alert`, `weather.outlook`, `weather.drought`, `weather.flood`, `weather.buoy` | `lightning.blitzortung`, `weather.openmeteo`, `weather.openaq`, `weather.nhc`, `weather.nws`, `weather.spc`, `weather.usdm`, `weather.glofas`, `weather.ndbc`, `weather.cpc` |
+| `aviation` | `aviation.aircraft`, `aviation.interference`, `aviation.sigmet`, `aviation.airmet`, `aviation.airspace`, `aviation.airport`, `aviation.tfr` | `aviation.adsb`, `aviation.opensky`, `aviation.gpsjam`, `aviation.aviationweather`, `aviation.ourairports`, `aviation.openaip`, `aviation.tfr`, `aviation.sua`, `aviation.adsbfi` |
+| `weather` | `weather.lightning`, `weather.observation`, `weather.airquality`, `weather.storm`, `weather.storm.cone`, `weather.alert`, `weather.outlook`, `weather.drought`, `weather.flood`, `weather.buoy`, `weather.gauge`, `weather.tide`, `weather.sonde` | `lightning.blitzortung`, `weather.openmeteo`, `weather.openaq`, `weather.nhc`, `weather.nws`, `weather.spc`, `weather.usdm`, `weather.glofas`, `weather.ndbc`, `weather.cpc`, `weather.meteoalarm`, `weather.metalerts`, `weather.eccc`, `weather.nwis`, `weather.coops`, `weather.sondehub` |
 | `spaceweather` | `spaceweather.state` | `spaceweather.swpc` |
 | `ionosphere` | `ionosphere.sounding` | `ionosonde.kc2g` |
 | `geophysics` | `geophysics.earthquake`, `geophysics.event`, `geophysics.volcano` | `earthquake.usgs`, `earthquake.emsc`, `geophysics.eonet`, `geophysics.gdacs`, `geophysics.usgsvolcano`, `geophysics.gvp` |
 | `orbital` | `orbital.position`, `orbital.pass`, `orbital.footprint`, `orbital.groundstation` | `orbital.celestrak`, `orbital.satnogs` |
 | `solar` | `solar.grayline` | `solar.grayline` |
 | `space` | `space.launch`, `space.pad` | `space.launchlibrary`, `space.pads` |
-| `geography` | `geography.region`, `geography.border`, `geography.city`, `geography.country`, `geography.landmark`, `geography.river`, `geography.cable`, `geography.landing`, `geography.eez`, `geography.plant`, `geography.outage`, `geography.base` | `geography.naturalearth`, `geography.cables`, `geography.marineregions`, `geography.powerplants`, `geography.ioda`, `geography.cloudflare`, `geography.milbases` |
+| `geography` | `geography.region`, `geography.border`, `geography.city`, `geography.country`, `geography.landmark`, `geography.river`, `geography.cable`, `geography.landing`, `geography.eez`, `geography.plant`, `geography.outage`, `geography.base`, `geography.facility` | `geography.naturalearth`, `geography.cables`, `geography.marineregions`, `geography.powerplants`, `geography.ioda`, `geography.cloudflare`, `geography.milbases`, `geography.peeringdb` |
 | `humanitarian` | `humanitarian.displacement`, `humanitarian.disaster`, `humanitarian.site`, `humanitarian.activation`, `humanitarian.foodsecurity` | `humanitarian.hapi`, `humanitarian.reliefweb`, `humanitarian.unhcr`, `humanitarian.cems`, `humanitarian.fews` |
 | `conflict` | `conflict.event` | `conflict.acled`, `conflict.ucdp` |
-| `maritime` | `maritime.vessel`, `maritime.chokepoint`, `maritime.disruption`, `maritime.fishing`, `maritime.incident`, `maritime.port` | `ais.aisstream`, `maritime.portwatch`, `maritime.gfw`, `maritime.incidentnews`, `maritime.wpi` |
-| `wildfire` | `wildfire.detection`, `wildfire.perimeter` | `wildfire.firms`, `wildfire.wfigs` |
+| `maritime` | `maritime.vessel`, `maritime.chokepoint`, `maritime.disruption`, `maritime.fishing`, `maritime.incident`, `maritime.port`, `maritime.fault`, `maritime.dirway` | `ais.aisstream`, `maritime.portwatch`, `maritime.gfw`, `maritime.incidentnews`, `maritime.wpi`, `maritime.digitraffic` |
+| `wildfire` | `wildfire.detection`, `wildfire.perimeter` | `wildfire.firms`, `wildfire.wfigs`, `wildfire.bc` |
 
 ## Context plugins
 

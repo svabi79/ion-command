@@ -71,6 +71,16 @@ non-commercial only.
 | **FEWS NET / IPC** | IPC acute food-insecurity phase-map polygons from the FEWS NET Data Warehouse. Tabular FDW rows often mark `data_usage_policy: Public`, but the maps mix FEWS NET and IPC Global Partnership copyright. **Enabled** in tracked configs (`fews-ipc`). Attribute FEWS NET / IPC Global Partnership. | [fews.net](https://fews.net) · [fdw.fews.net](https://fdw.fews.net) |
 | **NOAA NDBC** | Latest moored-buoy and DART tsunami-buoy observations from `latest_obs.txt`. Public domain. NOAA does not endorse this project. | [ndbc.noaa.gov](https://www.ndbc.noaa.gov) |
 | **NOAA CPC** | Climate Prediction Center 8–14 day temperature and precipitation outlook polygons. Public domain. Normal / equal-chance categories are not drawn. | [cpc.ncep.noaa.gov](https://www.cpc.ncep.noaa.gov) |
+| **MeteoAlarm** | European weather-warning Areas from the legacy Atom country feeds (`cap:polygon`). Licensed under terms equivalent to **CC BY 4.0 plus extra redistribution terms**. ION COMMAND **fetches at runtime only** and does **not** bundle, cache-export, or redistribute the raw feed. Attribute MeteoAlarm. Not a warning system for safety decisions. | [meteoalarm.org](https://meteoalarm.org) · [feeds](https://feeds.meteoalarm.org/) |
+| **MET Norway** | MetAlerts 2.0 current warning polygons. Licensed **NLOD 2.0 / CC BY 4.0**. Identifying User-Agent required. Credit MET Norway. Version 1.1 is EOL and is not fetched. | [api.met.no](https://api.met.no/weatherapi/metalerts/2.0/documentation) |
+| **ECCC / MSC** | Canadian weather-alert Areas from the MSC GeoMet OGC API. Attribute **Government of Canada / Meteorological Service of Canada**. | [api.weather.gc.ca](https://api.weather.gc.ca/collections/weather-alerts) |
+| **USGS NWIS** | Instantaneous stream-gauge observations (site catalog + IV). Public domain. Observed gauges, not flood-model polygons. | [waterservices.usgs.gov](https://waterservices.usgs.gov/) |
+| **NOAA CO-OPS** | Tide / water-level station locations from the CO-OPS metadata API. Public domain. Distinct from NDBC buoys. NOAA does not endorse this project. | [tidesandcurrents.noaa.gov](https://tidesandcurrents.noaa.gov) |
+| **BC Wildfire Service** | Current fire-perimeter polygons from the BC MapHub ArcGIS layer. Licensed **OGL-BC**. Attribute BC Wildfire Service / Province of British Columbia. | [maps.gov.bc.ca](https://delivery.maps.gov.bc.ca) |
+| **Digitraffic / Fintraffic** | Finnish marine ATON fault points, plus seasonal winter-navigation dirways when the path feed is non-empty. Licensed **CC BY 4.0**. AIS vessel locations are not fetched. | [digitraffic.fi](https://www.digitraffic.fi/en/marine-traffic/) |
+| **SondeHub** | Live radiosonde positions from SondeHub v2 `GET /sondes`. Licensed **CC BY-SA 2.0**. Attribute SondeHub / the radiosonde_auto_rx community. Fixtures in this repository are tiny reconstructed samples, not a dump of the live feed. | [sondehub.org](https://sondehub.org) · [api.v2.sondehub.org](https://api.v2.sondehub.org) |
+| **PeeringDB** | Guest read of facilities that already have lat/lon. Attribute **PeeringDB**. This plugin draws runtime Points for one operator; it does **not** republish the PeeringDB catalog. | [peeringdb.com](https://www.peeringdb.com) · [docs](https://docs.peeringdb.com/) |
+| **adsb.fi** | Military ADS-B snapshot (`/api/v2/mil` only). **Personal non-commercial** use. Attribute adsb.fi. The general civil snapshot is not registered. Honour about 1 request/second. | [opendata.adsb.fi](https://opendata.adsb.fi) |
 | **AIS Stream (aisstream.io)** | Vessel AIS data from aisstream.io, free with a self-service API key. No commercial-use restriction or redistribution licence is published as of this writing; treated with the same hobby-scale, attributed posture as the other unlicensed feeds below until the operator confirms otherwise. Direct browser connections to the stream are against its terms — ION COMMAND already only connects from the collector process, never from client JavaScript, so this is satisfied by the existing architecture. See [below](#enabling-ais-ships-aisstreamio) for the full picture. | [aisstream.io](https://aisstream.io) · [docs](https://aisstream.io/documentation) |
 | **EUMETSAT** | Cloud imagery ©EUMETSAT 2026. Governed by the EUMETSAT Data Policy, not Creative Commons. | [Terms of use](https://www.eumetsat.int/about-us/terms-use) |
 | **AWS Terrain Tiles** | Elevation for the close-orbit relief, from the AWS Open Data terrain tiles (the Mapzen "terrarium" encoding), fetched at runtime and cached locally. No account or key. The underlying data is a public-domain composite — chiefly SRTM (NASA/USGS), the USGS 3DEP and NED, Canada's CDEM, and the EU's EU-DEM — assembled by Mapzen and hosted by the AWS Open Data programme. Individual source licences are permissive or public domain; credit "elevation data from the AWS Terrain Tiles, based on SRTM and national elevation datasets" where relief is shown to third parties. `-IonNoTileImagery` disables the fetch. | [registry.opendata.aws/terrain-tiles](https://registry.opendata.aws/terrain-tiles/) |
@@ -149,6 +159,16 @@ What each source actually does, in the order it appears in `live.json`:
 | `humanitarian.fews` | fdw.fews.net `ipcphasemap` GeoJSON | 604800 s (floor 24 h) | `humanitarian.foodsecurity` (Area, IPC 3+, cap 24) | yes |
 | `weather.ndbc` | ndbc.noaa.gov `latest_obs.txt` | 600 s (floor 5 min) | `weather.buoy` (Point, DART+buoys, cap 180) | yes |
 | `weather.cpc` | mapservices.weather.noaa.gov CPC 8–14 day MapServer | 86400 s (floor 6 h) | `weather.outlook` (Area, skip Normal, cap 16) | yes |
+| `weather.meteoalarm` | feeds.meteoalarm.org legacy Atom `{country}` (`cap:polygon`) | 600 s (floor 5 min) | `weather.alert` (Area, Extreme/Severe first, cap 40) | yes |
+| `weather.metalerts` | api.met.no MetAlerts 2.0 `current.json` | 600 s (floor 5 min) | `weather.alert` (Area, cap 24) | yes |
+| `weather.eccc` | api.weather.gc.ca `weather-alerts` GeoJSON | 600 s (floor 5 min) | `weather.alert` (Area, cap 40) | yes |
+| `weather.nwis` | waterservices.usgs.gov site catalog + `/nwis/iv/` | 900 s (floor 10 min) | `weather.gauge` (Point, cap 250) | yes |
+| `weather.coops` | api.tidesandcurrents.noaa.gov `stations.json?type=waterlevels` | 86400 s (floor 6 h) | `weather.tide` (Point, cap 320) | yes |
+| `wildfire.bc` | delivery.maps.gov.bc.ca MapServer 624 GeoJSON | 900 s (floor 5 min) | `wildfire.perimeter` (Area, cap 24) | yes |
+| `maritime.digitraffic` | meri.digitraffic.fi ATON faults (+ dirways when non-empty) | 600 s (floor 2 min) | `maritime.fault` (Point, cap 80); `maritime.dirway` (Path, cap 12, skip if empty) | yes |
+| `weather.sondehub` | api.v2.sondehub.org `GET /sondes` | 120 s (floor 60 s) | `weather.sonde` (Point, 6 h, cap 80) | yes |
+| `geography.peeringdb` | peeringdb.com `/api/fac` guest GET | 86400 s (floor 6 h) | `geography.facility` (Point, lat/lon only, cap 250) | yes |
+| `aviation.adsbfi` | opendata.adsb.fi `/api/v2/mil` only | 30 s (floor 1 s) | `aviation.aircraft` (Point, cap 200) | yes |
 
 ## OSINT scout caps
 
@@ -177,8 +197,18 @@ These layers are globe-scale, not GIS-desktop resolution:
 - **FEWS IPC:** IPC phase ≥ 3, 24 areas, ~40 km / 24 vertices; **on** in tracked configs. Attribute FEWS NET / IPC Global Partnership.
 - **NDBC:** DART IDs first (40) then buoys, 180 points.
 - **CPC 8–14 day:** temperature + precipitation layers; Normal/EC skipped; server-side `maxAllowableOffset` plus ~40 km / 32 vertices, cap 16.
+- **MeteoAlarm:** 39 European country Atom feeds from the 2026-09-18 index (includes Switzerland). Native `cap:polygon` only, CAP lat,lon → GeoJSON lon,lat, expired skipped, Extreme/Severe preferred, 40 areas, ~15 km / 32 vertices. Raw feed is not bundled or exported.
+- **MET Norway MetAlerts 2.0:** current.json only (1.1 EOL). 24 areas, ~20 km / 32 vertices.
+- **ECCC alerts:** OGC items pages (4 × 50), native polygons, cap 40, ~15 km / 32 vertices.
+- **USGS NWIS:** weekly site catalog (tiled bboxes, prefer large drainage), then IV for 00060/00065; 250 points. Flood-model polygons are not fetched.
+- **NOAA CO-OPS:** `type=waterlevels` stations only (~302); cap 320. Not NDBC.
+- **BC Wildfire perimeters:** largest 24, envelope query required for GeoJSON, ~8 km / 32 vertices. Points layer not pulled.
+- **Digitraffic:** open ATON faults, cap 80; winter dirways only when the FeatureCollection has a real path (cap 12). `ais/v1/locations` is not registered.
+- **SondeHub:** last 6 hours, 80 most recent. Tiny fixtures only.
+- **PeeringDB:** facilities with lat/lon, ranked by net count, cap 250. Runtime points; not a catalog republish.
+- **adsb.fi military:** `/api/v2/mil` only; 200 aircraft; global 1 s request gate. Civil snapshot refused.
 
-IODA's cache must stay local. Georgia Tech forbids republication.
+IODA's cache must stay local. Georgia Tech forbids republication. MeteoAlarm's on-disk cache is a private operator copy of a derived snapshot, not a redistribution of the Atom feed.
 
 ## A word about Blitzortung
 

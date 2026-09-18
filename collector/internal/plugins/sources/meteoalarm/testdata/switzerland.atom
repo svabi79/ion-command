@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:cap="urn:oasis:names:tc:emergency:cap:1.2">
+  <title>MeteoAlarm</title>
+  <entry>
+    <id>https://feeds.meteoalarm.org/api/v1/warnings/feeds-switzerland/demo-alert-1</id>
+    <title>Orange Thunderstorm Warning issued for Switzerland - Mendrisiotto</title>
+    <updated>2026-09-18T00:00:00Z</updated>
+    <cap:status>Actual</cap:status>
+    <cap:severity>Severe</cap:severity>
+    <cap:event>Heavy thunderstorm</cap:event>
+    <cap:areaDesc>Mendrisiotto</cap:areaDesc>
+    <cap:expires>2026-09-19T12:00:00Z</cap:expires>
+    <cap:polygon>45.90,8.90 45.90,9.10 46.05,9.10 46.05,8.90 45.90,8.90</cap:polygon>
+  </entry>
+  <entry>
+    <id>expired-1</id>
+    <title>Expired</title>
+    <cap:status>Actual</cap:status>
+    <cap:severity>Moderate</cap:severity>
+    <cap:event>Wind</cap:event>
+    <cap:expires>2020-01-01T00:00:00Z</cap:expires>
+    <cap:polygon>46.0,8.0 46.0,8.2 46.2,8.2 46.0,8.0</cap:polygon>
+  </entry>
+</feed>
