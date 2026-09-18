@@ -10,6 +10,15 @@ superseded configurations, is in
 
 ## [Unreleased]
 
+### Fixed
+
+- **MeteoAlarm 406 on every country feed.** The collector sent
+  `Accept: application/atom+xml, application/xml`; feeds.meteoalarm.org
+  answers 406 to those and 200 to `*/*` (probed 2026-09-18, including
+  Switzerland). Fetch now uses `Accept: */*`. Runtime fetch only; the
+  raw feed is still not bundled. Other scout sources unchanged.
+  CodeFred[Agent].
+
 ### Added
 
 - **GitHub-scout sources 1–10 (Area/Point, existing pipeline).** Ten
