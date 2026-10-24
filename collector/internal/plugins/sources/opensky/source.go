@@ -501,20 +501,20 @@ func (s *Source) sample(ctx context.Context) ([]plugins.RawRecord, error) {
 			}
 		}
 		payload, err := json.Marshal(map[string]any{
-			"hex":                strings.ToLower(hex),
-			"callsign":           rawString(state[1]),
-			"originCountry":      rawString(state[2]),
-			"kind":               kindForCategory(category),
-			"squawk":             rawString(state[14]),
-			"baroRateFpm":        verticalMps * 196.850394,
-			"lat":                lat,
-			"lon":                lon,
-			"altFt":              altitudeM / 0.3048,
-			"gsKt":               velocityMps * 1.943844,
-			"track":              track,
-			"onGround":           rawBool(state[8]),
-			"validSeconds":       validSeconds,
-			"lastContactAgeSec":  contactAge,
+			"hex":               strings.ToLower(hex),
+			"callsign":          rawString(state[1]),
+			"originCountry":     rawString(state[2]),
+			"kind":              kindForCategory(category),
+			"squawk":            rawString(state[14]),
+			"baroRateFpm":       verticalMps * 196.850394,
+			"lat":               lat,
+			"lon":               lon,
+			"altFt":             altitudeM / 0.3048,
+			"gsKt":              velocityMps * 1.943844,
+			"track":             track,
+			"onGround":          rawBool(state[8]),
+			"validSeconds":      validSeconds,
+			"lastContactAgeSec": contactAge,
 		})
 		if err != nil {
 			continue

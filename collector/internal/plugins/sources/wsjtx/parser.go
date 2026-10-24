@@ -26,11 +26,11 @@ type StatusMessage struct {
 }
 
 type DecodeMessage struct {
-	IsNew        bool
-	SNRDb        int32
-	DeltaFreqHz  uint32
-	Mode         string
-	Text         string
+	IsNew         bool
+	SNRDb         int32
+	DeltaFreqHz   uint32
+	Mode          string
+	Text          string
 	LowConfidence bool
 }
 

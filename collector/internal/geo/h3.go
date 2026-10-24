@@ -11,13 +11,13 @@ import (
 )
 
 const (
-	h3ModeOffset    = 59
-	h3ResOffset     = 52
-	h3BaseOffset    = 45
-	h3DigitOffset   = 3
-	h3MaxRes        = 15
-	earthRadiusKm   = 6371.0088
-	res0EdgeKm      = 1107.712591
+	h3ModeOffset  = 59
+	h3ResOffset   = 52
+	h3BaseOffset  = 45
+	h3DigitOffset = 3
+	h3MaxRes      = 15
+	earthRadiusKm = 6371.0088
+	res0EdgeKm    = 1107.712591
 )
 
 // CellToLatLng returns an approximate WGS84 center of an H3 cell.

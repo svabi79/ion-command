@@ -30,6 +30,17 @@ jobs:
           go-version-file: collector/go.mod
           cache-dependency-path: collector/go.sum
 
+      # gofmt -l exits 0 even when files are unformatted, so fail on any output.
+      - name: gofmt
+        working-directory: collector
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "These files are not gofmt-formatted (run: gofmt -w collector):"
+            echo "$unformatted"
+            exit 1
+          fi
+
       - name: go vet
         working-directory: collector
         run: go vet ./...

@@ -22,9 +22,9 @@ func buildStatus(dialFreq uint64, deCall, deGrid string) []byte {
 	writeString(&buffer, "WSJT-X")
 	writeUint64(&buffer, dialFreq)
 	writeString(&buffer, "FT8")
-	writeString(&buffer, "")  // dx call
-	writeString(&buffer, "")  // report
-	writeString(&buffer, "FT8") // tx mode
+	writeString(&buffer, "")      // dx call
+	writeString(&buffer, "")      // report
+	writeString(&buffer, "FT8")   // tx mode
 	buffer.Write([]byte{0, 0, 1}) // txEnabled, transmitting, decoding
 	writeUint32(&buffer, 1500)    // rx df
 	writeUint32(&buffer, 1500)    // tx df
@@ -39,7 +39,7 @@ func buildDecode(snr int32, deltaFreq uint32, mode, text string) []byte {
 	writeUint32(&buffer, 2) // schema
 	writeUint32(&buffer, 2) // decode
 	writeString(&buffer, "WSJT-X")
-	buffer.WriteByte(1)          // is new
+	buffer.WriteByte(1)              // is new
 	writeUint32(&buffer, 43_200_000) // QTime
 	writeUint32(&buffer, uint32(snr))
 	writeUint64(&buffer, 0) // delta time double

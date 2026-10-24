@@ -14,6 +14,8 @@ import html
 import io
 import pathlib
 import re
+import shutil
+import subprocess
 import sys
 import urllib.request
 
@@ -44,6 +46,11 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", help="local copy of ADIF_315.htm")
     args = parser.parse_args()
+    gofmt = shutil.which("gofmt")
+    if gofmt is None:
+        print("gofmt not found on PATH; install Go. Refusing to write unformatted "
+              "code (the CI gofmt gate would fail on it).", file=sys.stderr)
+        return 1
     if args.input:
         raw = pathlib.Path(args.input).read_bytes()
     else:
@@ -80,6 +87,7 @@ def main() -> int:
         out.write(f"\t{code}: \"{name}\",\n")
     out.write("}\n")
     OUTPUT.write_text(out.getvalue(), encoding="utf-8", newline="\n")
+    subprocess.run([gofmt, "-w", str(OUTPUT)], check=True)
     print(f"wrote {OUTPUT} ({len(entities)} entities)")
     return 0
 

@@ -112,7 +112,7 @@ type llLaunch struct {
 		Abbrev string `json:"abbrev"`
 	} `json:"status"`
 	Pad struct {
-		Name      string      `json:"name"`
+		Name      string          `json:"name"`
 		Latitude  json.RawMessage `json:"latitude"`
 		Longitude json.RawMessage `json:"longitude"`
 		Location  struct {
@@ -180,18 +180,18 @@ func (s *Source) sample(ctx context.Context) ([]plugins.RawRecord, error) {
 			rocket = launch.Rocket.Configuration.Name
 		}
 		payload, err := json.Marshal(map[string]any{
-			"launchId":   launch.ID,
-			"name":       launch.Name,
-			"status":     launch.Status.Name,
+			"launchId":     launch.ID,
+			"name":         launch.Name,
+			"status":       launch.Status.Name,
 			"statusAbbrev": launch.Status.Abbrev,
-			"net":        launch.Net,
-			"padName":    launch.Pad.Name,
-			"padLocation": launch.Pad.Location.Name,
-			"latitude":   lat,
-			"longitude":  lon,
-			"rocket":     rocket,
-			"mission":    launch.Mission.Name,
-			"missionType": launch.Mission.Type,
+			"net":          launch.Net,
+			"padName":      launch.Pad.Name,
+			"padLocation":  launch.Pad.Location.Name,
+			"latitude":     lat,
+			"longitude":    lon,
+			"rocket":       rocket,
+			"mission":      launch.Mission.Name,
+			"missionType":  launch.Mission.Type,
 		})
 		if err != nil {
 			continue

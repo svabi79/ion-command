@@ -155,7 +155,7 @@ func (s *Source) sample(ctx context.Context) ([]plugins.RawRecord, error) {
 		records = append(records, plugins.RawRecord{
 			SourcePluginID: "openaq", SourceInstanceID: s.id,
 			OriginalID: fmt.Sprintf("openaq-%d", loc.ID),
-			Domain: "weather", ObservedUTC: now, Payload: payload,
+			Domain:     "weather", ObservedUTC: now, Payload: payload,
 		})
 	}
 	return records, nil

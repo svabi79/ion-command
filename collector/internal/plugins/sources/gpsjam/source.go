@@ -30,13 +30,13 @@ const (
 )
 
 type Source struct {
-	id           string
-	manifestURL  string
-	csvBase      string
-	interval     time.Duration
-	client       *http.Client
-	logger       *slog.Logger
-	fetch        func(ctx context.Context, url string) ([]byte, error)
+	id          string
+	manifestURL string
+	csvBase     string
+	interval    time.Duration
+	client      *http.Client
+	logger      *slog.Logger
+	fetch       func(ctx context.Context, url string) ([]byte, error)
 }
 
 func New(sourceConfig config.Source, logger *slog.Logger) (*Source, error) {
@@ -137,14 +137,14 @@ func parseHexes(csvBody []byte) []map[string]any {
 			continue
 		}
 		out = append(out, map[string]any{
-			"kind":           "interference",
-			"h3":             hex,
-			"latitude":       lat,
-			"longitude":      lon,
-			"level":          level,
-			"pct":            mathRound(pct),
-			"badAircraft":    bad,
-			"totalAircraft":  total,
+			"kind":          "interference",
+			"h3":            hex,
+			"latitude":      lat,
+			"longitude":     lon,
+			"level":         level,
+			"pct":           mathRound(pct),
+			"badAircraft":   bad,
+			"totalAircraft": total,
 		})
 		if len(out) >= maxHexes {
 			break

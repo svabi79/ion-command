@@ -294,4 +294,3 @@ func TestRateLimitedHonoursRetryAfter(t *testing.T) {
 		t.Fatalf("reason %q", source.StatusReason())
 	}
 }
-
