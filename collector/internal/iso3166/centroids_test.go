@@ -11,7 +11,7 @@ func TestLookupAlpha3(t *testing.T) {
 
 func TestLookupAlpha2(t *testing.T) {
 	_, _, name, ok := Lookup("DE")
-	if !ok || name != "Deutschland" {
+	if !ok || name != "Germany" {
 		t.Fatalf("de: %q %v", name, ok)
 	}
 }
