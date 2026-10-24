@@ -3,11 +3,11 @@
     Fails when generated Unreal assets are missing, before anything is cooked.
 
 .DESCRIPTION
-    The master materials, their instances and the Earth day/night textures are
-    build output (issue #35), not tracked files. Cooking without them is not an
-    error in Unreal: a missing material is only a cook WARNING and the globe
-    then ships drawn with the engine's default material. This check makes that
-    case a hard failure instead.
+    The master materials and their instances (issue #35) and the imported
+    textures (issue #41) are build output, not tracked files. Cooking without
+    them is not an error in Unreal: a missing material is only a cook WARNING
+    and the globe then ships drawn with the engine's default material. This
+    check makes that case a hard failure instead.
 
     The material names are derived from unreal/Scripts/create_material_instances.py
     itself (every ensure_material / create_instance / build_sensor_mono call,
@@ -15,8 +15,13 @@
     script. If the derivation yields no names, too few names, or meets a call it
     cannot resolve, that is an error too - never a pass.
 
+    The texture names are derived the same way from the import_texture(source,
+    "T_Name", ...) calls: the asset name is the second argument, and it must be
+    a plain string literal. A call whose second argument cannot be read as one,
+    or fewer textures than expected, is an error.
+
 .PARAMETER ListNames
-    Also print every derived material name (for checking the derivation).
+    Also print every derived material and texture name (for checking the derivation).
 
 .PARAMETER RepositoryRoot
     Repository to check. Defaults to the repository containing this script.
@@ -29,9 +34,10 @@ if (-not $RepositoryRoot) { $RepositoryRoot = Split-Path -Parent $PSScriptRoot }
 $scriptPath = Join-Path $RepositoryRoot 'unreal\Scripts\create_material_instances.py'
 $materialDir = Join-Path $RepositoryRoot 'unreal\Content\ION\Materials'
 $textureDir = Join-Path $RepositoryRoot 'unreal\Content\ION\Textures'
-$textures = @('T_EarthDay', 'T_EarthNight')
-# The script defines 34 materials today. Far fewer means the derivation broke.
+# The script defines 34 materials and 5 textures today. Far fewer means the
+# derivation broke.
 $minimumMaterials = 25
+$minimumTextures = 4
 
 $fix = "Run tools\fetch-earth-textures.py (Earth textures), then tools\run-editor.ps1 " +
     "(it runs unreal\Scripts\create_material_instances.py and regenerates the assets); " +
@@ -84,11 +90,40 @@ if ($names.Count -lt $minimumMaterials) {
         "create_material_instances.py (expected at least $minimumMaterials); refusing to pass on a broken derivation.")
 }
 
-if ($ListNames) { $names | ForEach-Object { Write-Output "derived: $_" } }
+# Textures: import_texture(<source>, "T_Name", ...). The source argument is an
+# arbitrary expression (starmap_source, SOURCE_DIR / "NASA" / "x.png"), so only
+# the second argument is read. Comment lines are skipped; every other mention of
+# import_texture must be the definition or a call with a literal asset name.
+$textureNames = New-Object 'System.Collections.Generic.SortedSet[string]'
+$unresolvedTextures = @()
+$textureCall = '^[^\r\n]*?\bimport_texture\(\s*[^,\r\n]+,\s*"(T_[A-Za-z0-9_]+)"\s*[,)]'
+foreach ($m in [regex]::Matches($source, '(?m)^(?!\s*#)(?!\s*def\s)[^\r\n]*\bimport_texture\b[^\r\n]*')) {
+    $line = $m.Value.Trim()
+    if ($line -match $textureCall) {
+        [void]$textureNames.Add($Matches[1])
+    }
+    else {
+        $unresolvedTextures += $line
+    }
+}
+if ($unresolvedTextures.Count -gt 0) {
+    throw ("Generated-asset preflight cannot resolve these import_texture uses in create_material_instances.py " +
+        "(the asset name must be a string literal as second argument; extend tools\check-generated-assets.ps1):`n  " +
+        ($unresolvedTextures -join "`n  "))
+}
+if ($textureNames.Count -lt $minimumTextures) {
+    throw ("Generated-asset preflight derived only $($textureNames.Count) texture names from " +
+        "create_material_instances.py (expected at least $minimumTextures); refusing to pass on a broken derivation.")
+}
+
+if ($ListNames) {
+    $names | ForEach-Object { Write-Output "derived material: $_" }
+    $textureNames | ForEach-Object { Write-Output "derived texture: $_" }
+}
 
 $expected = @()
 foreach ($n in $names) { $expected += [pscustomobject]@{ Kind = 'material'; Path = Join-Path $materialDir "$n.uasset" } }
-foreach ($t in $textures) { $expected += [pscustomobject]@{ Kind = 'texture'; Path = Join-Path $textureDir "$t.uasset" } }
+foreach ($t in $textureNames) { $expected += [pscustomobject]@{ Kind = 'texture'; Path = Join-Path $textureDir "$t.uasset" } }
 
 $missing = @($expected | Where-Object { -not (Test-Path -LiteralPath $_.Path -PathType Leaf) })
 if ($missing.Count -gt 0) {
@@ -97,4 +132,4 @@ if ($missing.Count -gt 0) {
         "cooking now would ship the default material instead:`n  $list`n$fix")
 }
 
-Write-Output "Generated assets OK: $($expected.Count) checked ($($names.Count) materials + $($textures.Count) textures)."
+Write-Output "Generated assets OK: $($expected.Count) checked ($($names.Count) materials + $($textureNames.Count) textures)."

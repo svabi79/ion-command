@@ -71,9 +71,10 @@ what is actually on screen rather than the full 21600x10800 source.
 from scratch on every run — never hand-edit the generated materials, change the
 script instead.
 
-**The materials are build output, not tracked files.** Everything in
-`unreal/Content/ION/Materials/` is produced by that script and is gitignored,
-as are the Earth textures `T_EarthDay` / `T_EarthNight`. A fresh clone
+**The materials and textures are build output, not tracked files.** Everything
+in `unreal/Content/ION/Materials/` and `unreal/Content/ION/Textures/` is
+produced by that script (it re-imports every texture on each run) and is
+gitignored. A fresh clone
 therefore has to run, in this order:
 
 1. `python tools\fetch-earth-textures.py` — the NASA source images
@@ -82,11 +83,12 @@ therefore has to run, in this order:
 3. `.\tools\package.ps1` — cooks the client
 
 `tools\package.ps1` starts with `tools\check-generated-assets.ps1`, which
-refuses to cook (and names the missing assets) if any material the script
-defines, or either Earth texture, is absent. Without that check a missing
-material is only a cook warning and the globe would ship with Unreal's default
-material. The material list is read from `create_material_instances.py`
-itself, so a new material needs no change to the check.
+refuses to cook (and names the missing assets) if any material or texture the
+script defines is absent. Without that check a missing material is only a cook
+warning and the globe would ship with Unreal's default material. Both lists are
+read from `create_material_instances.py` itself (every `import_texture` call
+must pass its asset name as a string literal), so a new material or texture
+needs no change to the check.
 
 ## 3. Client
 
