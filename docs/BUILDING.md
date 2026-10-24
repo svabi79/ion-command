@@ -117,6 +117,44 @@ default configuration, the launcher and the docs, then compiles
 silently attach to a collector you already have running. It fails on any error
 in the game log and runs a structural check on the captured frame.
 
+## Quality gates: what runs where
+
+Merging is gated in two places. They cover different failures; neither
+replaces the other.
+
+**Hosted CI** (`.github/workflows/ci.yml`, GitHub Actions, one `ubuntu-latest`
+job on every pull request and every push to `master`):
+
+| Check | Command |
+| --- | --- |
+| Go static analysis | `go vet ./...` in `collector/` |
+| Go tests | `go test ./...` in `collector/` |
+| Repository validation | `python tools/validate_repository.py` |
+| PowerShell syntax of `tools/*.ps1` | `tools/check-powershell-syntax.ps1` |
+
+The Go toolchain is pinned by `collector/go.mod`. Its `go 1.24.0` directive is
+patch-qualified, so CI uses exactly Go 1.24.0. `gofmt -l` is deliberately not
+part of CI yet: the existing collector code is not gofmt-clean (15 files), and
+reformatting it is a separate change.
+
+You can run the same checks locally with `.	ools	est.ps1`.
+
+**Local, before merge** (on a machine with Unreal Engine 5.8 installed):
+
+1. `.	oolsuild.ps1 -Unreal` — compiles **both** Unreal targets, the editor
+   target `IonCommandEditor` and the game target `IonCommand` (tracked in
+   [#34](https://github.com/svabi79/ion-command/issues/34)).
+2. `.	ools\package.ps1` — the cook and package.
+
+> **Hosted CI does not compile or cook the Unreal project.** UE 5.8 is a
+> ~100 GB local install and cannot run on a hosted runner. The four packaging
+> failures that reached `master` on 2026-09-13 (#15 `EKeys::NumPadEnter`,
+> #17 Material usage flags, #22 `Role` renamed to `PathRole`, #23 place-label LOD
+> sort) were all UE 5.8 compile or cook errors. A green hosted run says nothing
+> about them; the local compile of both targets and the cook are the gate that
+> catches them. Do not merge a change that touches `unreal/` without running
+> both.
+
 ## Repository layout
 
 ```

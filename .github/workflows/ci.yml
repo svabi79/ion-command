@@ -1,0 +1,46 @@
+name: CI
+
+# One cheap Linux job. The Unreal compile and cook cannot run on a hosted
+# runner (UE 5.8 is a ~100 GB local install); see docs/BUILDING.md,
+# "Quality gates", for the local pre-merge gate that covers them.
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      # go.mod carries a patch-qualified directive (go 1.24.0), so this pins
+      # exactly that toolchain.
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: collector/go.mod
+          cache-dependency-path: collector/go.sum
+
+      - name: go vet
+        working-directory: collector
+        run: go vet ./...
+
+      - name: go test
+        working-directory: collector
+        run: go test ./...
+
+      - name: Repository validation
+        run: python3 tools/validate_repository.py
+
+      - name: PowerShell syntax
+        shell: pwsh
+        run: ./tools/check-powershell-syntax.ps1
