@@ -43,14 +43,17 @@ unreal/SourceAssets/NASA/*.tif
 # Personal collector setup (callsign, home QTH) - never published
 collector/configs/local.json
 
-# Imported Earth day/night texture ASSETS (not just the raw NASA source):
-# at 21600x10800 / 13500x6750 these compile to ~165 MB / ~31 MB .uasset
-# files, unlike every other Content/*.uasset in this project. Reproducible
-# with everything else via tools/fetch-earth-textures.py +
-# unreal/Scripts/create_material_instances.py, so - like the NASA source
-# images - they stay out of the repository rather than bloating history.
-unreal/Content/ION/Textures/T_EarthDay.uasset
-unreal/Content/ION/Textures/T_EarthNight.uasset
+# Generated textures: create_material_instances.py re-imports every texture
+# on each editor start (import_texture always deletes and re-creates the
+# asset), so tracked copies sat modified after every session. Every file in
+# this folder is produced by that script from fetched or generated sources,
+# and the Earth day/night textures are unlike every other Content/*.uasset:
+# at 21600x10800 / 13500x6750 they compile to ~165 MB / ~31 MB. They are
+# reproducible via tools/fetch-earth-textures.py + tools/run-editor.ps1 and,
+# like the NASA source images, stay out of the repository. The
+# tools/check-generated-assets.ps1 preflight makes tools/package.ps1 refuse to
+# cook when any are missing.
+unreal/Content/ION/Textures/
 
 # Scratch levels: create_material_instances.py and generate_globe_mesh.py
 # open them via open_empty_rebuild_level() and delete them again via
