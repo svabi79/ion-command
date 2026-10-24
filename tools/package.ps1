@@ -2,6 +2,11 @@ param([string]$UnrealRoot = "", [string]$Config = "Development")
 
 $ErrorActionPreference = 'Stop'
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
+# Refuse to cook while generated assets are missing. A missing material is only
+# a cook warning, and the globe then ships with the default material (issue #35).
+# This runs first so it fails in seconds, before the archive is cleared or
+# RunUAT starts.
+& (Join-Path $PSScriptRoot 'check-generated-assets.ps1') -RepositoryRoot $repositoryRoot
 $project = Join-Path $repositoryRoot 'unreal\IonCommand.uproject'
 $engineRoot = & (Join-Path $PSScriptRoot 'find-unreal.ps1') -RequestedRoot $UnrealRoot
 $runUat = Join-Path $engineRoot 'Engine\Build\BatchFiles\RunUAT.bat'

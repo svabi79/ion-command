@@ -71,6 +71,23 @@ what is actually on screen rather than the full 21600x10800 source.
 from scratch on every run — never hand-edit the generated materials, change the
 script instead.
 
+**The materials are build output, not tracked files.** Everything in
+`unreal/Content/ION/Materials/` is produced by that script and is gitignored,
+as are the Earth textures `T_EarthDay` / `T_EarthNight`. A fresh clone
+therefore has to run, in this order:
+
+1. `python tools\fetch-earth-textures.py` — the NASA source images
+2. `.\tools\run-editor.ps1` — generates the textures and materials (do not
+   pass `-SkipBootstrap` on a fresh clone)
+3. `.\tools\package.ps1` — cooks the client
+
+`tools\package.ps1` starts with `tools\check-generated-assets.ps1`, which
+refuses to cook (and names the missing assets) if any material the script
+defines, or either Earth texture, is absent. Without that check a missing
+material is only a cook warning and the globe would ship with Unreal's default
+material. The material list is read from `create_material_instances.py`
+itself, so a new material needs no change to the check.
+
 ## 3. Client
 
 ```powershell
