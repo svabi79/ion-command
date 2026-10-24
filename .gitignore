@@ -62,3 +62,10 @@ unreal/Content/ION/Maps/L_Transient*.umap
 # Local build/test/probe output at the repository root.
 /.test-*.txt
 /.package-out.txt
+
+# Generated materials: create_material_instances.py rebuilds every master
+# material and instance from scratch on each editor start (tools/run-editor.ps1),
+# so tracked copies sat modified after every session. They are build output;
+# tools/check-generated-assets.ps1 makes tools/package.ps1 refuse to cook when
+# any are missing. Every file in this folder is produced by that script.
+unreal/Content/ION/Materials/
