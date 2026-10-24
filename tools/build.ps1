@@ -2,7 +2,9 @@ param(
     [switch]$Unreal,
     [string]$UnrealRoot = "",
     [ValidateRange(1, 64)]
-    [int]$MaxParallelActions = 8
+    [int]$MaxParallelActions = 8,
+    [ValidateSet('Development','Shipping')]
+    [string]$Config = 'Development'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -23,6 +25,11 @@ if ($Unreal) {
     $engineRoot = & (Join-Path $PSScriptRoot 'find-unreal.ps1') -RequestedRoot $UnrealRoot
     $buildScript = Join-Path $engineRoot 'Engine\Build\BatchFiles\Build.bat'
     $project = Join-Path $repositoryRoot 'unreal\IonCommand.uproject'
-    & $buildScript IonCommandEditor Win64 Development $project -WaitMutex -FromMsBuild "-MaxParallelActions=$MaxParallelActions"
-    if ($LASTEXITCODE -ne 0) { throw "Unreal build failed with exit code $LASTEXITCODE" }
+    $commonArguments = @($project, '-WaitMutex', '-FromMsBuild', "-MaxParallelActions=$MaxParallelActions")
+    # Game target first: it is what ships and has a different module set than the editor.
+    & $buildScript IonCommand Win64 $Config @commonArguments
+    if ($LASTEXITCODE -ne 0) { throw "Unreal build of target IonCommand (Win64 $Config) failed with exit code $LASTEXITCODE" }
+    # An editor target has no Shipping configuration.
+    & $buildScript IonCommandEditor Win64 Development @commonArguments
+    if ($LASTEXITCODE -ne 0) { throw "Unreal build of target IonCommandEditor (Win64 Development) failed with exit code $LASTEXITCODE" }
 }

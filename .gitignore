@@ -51,3 +51,14 @@ collector/configs/local.json
 # images - they stay out of the repository rather than bloating history.
 unreal/Content/ION/Textures/T_EarthDay.uasset
 unreal/Content/ION/Textures/T_EarthNight.uasset
+
+# Scratch levels: create_material_instances.py and generate_globe_mesh.py
+# open them via open_empty_rebuild_level() and delete them again via
+# discard_rebuild_level() (unreal/Scripts/_ion_common.py) on every run, so a
+# tracked copy shows up as a deletion after every editor session. They are
+# regenerated on demand.
+unreal/Content/ION/Maps/L_Transient*.umap
+
+# Local build/test/probe output at the repository root.
+/.test-*.txt
+/.package-out.txt
