@@ -11,7 +11,7 @@ import (
 )
 
 const (
-        h3ModeOffset  = 59
+	h3ModeOffset  = 59
 	h3ResOffset   = 52
 	h3BaseOffset  = 45
 	h3DigitOffset = 3
