@@ -14,13 +14,13 @@ package motion
 import "math"
 
 const (
-	HoverMPS      = 1.5  // 3 kt
-	TrackOnlyMPS  = 15.4 // 30 kt
-	ChordMPS      = 25.7 // 50 kt
-	TurnIgnoreMPS = 5.14 // 10 kt
-	SlewLowDegS   = 12.0
-	SlewCruiseDegS = 18.0
-	GraceSeconds  = 60.0
+	HoverMPS         = 1.5  // 3 kt
+	TrackOnlyMPS     = 15.4 // 30 kt
+	ChordMPS         = 25.7 // 50 kt
+	TurnIgnoreMPS    = 5.14 // 10 kt
+	SlewLowDegS      = 12.0
+	SlewCruiseDegS   = 18.0
+	GraceSeconds     = 60.0
 	HardCoastSeconds = 300.0
 )
 

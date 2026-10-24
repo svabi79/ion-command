@@ -22,12 +22,12 @@ import (
 )
 
 const (
-	defaultBase   = "https://api.open-meteo.com/v1/forecast"
-	pollDefault   = 5 * time.Minute
-	pollFloor     = 5 * time.Minute
-	cellDegrees   = 0.1
-	cacheTTL      = 5 * time.Minute
-	attribution   = "Weather data by Open-Meteo.com"
+	defaultBase = "https://api.open-meteo.com/v1/forecast"
+	pollDefault = 5 * time.Minute
+	pollFloor   = 5 * time.Minute
+	cellDegrees = 0.1
+	cacheTTL    = 5 * time.Minute
+	attribution = "Weather data by Open-Meteo.com"
 )
 
 type cacheEntry struct {
@@ -125,12 +125,12 @@ func (s *Source) cachedFetch(ctx context.Context, lat, lon float64) ([]byte, err
 
 type meteoResponse struct {
 	Current struct {
-		Time                string  `json:"time"`
-		Temperature2M       float64 `json:"temperature_2m"`
-		WeatherCode         int     `json:"weather_code"`
-		WindSpeed10M        float64 `json:"wind_speed_10m"`
-		WindDirection10M    float64 `json:"wind_direction_10m"`
-		RelativeHumidity2M  float64 `json:"relative_humidity_2m"`
+		Time               string  `json:"time"`
+		Temperature2M      float64 `json:"temperature_2m"`
+		WeatherCode        int     `json:"weather_code"`
+		WindSpeed10M       float64 `json:"wind_speed_10m"`
+		WindDirection10M   float64 `json:"wind_direction_10m"`
+		RelativeHumidity2M float64 `json:"relative_humidity_2m"`
 	} `json:"current"`
 }
 
@@ -146,16 +146,16 @@ func (s *Source) sample(ctx context.Context) ([]plugins.RawRecord, error) {
 	}
 	now := time.Now().UTC()
 	payload, err := json.Marshal(map[string]any{
-		"kind":           "observation",
-		"cellLat":        lat,
-		"cellLon":        lon,
-		"temperatureC":   response.Current.Temperature2M,
-		"weatherCode":    response.Current.WeatherCode,
-		"windKmh":        response.Current.WindSpeed10M,
-		"windDirection":  response.Current.WindDirection10M,
-		"humidityPct":    response.Current.RelativeHumidity2M,
-		"observedAt":     response.Current.Time,
-		"attribution":    attribution,
+		"kind":          "observation",
+		"cellLat":       lat,
+		"cellLon":       lon,
+		"temperatureC":  response.Current.Temperature2M,
+		"weatherCode":   response.Current.WeatherCode,
+		"windKmh":       response.Current.WindSpeed10M,
+		"windDirection": response.Current.WindDirection10M,
+		"humidityPct":   response.Current.RelativeHumidity2M,
+		"observedAt":    response.Current.Time,
+		"attribution":   attribution,
 	})
 	if err != nil {
 		return nil, err

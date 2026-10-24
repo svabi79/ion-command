@@ -109,8 +109,8 @@ func radioPayload(rng *rand.Rand, sequence uint64) map[string]any {
 	fromLon, fromLat := randomLandishPoint(rng)
 	toLon, toLat := randomLandishPoint(rng)
 	return map[string]any{
-		"txDxcc": dxcc[rng.IntN(len(dxcc))],
-		"rxDxcc": dxcc[rng.IntN(len(dxcc))],
+		"txDxcc":      dxcc[rng.IntN(len(dxcc))],
+		"rxDxcc":      dxcc[rng.IntN(len(dxcc))],
 		"spotId":      fmt.Sprintf("spot-%d", sequence),
 		"txCallsign":  fmt.Sprintf("TX%05d", sequence%100000),
 		"rxCallsign":  fmt.Sprintf("RX%05d", (sequence*37)%100000),

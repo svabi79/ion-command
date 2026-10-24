@@ -142,7 +142,7 @@ func (s *Source) sample(ctx context.Context) ([]plugins.RawRecord, error) {
 		records = append(records, plugins.RawRecord{
 			SourcePluginID: "gdacs", SourceInstanceID: s.id,
 			OriginalID: "gdacs-" + eventType + "-" + eventID,
-			Domain: "geophysics", ObservedUTC: now, Payload: payload,
+			Domain:     "geophysics", ObservedUTC: now, Payload: payload,
 		})
 		if len(records) >= maxEvents {
 			break

@@ -21,10 +21,10 @@ func testSource(t *testing.T) *Source {
 func TestParseLiveSpotLines(t *testing.T) {
 	source := testSource(t)
 	cases := []struct {
-		line    string
-		txName  string
-		band    string
-		mode    string
+		line   string
+		txName string
+		band   string
+		mode   string
 	}{
 		{"DX de HA8TKS-#: 14053.00  G4EDG/P        CW     7 dB  24 WPM  CQ      1528Z\r\n", "England", "20m", "CW"},
 		{"DX de DG1ELE-#: 21082.00  US5WAU         CW    24 dB  31 WPM  CQ      1528Z\r\n", "Ukraine", "15m", "CW"},
